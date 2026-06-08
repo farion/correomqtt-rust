@@ -25,7 +25,7 @@ If applicable, add screenshots to help explain your problem.
 
 **Desktop (please complete the following information):**
  - OS: [e.g. Ubuntu 20.04 or Windows 11]
- - Version [e.g. 0.14.2] (if you compiled CorreoMQTT yourself, please add the java version also)
+ - Version [e.g. 0.1.0-beta] (if you compiled CorreoMQTT yourself, please add the Rust toolchain and target triple)
 
 **Additional context**
 Add any other context about the problem here.

@@ -27,7 +27,7 @@ pub fn run() -> eframe::Result {
 }
 
 fn app_icon() -> eframe::egui::IconData {
-    eframe::icon_data::from_png_bytes(include_bytes!("../../../icon/ico/Icon_256x256.png"))
+    eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/package/Icon.png"))
         .unwrap_or_default()
 }
 

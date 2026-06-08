@@ -17,6 +17,7 @@ const APP_NAME: &str = "CorreoMQTT";
 const APP_ID: &str = "org.correomqtt.CorreoMQTT";
 const BIN_NAME: &str = "correomqtt";
 const VENDOR: &str = "EXXETA AG";
+const PACKAGE_ASSET_DIR: &str = "assets/package";
 
 pub(crate) fn run(args: Vec<String>) -> Result<(), XtaskError> {
     package("cargo xtask package", args).map(|_| ())
@@ -102,7 +103,7 @@ fn stage_linux(binary: &Path, stage_dir: &Path) -> Result<(), XtaskError> {
     let root = stage_dir.join(APP_NAME);
     copy_file(binary, &root.join("bin").join(BIN_NAME))?;
     copy_file(
-        Path::new("gui/src/main/deploy/package/Icon.png"),
+        Path::new(PACKAGE_ASSET_DIR).join("Icon.png").as_path(),
         &root
             .join("share/icons/hicolor/256x256/apps")
             .join(format!("{APP_ID}.png")),
@@ -126,7 +127,7 @@ fn stage_macos(binary: &Path, stage_dir: &Path) -> Result<(), XtaskError> {
     let contents = stage_dir.join(format!("{APP_NAME}.app")).join("Contents");
     copy_file(binary, &contents.join("MacOS").join(BIN_NAME))?;
     copy_file(
-        Path::new("gui/src/main/deploy/package/Icon.icns"),
+        Path::new(PACKAGE_ASSET_DIR).join("Icon.icns").as_path(),
         &contents.join("Resources/Icon.icns"),
     )?;
     write_file(&contents.join("Info.plist"), macos_info_plist().as_bytes())?;
@@ -138,7 +139,7 @@ fn stage_windows(binary: &Path, stage_dir: &Path) -> Result<(), XtaskError> {
     let root = stage_dir.join(APP_NAME);
     copy_file(binary, &root.join(format!("{BIN_NAME}.exe")))?;
     copy_file(
-        Path::new("gui/src/main/deploy/package/Icon.ico"),
+        Path::new(PACKAGE_ASSET_DIR).join("Icon.ico").as_path(),
         &root.join("icons/Icon.ico"),
     )?;
     write_file(

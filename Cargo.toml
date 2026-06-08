@@ -17,7 +17,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/EXXETA/correomqtt"
+repository = "https://github.com/farion/correomqtt-rust"
 
 [workspace.dependencies]
 aes = "0.8"

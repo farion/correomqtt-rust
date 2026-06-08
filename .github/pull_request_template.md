@@ -21,7 +21,7 @@ Please describe steps to test your change.
 - [ ] Do X
 - [ ] Do Y
 
-**Requirments**:
+**Requirements**:
 * Plugins:
 * Specific broker:
 
@@ -32,5 +32,5 @@ Please describe steps to test your change.
 - [ ] Code is commented
 - [ ] Migration of local user data is included (if relevant)
 - [ ] No unexpected warnings or exceptions are thrown.
-- [ ] Plugin compatibility is checked (if relevant)
+- [ ] Rust plugin and script compatibility is checked (if relevant)
 - [ ] Unit Tests are added
