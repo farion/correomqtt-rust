@@ -1,0 +1,326 @@
+use std::collections::HashMap;
+
+use correo_mqtt::{
+    ConnectionId, LastWill, MqttConnectionOptions, MqttEndpoint, MqttError, MqttProtocolVersion,
+    PublishRequest, Qos, Subscription, TlsConfig, TlsOptions, UnsubscribeRequest,
+};
+use thiserror::Error;
+
+use crate::{
+    AppCommand, AppSnapshot, ConnectDisabledReason, ConnectionSettingsSnapshot, ConnectionState,
+    ConnectionSummary, MqttCommand, MqttOperation, QosLevel,
+};
+
+pub(crate) fn commands_for_app_command(
+    command: &AppCommand,
+    snapshot: &AppSnapshot,
+    connection_settings: &HashMap<ConnectionId, ConnectionSettingsSnapshot>,
+) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    match command {
+        AppCommand::Connect(connection_id) => {
+            connect_command(*connection_id, false, snapshot, connection_settings)
+        }
+        AppCommand::Reconnect(connection_id) => {
+            connect_command(*connection_id, true, snapshot, connection_settings)
+        }
+        AppCommand::Disconnect(connection_id) => Ok(vec![MqttCommand::Disconnect {
+            connection_id: *connection_id,
+        }]),
+        AppCommand::Publish => publish_command(snapshot),
+        AppCommand::Subscribe => subscribe_command(snapshot),
+        AppCommand::Unsubscribe(topic_filter) => unsubscribe_command(topic_filter, snapshot),
+        AppCommand::UnsubscribeAll | AppCommand::CancelUnsubscribeAll => Ok(Vec::new()),
+        AppCommand::ConfirmUnsubscribeAll => unsubscribe_all_commands(snapshot),
+        AppCommand::Mqtt(command) => Ok(vec![command.clone()]),
+        _ => Ok(Vec::new()),
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum MqttCommandBuildError {
+    #[error("connection is not known: {connection_id}")]
+    UnknownConnection { connection_id: ConnectionId },
+    #[error("connection settings are unavailable for {connection_id}")]
+    MissingConnectionSettings { connection_id: ConnectionId },
+    #[error("no connection is selected for MQTT {operation}")]
+    NoSelectedConnection { operation: MqttOperation },
+    #[error("MQTT {operation} requires a connected broker for {connection_id}")]
+    NoOpenConnection {
+        operation: MqttOperation,
+        connection_id: ConnectionId,
+    },
+    #[error("connection {connection_id} has an invalid MQTT port")]
+    InvalidPort { connection_id: ConnectionId },
+    #[error("MQTT {operation} request is invalid: {source}")]
+    InvalidRequest {
+        operation: MqttOperation,
+        #[source]
+        source: MqttError,
+    },
+}
+
+fn connect_command(
+    connection_id: ConnectionId,
+    reconnect: bool,
+    snapshot: &AppSnapshot,
+    connection_settings: &HashMap<ConnectionId, ConnectionSettingsSnapshot>,
+) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    let Some(connection) = connection(snapshot, connection_id) else {
+        return Err(MqttCommandBuildError::UnknownConnection { connection_id });
+    };
+
+    if !reconnect && !connection.can_connect() {
+        return Ok(Vec::new());
+    }
+    if reconnect
+        && matches!(
+            connection.disabled_reason,
+            Some(ConnectDisabledReason::MissingHost | ConnectDisabledReason::MissingSecret)
+        )
+    {
+        return Ok(Vec::new());
+    }
+
+    let options = connection_options(connection_id, snapshot, connection_settings)?;
+    let command = if reconnect {
+        MqttCommand::Reconnect { options }
+    } else {
+        MqttCommand::Connect { options }
+    };
+    Ok(vec![command])
+}
+
+fn publish_command(snapshot: &AppSnapshot) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    let connection_id = connected_connection_id(snapshot, MqttOperation::Publish)?;
+    let publish = &snapshot.workbench.publish;
+    let topic = publish.topic.trim();
+    if topic.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let request = PublishRequest::new(
+        topic,
+        publish.payload.as_bytes().to_vec(),
+        qos(publish.qos),
+        publish.retained,
+    )
+    .map_err(|source| MqttCommandBuildError::InvalidRequest {
+        operation: MqttOperation::Publish,
+        source,
+    })?;
+
+    Ok(vec![MqttCommand::Publish {
+        connection_id,
+        request,
+    }])
+}
+
+fn subscribe_command(snapshot: &AppSnapshot) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    let connection_id = connected_connection_id(snapshot, MqttOperation::Subscribe)?;
+    let topic_filter = snapshot.workbench.subscribe.topic.trim();
+    if topic_filter.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let subscription = Subscription::new(topic_filter, qos(snapshot.workbench.subscribe.qos))
+        .map_err(|source| MqttCommandBuildError::InvalidRequest {
+            operation: MqttOperation::Subscribe,
+            source,
+        })?;
+
+    Ok(vec![MqttCommand::Subscribe {
+        connection_id,
+        subscription,
+    }])
+}
+
+fn unsubscribe_command(
+    topic_filter: &str,
+    snapshot: &AppSnapshot,
+) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    let connection_id = connected_connection_id(snapshot, MqttOperation::Unsubscribe)?;
+    let topic_filter = topic_filter.trim();
+    if topic_filter.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let request = UnsubscribeRequest::new(topic_filter).map_err(|source| {
+        MqttCommandBuildError::InvalidRequest {
+            operation: MqttOperation::Unsubscribe,
+            source,
+        }
+    })?;
+
+    Ok(vec![MqttCommand::Unsubscribe {
+        connection_id,
+        request,
+    }])
+}
+
+fn unsubscribe_all_commands(
+    snapshot: &AppSnapshot,
+) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    if snapshot
+        .workbench
+        .subscribe
+        .unsubscribe_all_confirmation_count
+        .is_none()
+    {
+        return Ok(Vec::new());
+    }
+
+    let connection_id = connected_connection_id(snapshot, MqttOperation::Unsubscribe)?;
+    snapshot
+        .workbench
+        .subscribe
+        .subscriptions
+        .iter()
+        .filter(|subscription| subscription.active)
+        .map(|subscription| {
+            let request =
+                UnsubscribeRequest::new(subscription.topic_filter.as_str()).map_err(|source| {
+                    MqttCommandBuildError::InvalidRequest {
+                        operation: MqttOperation::Unsubscribe,
+                        source,
+                    }
+                })?;
+            Ok(MqttCommand::Unsubscribe {
+                connection_id,
+                request,
+            })
+        })
+        .collect()
+}
+
+fn connection_options(
+    connection_id: ConnectionId,
+    snapshot: &AppSnapshot,
+    connection_settings: &HashMap<ConnectionId, ConnectionSettingsSnapshot>,
+) -> Result<MqttConnectionOptions, MqttCommandBuildError> {
+    let connection = connection(snapshot, connection_id)
+        .ok_or(MqttCommandBuildError::UnknownConnection { connection_id })?;
+    let settings = settings_for(connection_id, snapshot, connection_settings);
+
+    let name = settings
+        .map(|settings| settings.profile_name.trim())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(&connection.name);
+    let (host, port) = endpoint_parts(connection_id, connection, settings)?;
+    let endpoint =
+        MqttEndpoint::new(host, port).map_err(|source| MqttCommandBuildError::InvalidRequest {
+            operation: MqttOperation::Connect,
+            source,
+        })?;
+    let mut options = MqttConnectionOptions::new(connection_id, name, endpoint);
+    if let Some(settings) = settings {
+        options.client_id = non_empty(settings.client_id.trim());
+        options.protocol_version = MqttProtocolVersion::try_from(settings.mqtt_version.as_str())
+            .map_err(|source| MqttCommandBuildError::InvalidRequest {
+                operation: MqttOperation::Connect,
+                source,
+            })?;
+        if settings.tls_mode != "Disabled" {
+            options.tls = TlsConfig::Enabled(TlsOptions::default());
+        }
+        options.last_will = last_will(settings)?;
+    } else {
+        options.protocol_version = MqttProtocolVersion::try_from(connection.mqtt_version.as_str())
+            .map_err(|source| MqttCommandBuildError::InvalidRequest {
+                operation: MqttOperation::Connect,
+                source,
+            })?;
+    }
+    Ok(options)
+}
+
+fn settings_for<'a>(
+    connection_id: ConnectionId,
+    snapshot: &'a AppSnapshot,
+    connection_settings: &'a HashMap<ConnectionId, ConnectionSettingsSnapshot>,
+) -> Option<&'a ConnectionSettingsSnapshot> {
+    connection_settings.get(&connection_id).or_else(|| {
+        (snapshot.selected_connection == Some(connection_id))
+            .then_some(&snapshot.connection_settings)
+    })
+}
+
+fn endpoint_parts(
+    connection_id: ConnectionId,
+    connection: &ConnectionSummary,
+    settings: Option<&ConnectionSettingsSnapshot>,
+) -> Result<(String, u16), MqttCommandBuildError> {
+    if let Some(settings) = settings {
+        let port = settings
+            .port
+            .trim()
+            .parse::<u16>()
+            .map_err(|_| MqttCommandBuildError::InvalidPort { connection_id })?;
+        return Ok((settings.host.trim().to_owned(), port));
+    }
+
+    let Some((host, port)) = connection.endpoint.rsplit_once(':') else {
+        return Err(MqttCommandBuildError::MissingConnectionSettings { connection_id });
+    };
+    let port = port
+        .trim()
+        .parse::<u16>()
+        .map_err(|_| MqttCommandBuildError::InvalidPort { connection_id })?;
+    Ok((host.trim().to_owned(), port))
+}
+
+fn last_will(
+    settings: &ConnectionSettingsSnapshot,
+) -> Result<Option<LastWill>, MqttCommandBuildError> {
+    if !settings.lwt_enabled || settings.lwt_topic.trim().is_empty() {
+        return Ok(None);
+    }
+    let will = LastWill {
+        topic: settings.lwt_topic.trim().try_into().map_err(|source| {
+            MqttCommandBuildError::InvalidRequest {
+                operation: MqttOperation::Connect,
+                source,
+            }
+        })?,
+        payload: settings.lwt_payload.as_bytes().to_vec(),
+        qos: Qos::AtLeastOnce,
+        retain: false,
+    };
+    Ok(Some(will))
+}
+
+fn connected_connection_id(
+    snapshot: &AppSnapshot,
+    operation: MqttOperation,
+) -> Result<ConnectionId, MqttCommandBuildError> {
+    let connection_id = snapshot
+        .selected_connection
+        .ok_or(MqttCommandBuildError::NoSelectedConnection { operation })?;
+    let connection = connection(snapshot, connection_id)
+        .ok_or(MqttCommandBuildError::UnknownConnection { connection_id })?;
+    if connection.state != ConnectionState::Connected {
+        return Err(MqttCommandBuildError::NoOpenConnection {
+            operation,
+            connection_id,
+        });
+    }
+    Ok(connection_id)
+}
+
+fn connection(snapshot: &AppSnapshot, connection_id: ConnectionId) -> Option<&ConnectionSummary> {
+    snapshot
+        .connections
+        .iter()
+        .find(|connection| connection.id == connection_id)
+}
+
+fn qos(qos: QosLevel) -> Qos {
+    match qos {
+        QosLevel::Zero => Qos::AtMostOnce,
+        QosLevel::One => Qos::AtLeastOnce,
+        QosLevel::Two => Qos::ExactlyOnce,
+    }
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_owned())
+}

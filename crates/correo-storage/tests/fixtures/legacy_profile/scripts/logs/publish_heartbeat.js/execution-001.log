@@ -1,0 +1,3 @@
+INFO synthetic script log
+INFO password=synthetic-log-password
+ERROR export password: synthetic-export-password

@@ -1,0 +1,23 @@
+{
+  "hook": "incoming_message_transform",
+  "request": {
+    "abi_version": 1,
+    "context": {
+      "subscription_topic": "fixture/#"
+    },
+    "config": null,
+    "message": {
+      "topic": "fixture/incoming",
+      "payload": [112, 111, 110, 103],
+      "qos": "at_least_once",
+      "retained": false,
+      "properties": {}
+    }
+  },
+  "expected_response": {
+    "abi_version": 1,
+    "outcome": {
+      "kind": "unchanged"
+    }
+  }
+}

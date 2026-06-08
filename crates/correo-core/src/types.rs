@@ -1,0 +1,484 @@
+use correo_mqtt::ConnectionId;
+use serde::{Deserialize, Serialize};
+
+#[path = "types/workflow.rs"]
+mod workflow;
+pub use workflow::*;
+#[path = "types/plugin_workflow.rs"]
+mod plugin_workflow;
+pub use plugin_workflow::*;
+
+use crate::{
+    Diagnostic, GlobalSettingsSnapshot, MigrationRecoverySnapshot, PluginSurfaceSnapshot,
+    ScriptSurfaceSnapshot, TransferSurfaceSnapshot,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppSnapshot {
+    pub active_workspace: Workspace,
+    pub active_connection: Option<ConnectionId>,
+    pub connection_count: usize,
+    pub connection_filter: String,
+    pub connection_settings: ConnectionSettingsSnapshot,
+    pub connection_surface: ConnectionSurface,
+    pub connections: Vec<ConnectionSummary>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics_expanded: bool,
+    pub global_settings: GlobalSettingsSnapshot,
+    pub migration_recovery: MigrationRecoverySnapshot,
+    pub plugins: PluginSurfaceSnapshot,
+    pub scripts: ScriptSurfaceSnapshot,
+    pub selected_connection: Option<ConnectionId>,
+    pub theme_mode: ThemeMode,
+    pub transfer: TransferSurfaceSnapshot,
+    pub workbench: WorkbenchSnapshot,
+}
+
+impl AppSnapshot {
+    pub fn empty() -> Self {
+        Self {
+            active_workspace: Workspace::Connections,
+            active_connection: None,
+            connection_count: 0,
+            connection_filter: String::new(),
+            connection_settings: ConnectionSettingsSnapshot::default(),
+            connection_surface: ConnectionSurface::Launcher,
+            connections: Vec::new(),
+            diagnostics: Vec::new(),
+            diagnostics_expanded: false,
+            global_settings: GlobalSettingsSnapshot::default(),
+            migration_recovery: MigrationRecoverySnapshot::default(),
+            plugins: PluginSurfaceSnapshot::default(),
+            scripts: ScriptSurfaceSnapshot::default(),
+            selected_connection: None,
+            theme_mode: ThemeMode::System,
+            transfer: TransferSurfaceSnapshot::default(),
+            workbench: WorkbenchSnapshot::default(),
+        }
+    }
+
+    pub fn selected_connection(&self) -> Option<&ConnectionSummary> {
+        let selected = self.selected_connection?;
+        self.connections
+            .iter()
+            .find(|connection| connection.id == selected)
+    }
+
+    pub fn filtered_connections(&self) -> Vec<&ConnectionSummary> {
+        let needle = self.connection_filter.trim().to_ascii_lowercase();
+        self.connections
+            .iter()
+            .filter(|connection| {
+                needle.is_empty()
+                    || connection.name.to_ascii_lowercase().contains(&needle)
+                    || connection.endpoint.to_ascii_lowercase().contains(&needle)
+            })
+            .collect()
+    }
+}
+
+impl Default for AppSnapshot {
+    fn default() -> Self {
+        crate::sample_snapshot(ThemeMode::System)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThemeMode {
+    System,
+    Light,
+    Dark,
+}
+
+impl ThemeMode {
+    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::System => "System",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+        }
+    }
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        Self::System
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Workspace {
+    Connections,
+    ImportExport,
+    Scripts,
+    Plugins,
+    Diagnostics,
+    Settings,
+}
+
+impl Workspace {
+    pub const ALL: [Self; 6] = [
+        Self::Connections,
+        Self::ImportExport,
+        Self::Scripts,
+        Self::Plugins,
+        Self::Diagnostics,
+        Self::Settings,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Connections => "Connections",
+            Self::ImportExport => "Import/Export",
+            Self::Scripts => "Scripts",
+            Self::Plugins => "Plugins",
+            Self::Diagnostics => "Diagnostics",
+            Self::Settings => "Settings",
+        }
+    }
+
+    pub fn rail_label(self) -> &'static str {
+        match self {
+            Self::Connections => "C",
+            Self::ImportExport => "I/O",
+            Self::Scripts => "S",
+            Self::Plugins => "P",
+            Self::Diagnostics => "D",
+            Self::Settings => "G",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionSurface {
+    Launcher,
+    Workbench,
+    Settings,
+}
+
+impl Default for ConnectionSurface {
+    fn default() -> Self {
+        Self::Launcher
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Error,
+}
+
+impl ConnectionState {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Disconnected => "Disconnected",
+            Self::Connecting => "Connecting",
+            Self::Connected => "Connected",
+            Self::Reconnecting => "Reconnecting",
+            Self::Error => "Error",
+        }
+    }
+
+    pub fn blocks_connect(self) -> bool {
+        matches!(
+            self,
+            Self::Connecting | Self::Connected | Self::Reconnecting
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionBadge {
+    Tls,
+    Proxy,
+    Lwt,
+    KeyringWarning,
+}
+
+impl ConnectionBadge {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Tls => "TLS",
+            Self::Proxy => "Proxy",
+            Self::Lwt => "LWT",
+            Self::KeyringWarning => "Keyring",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectDisabledReason {
+    AlreadyConnected,
+    MissingHost,
+    MissingSecret,
+    Busy,
+}
+
+impl ConnectDisabledReason {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::AlreadyConnected => "Already connected",
+            Self::MissingHost => "Host is required",
+            Self::MissingSecret => "Secret must be restored before connecting.",
+            Self::Busy => "Connection is busy",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectionSummary {
+    pub id: ConnectionId,
+    pub name: String,
+    pub endpoint: String,
+    pub mqtt_version: String,
+    pub badges: Vec<ConnectionBadge>,
+    pub state: ConnectionState,
+    pub disabled_reason: Option<ConnectDisabledReason>,
+    pub recent_subscriptions: usize,
+    pub recent_messages: usize,
+    pub last_activity: String,
+}
+
+impl ConnectionSummary {
+    pub fn can_connect(&self) -> bool {
+        self.disabled_reason.is_none() && !self.state.blocks_connect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QosLevel {
+    #[default]
+    Zero,
+    One,
+    Two,
+}
+
+impl QosLevel {
+    pub const ALL: [Self; 3] = [Self::Zero, Self::One, Self::Two];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Zero => "QoS 0",
+            Self::One => "QoS 1",
+            Self::Two => "QoS 2",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorkbenchTab {
+    #[default]
+    Publish,
+    Subscribe,
+}
+
+impl WorkbenchTab {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Publish => "Publish",
+            Self::Subscribe => "Subscribe",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageInspectorTab {
+    #[default]
+    Payload,
+    Properties,
+    Formatted,
+    Diagnostics,
+}
+
+impl MessageInspectorTab {
+    pub const ALL: [Self; 4] = [
+        Self::Payload,
+        Self::Properties,
+        Self::Formatted,
+        Self::Diagnostics,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Payload => "Payload",
+            Self::Properties => "Properties",
+            Self::Formatted => "Formatted",
+            Self::Diagnostics => "Diagnostics",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkbenchSnapshot {
+    pub publish: PublishPaneSnapshot,
+    pub subscribe: SubscribePaneSnapshot,
+    pub messages: Vec<MessageRow>,
+    pub selected_message_id: Option<u32>,
+    pub inspector_tab: MessageInspectorTab,
+    pub detail: MessageDetailSnapshot,
+    pub narrow_tab: WorkbenchTab,
+    pub reconnect_status: String,
+}
+
+impl WorkbenchSnapshot {
+    pub fn selected_message(&self) -> Option<&MessageRow> {
+        let selected = self.selected_message_id?;
+        self.messages.iter().find(|message| message.id == selected)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishPaneSnapshot {
+    pub topic: String,
+    pub topic_history: Vec<String>,
+    pub valid: bool,
+    pub qos: QosLevel,
+    pub retained: bool,
+    pub payload: String,
+    pub validation: Vec<String>,
+    pub feedback: Option<WorkflowFeedback>,
+    pub history_filter: String,
+    pub history: Vec<PublishHistoryRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishHistoryRow {
+    pub topic: String,
+    pub timestamp: String,
+    pub qos: QosLevel,
+    pub retained: bool,
+    pub byte_size: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubscribePaneSnapshot {
+    pub topic: String,
+    pub topic_history: Vec<String>,
+    pub valid: bool,
+    pub qos: QosLevel,
+    pub validation: Vec<String>,
+    pub feedback: Option<WorkflowFeedback>,
+    pub subscriptions: Vec<SubscriptionRow>,
+    pub unsubscribe_all_confirmation_count: Option<usize>,
+    pub message_filter: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubscriptionRow {
+    pub topic_filter: String,
+    pub qos: QosLevel,
+    pub message_count: usize,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageRow {
+    pub id: u32,
+    pub topic: String,
+    pub timestamp: String,
+    pub qos: QosLevel,
+    pub retained: bool,
+    pub payload: Vec<u8>,
+    pub payload_preview: String,
+    pub byte_size: usize,
+    pub badges: Vec<String>,
+    pub diagnostics: Vec<MessageDiagnosticRow>,
+    pub formatted_detail: Option<FormattedMessageDetail>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionSettingsTab {
+    #[default]
+    Mqtt,
+    Tls,
+    Proxy,
+    Lwt,
+    Advanced,
+}
+
+impl ConnectionSettingsTab {
+    pub const ALL: [Self; 5] = [
+        Self::Mqtt,
+        Self::Tls,
+        Self::Proxy,
+        Self::Lwt,
+        Self::Advanced,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mqtt => "MQTT",
+            Self::Tls => "TLS/SSL",
+            Self::Proxy => "Proxy/Tunnel",
+            Self::Lwt => "LWT",
+            Self::Advanced => "Advanced",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KeyringState {
+    #[default]
+    Available,
+    Locked,
+    Unavailable,
+    MigrationRequired,
+}
+
+impl KeyringState {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Available => "Keyring available",
+            Self::Locked => "Keyring locked",
+            Self::Unavailable => "Keyring unavailable",
+            Self::MigrationRequired => "Keyring migration required",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectionSettingsSnapshot {
+    pub selected_tab: ConnectionSettingsTab,
+    pub profile_name: String,
+    pub host: String,
+    pub port: String,
+    pub mqtt_version: String,
+    pub client_id: String,
+    pub auth_mode: String,
+    pub username_status: String,
+    pub tls_mode: String,
+    pub tls_store: String,
+    pub proxy_mode: String,
+    pub proxy_endpoint: String,
+    pub lwt_enabled: bool,
+    pub lwt_topic: String,
+    pub lwt_payload: String,
+    pub advanced_options: Vec<String>,
+    pub dirty: bool,
+    pub valid: bool,
+    pub save_disabled_reason: String,
+    pub delete_confirmation_open: bool,
+    pub keyring_state: KeyringState,
+    pub validation_errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionSettingField {
+    ProfileName,
+    Host,
+    Port,
+    MqttVersion,
+    ClientId,
+    AuthMode,
+    TlsMode,
+    TlsStore,
+    ProxyMode,
+    ProxyEndpoint,
+    LwtTopic,
+    LwtPayload,
+}

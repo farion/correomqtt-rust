@@ -1,0 +1,18 @@
+{
+  "connectionConfigDTOS": [
+    {
+      "id": "exported-broker-01",
+      "name": "Synthetic Exported Broker",
+      "url": "export.example.invalid",
+      "port": 1883,
+      "clientId": "correo-export",
+      "username": "synthetic-export-user",
+      "cleanSession": true,
+      "mqttVersion": "MQTT_5_0",
+      "ssl": "OFF",
+      "proxy": "OFF",
+      "auth": "OFF",
+      "lwt": "OFF"
+    }
+  ]
+}

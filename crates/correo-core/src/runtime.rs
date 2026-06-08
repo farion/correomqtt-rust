@@ -1,0 +1,332 @@
+use std::sync::Arc;
+
+use crate::{
+    AppCommand, AppCommandSender, AppEvent, AppEventSender, AppModel, AppSnapshot, Diagnostic,
+    HistoryPersistenceEvent, HistoryPersistenceKind, HistoryPersistenceWorker, MqttCommandSender,
+    MqttService, NoopPluginHookExecutor, PluginHookExecutor, SettingsPersistenceCommand,
+    SettingsPersistenceEvent, SettingsPersistenceWorker, StartupState,
+};
+
+mod plugin_helpers;
+mod plugins;
+
+#[derive(Debug)]
+pub struct AppRuntime {
+    model: AppModel,
+    command_sender: AppCommandSender,
+    command_receiver: flume::Receiver<AppCommand>,
+    event_sender: AppEventSender,
+    event_receiver: flume::Receiver<AppEvent>,
+    mqtt_service: Option<MqttService>,
+    history_worker: Option<HistoryPersistenceWorker>,
+    plugin_hooks: Arc<dyn PluginHookExecutor>,
+    settings_worker: Option<SettingsPersistenceWorker>,
+    shutdown_requested: bool,
+}
+
+impl AppRuntime {
+    pub fn new() -> Self {
+        Self::with_snapshot(crate::sample_snapshot(crate::ThemeMode::System))
+    }
+
+    pub fn with_snapshot(snapshot: AppSnapshot) -> Self {
+        Self::with_model(AppModel::with_snapshot(snapshot))
+    }
+
+    pub fn with_startup_state(state: StartupState) -> Self {
+        Self::with_model(AppModel::with_startup_state(state))
+    }
+
+    fn with_model(model: AppModel) -> Self {
+        let (command_sender, command_receiver) = flume::unbounded();
+        let (event_sender, event_receiver) = flume::unbounded();
+        Self {
+            model,
+            command_sender: AppCommandSender::new(command_sender),
+            command_receiver,
+            event_sender: AppEventSender::new(event_sender),
+            event_receiver,
+            mqtt_service: None,
+            history_worker: None,
+            plugin_hooks: Arc::new(NoopPluginHookExecutor),
+            settings_worker: None,
+            shutdown_requested: false,
+        }
+    }
+
+    pub fn snapshot(&self) -> &AppSnapshot {
+        self.model.snapshot()
+    }
+
+    pub fn command_sender(&self) -> AppCommandSender {
+        self.command_sender.clone()
+    }
+
+    pub fn event_sender(&self) -> AppEventSender {
+        self.event_sender.clone()
+    }
+
+    pub fn attach_mqtt_service(&mut self, service: MqttService) {
+        self.mqtt_service = Some(service);
+    }
+
+    pub fn attach_history_worker(&mut self, worker: HistoryPersistenceWorker) {
+        self.history_worker = Some(worker);
+    }
+
+    pub fn attach_plugin_hook_executor(&mut self, executor: impl PluginHookExecutor) {
+        self.plugin_hooks = Arc::new(executor);
+    }
+
+    pub fn attach_settings_worker(&mut self, worker: SettingsPersistenceWorker) {
+        self.settings_worker = Some(worker);
+    }
+
+    pub fn mqtt_command_sender(&self) -> Option<MqttCommandSender> {
+        self.mqtt_service.as_ref().map(MqttService::command_sender)
+    }
+
+    pub fn shutdown_requested(&self) -> bool {
+        self.shutdown_requested
+    }
+
+    pub fn pump(&mut self) -> PumpReport {
+        let before = self.model.snapshot().clone();
+        let mut report = PumpReport::default();
+
+        while let Some(event) = self.try_recv_mqtt_event() {
+            let Some((event, incoming_diagnostics)) = self.apply_incoming_hooks(event) else {
+                report.events_processed += 1;
+                continue;
+            };
+            let refresh_detail = matches!(event, crate::MqttEvent::IncomingMessage(_));
+            self.dispatch_history_for_mqtt_event(&event);
+            self.model.apply_event(AppEvent::Mqtt(event));
+            self.append_incoming_diagnostics(incoming_diagnostics);
+            if refresh_detail {
+                self.refresh_message_detail();
+            }
+            report.events_processed += 1;
+        }
+
+        while let Some(event) = self.try_recv_history_event() {
+            self.apply_history_event(event);
+            report.events_processed += 1;
+        }
+
+        while let Some(event) = self.try_recv_settings_event() {
+            self.apply_settings_event(event);
+            report.events_processed += 1;
+        }
+
+        while let Ok(event) = self.event_receiver.try_recv() {
+            self.model.apply_event(event);
+            report.events_processed += 1;
+        }
+
+        while let Ok(command) = self.command_receiver.try_recv() {
+            let should_persist_settings = matches!(command, AppCommand::SaveGlobalSettings)
+                && self.model.snapshot().global_settings.dirty;
+            if matches!(command, AppCommand::Shutdown) {
+                self.shutdown_requested = true;
+            }
+            self.forward_mqtt_commands(&command);
+            self.model.apply_command(command.clone());
+            if self.should_refresh_detail_for_command(&command) {
+                self.refresh_message_detail();
+            }
+            if should_persist_settings {
+                self.dispatch_global_settings_save();
+            }
+            report.commands_processed += 1;
+        }
+
+        report.snapshot_changed = before != *self.model.snapshot();
+        report.shutdown_requested = self.shutdown_requested;
+        report
+    }
+
+    fn try_recv_mqtt_event(&self) -> Option<crate::MqttEvent> {
+        self.mqtt_service
+            .as_ref()
+            .and_then(|service| service.try_recv_event().ok())
+    }
+
+    fn try_recv_history_event(&self) -> Option<HistoryPersistenceEvent> {
+        self.history_worker
+            .as_ref()
+            .and_then(HistoryPersistenceWorker::try_recv_event)
+    }
+
+    fn try_recv_settings_event(&self) -> Option<SettingsPersistenceEvent> {
+        self.settings_worker
+            .as_ref()
+            .and_then(SettingsPersistenceWorker::try_recv_event)
+    }
+
+    fn dispatch_history_for_mqtt_event(&self, event: &crate::MqttEvent) {
+        let commands = self.model.history_commands_for_mqtt_event(event);
+        if commands.is_empty() {
+            return;
+        }
+        let Some(worker) = &self.history_worker else {
+            return;
+        };
+        for command in commands {
+            if let Err(error) = worker.dispatch(command) {
+                let _ = self
+                    .event_sender
+                    .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                        error.to_string(),
+                    )));
+            }
+        }
+    }
+
+    fn apply_history_event(&self, event: HistoryPersistenceEvent) {
+        if let HistoryPersistenceEvent::Failed {
+            connection_id,
+            kind,
+            error,
+        } = event
+        {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(Diagnostic::error(format!(
+                    "{} history persistence failed for {connection_id}: {error}",
+                    history_kind_label(kind)
+                ))));
+        }
+    }
+
+    fn dispatch_global_settings_save(&self) {
+        let Some(worker) = &self.settings_worker else {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                    "Settings persistence worker is not running.",
+                )));
+            return;
+        };
+        if let Err(error) = worker.dispatch(SettingsPersistenceCommand::Save {
+            theme_mode: self.model.snapshot().theme_mode,
+            settings: self.model.snapshot().global_settings.clone(),
+        }) {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                    error.to_string(),
+                )));
+        }
+    }
+
+    fn apply_settings_event(&self, event: SettingsPersistenceEvent) {
+        let diagnostic = match event {
+            SettingsPersistenceEvent::Saved => Diagnostic::info("Global settings persisted."),
+            SettingsPersistenceEvent::Failed { error } => {
+                Diagnostic::error(format!("Global settings persistence failed: {error}"))
+            }
+        };
+        let _ = self
+            .event_sender
+            .emit(AppEvent::DiagnosticRaised(diagnostic));
+    }
+
+    fn forward_mqtt_commands(&self, command: &AppCommand) {
+        let commands = match self.mqtt_commands_for_app_command_with_plugins(command) {
+            Ok(commands) => commands,
+            Err(error) => {
+                let _ = self
+                    .event_sender
+                    .emit(AppEvent::DiagnosticRaised(Diagnostic::error(
+                        error.to_string(),
+                    )));
+                return;
+            }
+        };
+        if commands.is_empty() {
+            return;
+        };
+
+        let Some(service) = &self.mqtt_service else {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                    "MQTT service is not running.",
+                )));
+            return;
+        };
+
+        let sender = service.command_sender();
+        for command in commands {
+            if let Err(error) = sender.send(command) {
+                let _ = self
+                    .event_sender
+                    .emit(AppEvent::DiagnosticRaised(Diagnostic::error(
+                        error.to_string(),
+                    )));
+            }
+        }
+    }
+}
+
+fn history_kind_label(kind: HistoryPersistenceKind) -> &'static str {
+    match kind {
+        HistoryPersistenceKind::Publish => "Publish",
+        HistoryPersistenceKind::Subscription => "Subscription",
+    }
+}
+
+impl Default for AppRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PumpReport {
+    pub commands_processed: usize,
+    pub events_processed: usize,
+    pub snapshot_changed: bool,
+    pub shutdown_requested: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{AppCommand, AppEvent, AppRuntime, Diagnostic, ThemeMode};
+
+    #[test]
+    fn pump_processes_commands_without_awaiting() {
+        let mut runtime = AppRuntime::new();
+        runtime
+            .command_sender()
+            .send(AppCommand::SetThemeMode(ThemeMode::Dark))
+            .unwrap();
+
+        let report = runtime.pump();
+
+        assert_eq!(report.commands_processed, 1);
+        assert!(report.snapshot_changed);
+        assert_eq!(runtime.snapshot().theme_mode, ThemeMode::Dark);
+    }
+
+    #[test]
+    fn pump_redacts_service_diagnostics() {
+        let mut runtime = AppRuntime::new();
+        runtime
+            .event_sender()
+            .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                "auth failed: password:open-sesame",
+            )))
+            .unwrap();
+
+        runtime.pump();
+
+        let message = &runtime.snapshot().diagnostics[0].message;
+        assert!(!message.contains("open-sesame"));
+        assert!(message.contains("[REDACTED]"));
+    }
+}
+
+#[cfg(test)]
+mod plugin_tests;

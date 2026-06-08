@@ -1,0 +1,17 @@
+[package]
+name = "correo-scripting"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+correo-mqtt = { path = "../correo-mqtt" }
+rquickjs.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

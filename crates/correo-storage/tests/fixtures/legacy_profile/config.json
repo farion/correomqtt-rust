@@ -1,0 +1,86 @@
+{
+  "connections": [
+    {
+      "id": "local-broker-01",
+      "name": "Synthetic Local Broker",
+      "url": "localhost",
+      "port": 1883,
+      "clientId": "correo-rust-test",
+      "username": "synthetic-user",
+      "cleanSession": false,
+      "mqttVersion": "MQTT_5_0",
+      "ssl": "OFF",
+      "ssl_keystore": null,
+      "ssl_keystore_password": null,
+      "sslHostVerification": false,
+      "proxy": "SSH",
+      "sshHost": "ssh.example.invalid",
+      "sshPort": 22,
+      "localPort": 11883,
+      "auth": "KEY",
+      "authUsername": "synthetic-ssh-user",
+      "authKeyfile": "/synthetic/path/id_ed25519",
+      "lwt": "ON",
+      "lwtTopic": "status/local-broker-01",
+      "lwtQoS": 1,
+      "lwtRetained": true,
+      "lwtPayload": "offline",
+      "connectionUISettings": {
+        "selectedTab": "publish"
+      },
+      "publishListViewConfig": {
+        "columns": ["topic", "payload"]
+      },
+      "subscribeListViewConfig": {
+        "columns": ["topic", "qos"]
+      },
+      "futureJavaField": "ignored by Rust migration"
+    },
+    {
+      "id": "staging-broker-02",
+      "name": "Synthetic Staging Broker",
+      "url": "mqtt.example.invalid",
+      "port": 8883,
+      "clientId": "correo-rust-staging",
+      "username": null,
+      "cleanSession": true,
+      "mqttVersion": "MQTT_3_1_1",
+      "ssl": "ON",
+      "sslHostVerification": true,
+      "proxy": "OFF",
+      "auth": "OFF",
+      "lwt": "OFF"
+    }
+  ],
+  "themesSettings": {
+    "activeTheme": {
+      "name": "Light",
+      "iconMode": "BLACK"
+    }
+  },
+  "settings": {
+    "activeTheme": true,
+    "base64DecodingPayload": true,
+    "unzippingPayload": false,
+    "useRegexForSearch": true,
+    "useIgnoreCase": true,
+    "savedLocale": "de_DE",
+    "currentLocale": "en_US",
+    "searchUpdates": false,
+    "useDefaultRepo": false,
+    "installBundledPlugins": false,
+    "bundledPluginsUrl": "https://example.invalid/bundled.json",
+    "pluginRepositories": {
+      "synthetic": "https://example.invalid/plugins.json"
+    },
+    "keyringIdentifier": "LibSecret",
+    "globalUISettings": {
+      "windowPositionX": 12.0,
+      "windowPositionY": 34.0,
+      "windowWidth": 1280.0,
+      "windowHeight": 800.0
+    },
+    "firstStart": false,
+    "configCreatedWithCorreoVersion": "0.20.0"
+  }
+}

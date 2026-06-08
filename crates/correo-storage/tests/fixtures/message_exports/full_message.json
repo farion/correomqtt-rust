@@ -1,0 +1,10 @@
+{
+  "topic": "alerts/status",
+  "payload": "{\"state\":\"ok\",\"count\":2}",
+  "retained": true,
+  "qos": 2,
+  "dateTime": "2026-06-08T19:04:03.210Z",
+  "messageId": "synthetic-message-export-001",
+  "messageType": "OUTGOING",
+  "publishStatus": "FAILED"
+}

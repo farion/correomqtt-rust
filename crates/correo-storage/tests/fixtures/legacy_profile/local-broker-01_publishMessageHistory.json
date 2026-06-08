@@ -1,0 +1,14 @@
+{
+  "messages": [
+    {
+      "topic": "alerts/status",
+      "payload": "{\"state\":\"ok\"}",
+      "isRetained": false,
+      "qos": 1,
+      "dateTime": "2026-01-15T12:30:00",
+      "messageId": "synthetic-message-001",
+      "messageType": "OUTGOING",
+      "publishStatus": "SUCCEEDED"
+    }
+  ]
+}

@@ -34,6 +34,20 @@ Feel free to contribute.
 * [Check out our project board with open issues here](https://github.com/orgs/EXXETA/projects/4)
 * [Learn how to build correo](https://github.com/EXXETA/correomqtt/wiki/Build-Correo)
 
+### Rust beta packaging
+
+Unsigned Rust beta packages are built through `xtask`:
+
+```bash
+cargo xtask package
+```
+
+See [docs/beta-packaging.md](docs/beta-packaging.md) for target triples,
+artifact names, checksums, and platform layouts.
+See [docs/beta-release-notes.md](docs/beta-release-notes.md) for beta
+compatibility caveats, migration and rollback behavior, diagnostics, and known
+limitations.
+
 ## Plugins
 
 * [List of available plugins](https://github.com/EXXETA/correomqtt/wiki/List-of-available-plugins)

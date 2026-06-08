@@ -1,0 +1,6 @@
+{
+  "topics": [
+    "sensors/temperature",
+    "alerts/status"
+  ]
+}
