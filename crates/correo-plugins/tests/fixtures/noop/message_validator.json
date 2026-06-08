@@ -1,0 +1,21 @@
+{
+  "hook": "message_validator",
+  "request": {
+    "abi_version": 1,
+    "context": {},
+    "config": null,
+    "message": {
+      "topic": "fixture/validator",
+      "payload": [111, 107],
+      "qos": "at_most_once",
+      "retained": false,
+      "properties": {}
+    }
+  },
+  "expected_response": {
+    "abi_version": 1,
+    "result": {
+      "status": "valid"
+    }
+  }
+}

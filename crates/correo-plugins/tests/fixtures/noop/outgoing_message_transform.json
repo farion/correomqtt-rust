@@ -1,0 +1,21 @@
+{
+  "hook": "outgoing_message_transform",
+  "request": {
+    "abi_version": 1,
+    "context": {},
+    "config": null,
+    "message": {
+      "topic": "fixture/outgoing",
+      "payload": [112, 105, 110, 103],
+      "qos": "at_most_once",
+      "retained": false,
+      "properties": {}
+    }
+  },
+  "expected_response": {
+    "abi_version": 1,
+    "outcome": {
+      "kind": "unchanged"
+    }
+  }
+}

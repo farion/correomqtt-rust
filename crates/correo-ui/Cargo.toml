@@ -1,0 +1,19 @@
+[package]
+name = "correo-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+correo-core = { path = "../correo-core" }
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true
+image.workspace = true
+
+[lints]
+workspace = true

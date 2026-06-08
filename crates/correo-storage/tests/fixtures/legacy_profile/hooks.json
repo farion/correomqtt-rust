@@ -1,0 +1,46 @@
+{
+  "outgoingMessages": [
+    {
+      "id": "base64-outgoing",
+      "pluginId": "org.correomqtt.plugin.base64",
+      "config": {
+        "mode": "encode"
+      }
+    }
+  ],
+  "incomingMessages": [
+    {
+      "id": "json-format-incoming",
+      "pluginId": "org.correomqtt.plugin.json_format",
+      "config": {
+        "pretty": true
+      }
+    }
+  ],
+  "detailViewTasks": [
+    {
+      "name": "Format detail",
+      "extensions": [
+        {
+          "id": "xml-format-detail",
+          "pluginId": "org.correomqtt.plugin.xml_format",
+          "config": {}
+        }
+      ]
+    }
+  ],
+  "messageValidators": [
+    {
+      "topic": "alerts/status",
+      "extensions": [
+        {
+          "id": "contains-ok",
+          "pluginId": "org.correomqtt.plugin.contains_string_validator",
+          "config": {
+            "needle": "ok"
+          }
+        }
+      ]
+    }
+  ]
+}

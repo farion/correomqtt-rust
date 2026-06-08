@@ -1,0 +1,23 @@
+[package]
+name = "correo-mqtt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+futures.workspace = true
+rumqttc_v4 = { package = "rumqttc-v4-next", version = "0.33.2", default-features = false, features = ["use-rustls-ring"] }
+rumqttc_v5 = { package = "rumqttc-v5-next", version = "0.33.2", default-features = false, features = ["use-rustls-ring"] }
+russh = { version = "0.61.2", default-features = false, features = ["ring", "rsa"] }
+rustls.workspace = true
+rustls-native-certs.workspace = true
+rustls-pemfile.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "net"] }
+uuid.workspace = true
+
+[lints]
+workspace = true

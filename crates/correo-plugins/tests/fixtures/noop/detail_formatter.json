@@ -1,0 +1,18 @@
+{
+  "hook": "detail_formatter",
+  "request": {
+    "abi_version": 1,
+    "context": {},
+    "config": null,
+    "bytes": [112, 108, 97, 105, 110],
+    "content_type": "text/plain"
+  },
+  "expected_response": {
+    "abi_version": 1,
+    "output": {
+      "format": "plain_text",
+      "text": "plain",
+      "diagnostics": []
+    }
+  }
+}

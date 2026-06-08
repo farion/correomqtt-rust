@@ -1,0 +1,31 @@
+mod bootstrap;
+mod commands;
+mod history;
+mod model;
+mod mqtt;
+mod runtime;
+mod samples;
+mod settings_persistence;
+mod surfaces;
+mod types;
+
+pub use commands::*;
+pub use correo_diagnostics::{redact_sensitive, Diagnostic, DiagnosticSeverity};
+pub use history::*;
+pub use model::AppModel;
+pub use mqtt::*;
+pub use runtime::{AppRuntime, PumpReport};
+pub use samples::sample_snapshot;
+pub use settings_persistence::*;
+pub use surfaces::*;
+use thiserror::Error;
+pub use types::*;
+
+use correo_mqtt::ConnectionId;
+
+#[derive(Debug, Error)]
+pub enum CoreError {
+    #[error("connection is not open: {0}")]
+    ConnectionNotOpen(ConnectionId),
+}
+pub use bootstrap::{startup_state_from_current, startup_state_from_migration, StartupState};

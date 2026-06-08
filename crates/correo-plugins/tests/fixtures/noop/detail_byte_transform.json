@@ -1,0 +1,15 @@
+{
+  "hook": "detail_byte_transform",
+  "request": {
+    "abi_version": 1,
+    "context": {},
+    "config": null,
+    "bytes": [123, 125],
+    "content_type": "application/json"
+  },
+  "expected_response": {
+    "abi_version": 1,
+    "bytes": [123, 125],
+    "content_type": "application/json"
+  }
+}
