@@ -4,7 +4,7 @@ use egui::{Align, Button, CornerRadius, Layout, RichText, Stroke, Ui};
 use crate::i18n::I18n;
 use crate::icons;
 use crate::theme::ThemeTokens;
-use crate::widgets::with_icon_button_padding;
+use crate::widgets::{square_icon_button_size, with_icon_button_padding};
 
 const TOP_WORKSPACES: [Workspace; 2] = [Workspace::Connections, Workspace::Scripts];
 const BOTTOM_WORKSPACES: [Workspace; 4] = [
@@ -74,7 +74,7 @@ fn nav_button(
     };
     let response = with_icon_button_padding(ui, |ui| {
         ui.add_sized(
-            [32.0, 32.0],
+            square_icon_button_size(),
             Button::new(RichText::new(icons::workspace_icon(workspace)).size(18.0))
                 .fill(fill)
                 .stroke(Stroke::new(1.0, tokens.border))
