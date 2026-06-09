@@ -124,7 +124,8 @@ fn loads_legacy_profile_fixtures_and_reinitializes_plugins() {
             "builtin.json-format",
             "builtin.xml-format",
             "builtin.contains-string-validator",
-            "builtin.advanced-validator"
+            "builtin.advanced-validator",
+            "builtin.xml-xsd-validator"
         ]
     );
     assert!(preview

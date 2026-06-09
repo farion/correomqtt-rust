@@ -10,13 +10,13 @@ members = [
     "crates/correo-scripting",
     "crates/correo-storage",
     "crates/correo-ui",
+    "plugins/correo-plugins-advanced-validator",
     "plugins/correo-plugins-json-format",
     "plugins/xml-format",
-    "plugins/correo-plugins-advanced-validator",
     "plugins/correo-plugins-contains-string-validator",
     "plugins/correo-plugins-systopic",
-    "plugins/correo-plugins-xml-xsd-validator",
     "plugins/save-manipulator",
+    "plugins/correo-plugins-xml-xsd-validator",
     "xtask",
 ]
 resolver = "2"
