@@ -22,7 +22,7 @@ mod keyboard;
 #[path = "plugins/marketplace.rs"]
 mod marketplace;
 
-const TILE_HEIGHT: f32 = 94.0;
+const TILE_HEIGHT: f32 = 88.0;
 const LIST_WIDTH: f32 = 340.0;
 const MIN_LIST_WIDTH: f32 = 260.0;
 const MAX_LIST_WIDTH: f32 = 520.0;
@@ -302,7 +302,6 @@ pub(super) fn plugin_tile(
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
     disable_tile_text_selection(&mut content_ui);
     tighten_tile_spacing(&mut content_ui);
-    content_ui.spacing_mut().interact_size.y = 20.0;
     content_ui.set_clip_rect(content_rect.intersect(clip_rect));
     add_contents(&mut content_ui);
     ui.add_space(TILE_GAP);

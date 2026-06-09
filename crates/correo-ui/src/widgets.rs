@@ -11,9 +11,9 @@ const CHECKBOX_TEXT_TRAILING_PADDING: f32 = 8.0;
 const TILE_SCROLLBAR_GUTTER: f32 = 12.0;
 const TILE_SCROLLBAR_INSET: f32 = 4.0;
 pub(crate) const TILE_GAP: f32 = 4.0;
-pub(crate) const TILE_LINE_GAP: f32 = 2.0;
+pub(crate) const TILE_LINE_GAP: f32 = 0.0;
 const TILE_PADDING_X: i8 = 8;
-const TILE_PADDING_Y: i8 = 6;
+const TILE_PADDING_Y: i8 = 4;
 
 pub(crate) fn padded_text_edit<'a>(text_edit: TextEdit<'a>) -> TextEdit<'a> {
     text_edit.margin(control_margin())
@@ -208,11 +208,11 @@ mod tests {
     #[test]
     fn tile_rhythm_is_compact_and_symmetric() {
         assert_eq!(TILE_GAP, 4.0);
-        assert_eq!(TILE_LINE_GAP, 2.0);
+        assert_eq!(TILE_LINE_GAP, 0.0);
         assert_eq!(TILE_SCROLLBAR_GUTTER, 12.0);
         assert_eq!(TILE_SCROLLBAR_INSET, 4.0);
-        assert_eq!(tile_inner_margin(), egui::Margin::symmetric(8, 6));
-        assert_eq!(tile_inner_padding(), egui::vec2(8.0, 6.0));
+        assert_eq!(tile_inner_margin(), egui::Margin::symmetric(8, 4));
+        assert_eq!(tile_inner_padding(), egui::vec2(8.0, 4.0));
     }
 
     #[test]

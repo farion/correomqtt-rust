@@ -10,20 +10,20 @@ use egui_phosphor::regular;
 use crate::i18n::I18n;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
-    disable_tile_text_selection, square_icon_button_side, tile_list_content_width,
-    tile_scroll_bar_rect, with_icon_button_padding, TILE_GAP, TILE_LINE_GAP,
+    disable_tile_text_selection, tile_list_content_width, tile_scroll_bar_rect, TILE_GAP,
 };
 
-const ROW_HEIGHT: f32 = 62.0;
+const ROW_HEIGHT: f32 = 58.0;
 const ROW_PADDING_X: f32 = 8.0;
-const ROW_PADDING_Y: f32 = 7.0;
+const ROW_PADDING_Y: f32 = 6.0;
 const STATUS_ICON_WIDTH: f32 = 26.0;
 const STATUS_ICON_SIZE: f32 = 21.0;
 const FEATURE_ICON_WIDTH: f32 = 19.0;
 const FEATURE_ICON_SIZE: f32 = 17.0;
 const FEATURE_ICON_GAP: f32 = 2.0;
-const ACTION_BUTTON_SIDE: f32 = square_icon_button_side();
-const ACTION_ICON_SIZE: f32 = 16.0;
+const ACTION_BUTTON_SIDE: f32 = 28.0;
+const ACTION_ICON_SIZE: f32 = 15.0;
+const ACTION_BUTTON_PADDING: f32 = 5.0;
 const ACTION_BUTTON_GAP: f32 = 4.0;
 
 pub fn panel(
@@ -226,80 +226,80 @@ fn connection_info(
     let mut button_clicked = false;
     let rect = ui.max_rect();
     let action_width = (ACTION_BUTTON_SIDE * 2.0) + ACTION_BUTTON_GAP;
+    let features = feature_icons(connection);
+    let feature_width = feature_group_width(features.len());
+    let right_width = action_width.max(feature_width);
+    let right = rect.right();
+    let right_left = (right - right_width).max(rect.left());
+    let right_rect = Rect::from_min_max(egui::pos2(right_left, rect.top()), rect.right_bottom());
     let action_rect = Rect::from_min_max(
-        egui::pos2((rect.right() - action_width).max(rect.left()), rect.top()),
+        egui::pos2(
+            (right - action_width).max(right_left),
+            rect.bottom() - ACTION_BUTTON_SIDE,
+        ),
         rect.right_bottom(),
     );
-    let text_right = (action_rect.left() - 6.0).max(rect.left());
-    let line_height = ((rect.height() - TILE_LINE_GAP) * 0.5).max(0.0);
+    let text_right = (right_rect.left() - 6.0).max(rect.left());
+    let line_height = ui.text_style_height(&egui::TextStyle::Body);
     let title_rect = Rect::from_min_max(
         rect.left_top(),
         egui::pos2(text_right, rect.top() + line_height),
     );
     let endpoint_rect = Rect::from_min_max(
-        egui::pos2(rect.left(), title_rect.bottom() + TILE_LINE_GAP),
-        egui::pos2(text_right, rect.bottom()),
+        egui::pos2(rect.left(), title_rect.bottom()),
+        egui::pos2(text_right, title_rect.bottom() + line_height),
     );
-    connection_title_row(ui, connection, tokens, title_rect);
-    connection_endpoint_row(ui, connection, tokens, endpoint_rect);
+    let feature_rect = Rect::from_min_max(
+        egui::pos2((right - feature_width).max(right_left), rect.top()),
+        egui::pos2(right, title_rect.bottom()),
+    );
+    let text_rect = Rect::from_min_max(rect.left_top(), endpoint_rect.right_bottom());
+    connection_text_rows(ui, connection, tokens, text_rect);
+    connection_feature_row(ui, features, tokens, feature_rect, line_height);
     if connection_action_buttons(ui, connection, commands, i18n, action_rect) {
         button_clicked = true;
     }
     button_clicked
 }
 
-fn connection_title_row(
+fn connection_text_rows(
     ui: &mut Ui,
     connection: &ConnectionSummary,
     tokens: ThemeTokens,
     rect: Rect,
 ) {
-    let features = feature_icons(connection);
-    let feature_width = feature_group_width(features.len());
-    let feature_rect = Rect::from_min_max(
-        egui::pos2((rect.right() - feature_width).max(rect.left()), rect.top()),
-        rect.right_bottom(),
-    );
-    let name_rect = Rect::from_min_max(
-        rect.left_top(),
-        egui::pos2((feature_rect.left() - 6.0).max(rect.left()), rect.bottom()),
-    );
-
-    let mut name_ui = ui.new_child(
+    let mut text_ui = ui.new_child(
         UiBuilder::new()
-            .max_rect(name_rect)
-            .layout(Layout::left_to_right(egui::Align::Center)),
+            .max_rect(rect)
+            .layout(Layout::top_down(egui::Align::Min)),
     );
-    name_ui
+    text_ui.spacing_mut().item_spacing.y = 0.0;
+    text_ui.set_width(rect.width());
+    text_ui
         .add(Label::new(RichText::new(&connection.name).strong()).truncate())
         .on_hover_text(&connection.name);
-
-    let mut feature_ui = ui.new_child(
-        UiBuilder::new()
-            .max_rect(feature_rect)
-            .layout(Layout::left_to_right(egui::Align::Center)),
-    );
-    feature_ui.spacing_mut().item_spacing.x = FEATURE_ICON_GAP;
-    for feature in features {
-        feature_icon(&mut feature_ui, feature, tokens, rect.height());
-    }
+    let endpoint = endpoint_label(connection);
+    text_ui
+        .add(Label::new(RichText::new(&endpoint).color(tokens.text_secondary)).truncate())
+        .on_hover_text(&connection.endpoint);
 }
 
-fn connection_endpoint_row(
+fn connection_feature_row(
     ui: &mut Ui,
-    connection: &ConnectionSummary,
+    features: Vec<FeatureIcon>,
     tokens: ThemeTokens,
     rect: Rect,
+    line_height: f32,
 ) {
-    let endpoint = endpoint_label(connection);
-    let mut endpoint_ui = ui.new_child(
+    let mut feature_ui = ui.new_child(
         UiBuilder::new()
             .max_rect(rect)
             .layout(Layout::left_to_right(egui::Align::Center)),
     );
-    endpoint_ui
-        .add(Label::new(RichText::new(&endpoint).color(tokens.text_secondary)).truncate())
-        .on_hover_text(&connection.endpoint);
+    feature_ui.spacing_mut().item_spacing.x = FEATURE_ICON_GAP;
+    for feature in features {
+        feature_icon(&mut feature_ui, feature, tokens, line_height);
+    }
 }
 
 fn connection_action_buttons(
@@ -343,13 +343,14 @@ fn edit_button(ui: &mut Ui, i18n: &I18n) -> Response {
 }
 
 fn icon_button(ui: &mut Ui, icon: &'static str, enabled: bool) -> Response {
-    with_icon_button_padding(ui, |ui| {
-        ui.add_enabled(
-            enabled,
-            Button::new(RichText::new(icon).size(ACTION_ICON_SIZE))
-                .min_size(egui::vec2(ACTION_BUTTON_SIDE, ACTION_BUTTON_SIDE)),
-        )
+    let button = Button::new(RichText::new(icon).size(ACTION_ICON_SIZE))
+        .min_size(egui::vec2(ACTION_BUTTON_SIDE, ACTION_BUTTON_SIDE));
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = egui::vec2(ACTION_BUTTON_PADDING, ACTION_BUTTON_PADDING);
+        ui.spacing_mut().interact_size = egui::Vec2::splat(ACTION_BUTTON_SIDE);
+        ui.add_enabled(enabled, button)
     })
+    .inner
 }
 
 fn feature_icon(ui: &mut Ui, feature: FeatureIcon, tokens: ThemeTokens, line_height: f32) {
