@@ -1,5 +1,6 @@
 use crate::{
-    AppCommand, AppEvent, AppModel, ScriptExecutionErrorKind, ScriptExecutionStatus, ScriptLogLevel,
+    AppCommand, AppEvent, AppModel, ScriptExecutionErrorKind, ScriptExecutionRow,
+    ScriptExecutionStatus, ScriptLogLevel,
 };
 
 #[test]
@@ -47,6 +48,29 @@ fn script_edit_save_tracks_dirty_state() {
 }
 
 #[test]
+fn discard_script_changes_restores_saved_source() {
+    let mut model = AppModel::default();
+    let original = model
+        .snapshot()
+        .scripts
+        .selected_script()
+        .unwrap()
+        .saved_source
+        .clone();
+
+    model.apply_command(AppCommand::UpdateScriptSource(
+        "logger.info('dirty');".to_owned(),
+    ));
+    assert!(model.snapshot().scripts.selected_script_is_dirty());
+
+    model.apply_command(AppCommand::DiscardScriptChanges);
+
+    let script = model.snapshot().scripts.selected_script().unwrap();
+    assert_eq!(script.source, original);
+    assert!(!script.is_dirty());
+}
+
+#[test]
 fn run_and_cancel_script_updates_execution_state() {
     let mut model = AppModel::default();
 
@@ -69,6 +93,54 @@ fn run_and_cancel_script_updates_execution_state() {
         model.snapshot().scripts.last_error.as_ref().unwrap().kind,
         ScriptExecutionErrorKind::Cancellation
     );
+}
+
+#[test]
+fn clear_finished_execution_logs_keeps_running_execution() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::RunScript);
+    let running_id = model
+        .snapshot()
+        .scripts
+        .active_execution_id
+        .clone()
+        .unwrap();
+    model.snapshot.scripts.executions.push(ScriptExecutionRow {
+        execution_id: "finished".to_owned(),
+        script_name: model.snapshot().scripts.selected_script.clone(),
+        status: ScriptExecutionStatus::Succeeded,
+        duration: "42ms".to_owned(),
+        timestamp: "now".to_owned(),
+        error: None,
+    });
+    model.apply_event(AppEvent::ScriptExecutionLogAppended {
+        execution_id: "finished".to_owned(),
+        level: ScriptLogLevel::Info,
+        message: "done".to_owned(),
+        timestamp: "now".to_owned(),
+    });
+
+    model.apply_command(AppCommand::ClearFinishedScriptExecutions);
+
+    assert!(model
+        .snapshot()
+        .scripts
+        .executions
+        .iter()
+        .any(|execution| execution.execution_id == running_id));
+    assert!(!model
+        .snapshot()
+        .scripts
+        .executions
+        .iter()
+        .any(|execution| execution.execution_id == "finished"));
+    assert!(!model
+        .snapshot()
+        .scripts
+        .log_lines
+        .iter()
+        .any(|line| line.execution_id == "finished"));
 }
 
 #[test]

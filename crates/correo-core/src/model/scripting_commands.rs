@@ -14,6 +14,7 @@ impl AppModel {
             AppCommand::CreateScript => self.create_script(),
             AppCommand::UpdateScriptSource(source) => self.update_script_source(source.clone()),
             AppCommand::SaveScript => self.save_script(),
+            AppCommand::DiscardScriptChanges => self.discard_script_changes(),
             AppCommand::RequestRenameScript => self.request_rename_script(),
             AppCommand::UpdateRenameScriptName(name) => {
                 self.update_rename_script_name(name.clone());
@@ -29,6 +30,7 @@ impl AppModel {
             }
             AppCommand::RunScript => self.run_script(),
             AppCommand::CancelScript => self.cancel_script(),
+            AppCommand::ClearFinishedScriptExecutions => self.clear_finished_script_executions(),
             _ => return false,
         }
         true

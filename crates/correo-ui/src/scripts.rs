@@ -1,16 +1,16 @@
 use correo_core::{
-    AppCommand, AppCommandSender, AppSnapshot, ScriptExecutionError, ScriptExecutionStatus,
-    ScriptFeedbackSeverity, ScriptFileStatus, ScriptLogLevel, ScriptSurfaceSnapshot,
+    AppCommand, AppCommandSender, AppSnapshot, ScriptExecutionStatus, ScriptFeedbackSeverity,
+    ScriptFileStatus, ScriptLogLevel, ScriptSurfaceSnapshot,
 };
 use egui::{Button, ComboBox, Frame, Id, Modal, RichText, ScrollArea, Stroke, TextEdit, Ui};
-use egui_extras::{Column, TableBuilder};
 
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::padded_text_edit;
 
-const SCRIPT_LIST_WIDTH: f32 = 300.0;
-const EXECUTION_LIST_WIDTH: f32 = 560.0;
-const LOWER_MIN_HEIGHT: f32 = 180.0;
+#[path = "scripts/layout.rs"]
+mod layout;
+
+const SCRIPTING_HELP_URL: &str = "https://github.com/EXXETA/correomqtt/wiki/scripting";
 
 pub fn sidebar(
     ui: &mut Ui,
@@ -43,67 +43,19 @@ pub fn sidebar(
 }
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
-    ui.heading("Scripting");
-    ui.add_space(8.0);
-    let available_height = ui.available_height();
-    let upper_height = (available_height * 0.58)
-        .max(260.0)
-        .min((available_height - LOWER_MIN_HEIGHT).max(260.0));
-    ui.horizontal(|ui| {
-        let list_width = SCRIPT_LIST_WIDTH.min(ui.available_width() * 0.38);
-        ui.allocate_ui_with_layout(
-            egui::vec2(list_width, upper_height),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                let cell_size = ui.available_size();
-                panel(tokens).show(ui, |ui| {
-                    ui.set_min_size(cell_size);
-                    script_browser(ui, &snapshot.scripts, tokens, commands)
-                });
-            },
-        );
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), upper_height),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                let cell_size = ui.available_size();
-                panel(tokens).show(ui, |ui| {
-                    ui.set_min_size(cell_size);
-                    toolbar(ui, snapshot, tokens, commands);
-                    ui.separator();
-                    editor(ui, &snapshot.scripts, commands);
-                });
-            },
-        );
-    });
-    ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        let lower_height = ui.available_height().max(LOWER_MIN_HEIGHT);
-        let execution_width = EXECUTION_LIST_WIDTH.min(ui.available_width() * 0.55);
-        ui.allocate_ui_with_layout(
-            egui::vec2(execution_width, lower_height),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                let cell_size = ui.available_size();
-                panel(tokens).show(ui, |ui| {
-                    ui.set_min_size(cell_size);
-                    error_summary(ui, snapshot.scripts.last_error.as_ref(), tokens);
-                    executions(ui, &snapshot.scripts, tokens, commands);
-                });
-            },
-        );
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), lower_height),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                let cell_size = ui.available_size();
-                panel(tokens).show(ui, |ui| {
-                    ui.set_min_size(cell_size);
-                    log_view(ui, &snapshot.scripts, tokens);
-                });
-            },
-        );
-    });
+    layout::four_pane(
+        ui,
+        tokens,
+        |ui| script_browser(ui, &snapshot.scripts, tokens, commands),
+        |ui| {
+            toolbar(ui, snapshot, tokens, commands);
+            ui.add_space(6.0);
+            editor(ui, &snapshot.scripts, commands);
+        },
+        |ui| executions(ui, &snapshot.scripts, tokens, commands),
+        |ui| log_view(ui, &snapshot.scripts, tokens, commands),
+        |ui| footer(ui, &snapshot.scripts, tokens),
+    );
     rename_dialog(ui, &snapshot.scripts, commands);
     delete_dialog(ui, &snapshot.scripts, commands);
 }
@@ -204,9 +156,13 @@ fn script_list(
 fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     let scripts = &snapshot.scripts;
     ui.horizontal_wrapped(|ui| {
-        ui.label(selected_label(scripts, tokens));
-        if scripts.selected_script_is_dirty() {
-            ui.label(RichText::new("Unsaved").color(tokens.warning));
+        let has_script = scripts.selected_script().is_some();
+        if ui
+            .add_enabled(scripts.can_run(), Button::new("Run Script"))
+            .on_hover_text("Queue script execution through core")
+            .clicked()
+        {
+            send(commands, AppCommand::RunScript);
         }
         if ui
             .add_enabled(scripts.can_save(), Button::new("Save"))
@@ -216,30 +172,22 @@ fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &
             send(commands, AppCommand::SaveScript);
         }
         if ui
-            .add_enabled(scripts.can_run(), Button::new("Run"))
-            .on_hover_text("Queue script execution through core")
+            .add_enabled(scripts.selected_script_is_dirty(), Button::new("Discard"))
+            .on_hover_text("Reset the editor to the saved script source")
             .clicked()
         {
-            send(commands, AppCommand::RunScript);
+            send(commands, AppCommand::DiscardScriptChanges);
         }
-        if ui
-            .add_enabled(scripts.running, Button::new("Cancel"))
-            .on_hover_text("Cancel the active script execution")
-            .clicked()
-        {
-            send(commands, AppCommand::CancelScript);
-        }
-        if ui
-            .add_enabled(scripts.selected_script().is_some(), Button::new("Rename"))
-            .clicked()
-        {
+        if ui.add_enabled(has_script, Button::new("Rename")).clicked() {
             send(commands, AppCommand::RequestRenameScript);
         }
-        if ui
-            .add_enabled(scripts.selected_script().is_some(), Button::new("Delete"))
-            .clicked()
-        {
+        if ui.add_enabled(has_script, Button::new("Delete")).clicked() {
             send(commands, AppCommand::RequestDeleteScript);
+        }
+        ui.separator();
+        ui.label(selected_label(scripts, tokens));
+        if scripts.selected_script_is_dirty() {
+            ui.label(RichText::new("Unsaved").color(tokens.warning));
         }
     });
     ui.horizontal(|ui| {
@@ -273,7 +221,7 @@ fn selected_label(scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) -> RichT
 fn editor(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
     if let Some(script) = scripts.selected_script() {
         let mut source = script.source.clone();
-        let editor_height = (ui.available_height() - 180.0).max(220.0);
+        let editor_height = ui.available_height().max(180.0);
         if ui
             .add_sized(
                 [ui.available_width(), editor_height],
@@ -296,77 +244,93 @@ fn executions(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    ui.heading("Executions");
-    let max_scroll_height = (ui.available_height() - 24.0).max(120.0);
-    TableBuilder::new(ui)
-        .striped(true)
-        .max_scroll_height(max_scroll_height)
-        .column(Column::remainder())
-        .column(Column::exact(92.0))
-        .column(Column::exact(84.0))
-        .column(Column::exact(76.0))
-        .column(Column::remainder())
-        .header(22.0, |mut header| {
-            header.col(|ui| {
-                ui.strong("Script");
-            });
-            header.col(|ui| {
-                ui.strong("Status");
-            });
-            header.col(|ui| {
-                ui.strong("Duration");
-            });
-            header.col(|ui| {
-                ui.strong("Time");
-            });
-            header.col(|ui| {
-                ui.strong("Error");
-            });
-        })
-        .body(|mut body| {
+    ui.horizontal(|ui| {
+        ui.heading("Executions");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("Clear execution log").clicked() {
+                send(commands, AppCommand::ClearFinishedScriptExecutions);
+            }
+        });
+    });
+    ui.add_space(4.0);
+    ScrollArea::vertical()
+        .id_salt("script-executions")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            if scripts.executions.is_empty() {
+                ui.label(RichText::new("No executions").color(tokens.text_secondary));
+                return;
+            }
             for execution in &scripts.executions {
-                body.row(28.0, |mut row| {
-                    row.col(|ui| {
-                        let selected = scripts.selected_execution_id()
-                            == Some(execution.execution_id.as_str());
-                        if ui
-                            .selectable_label(selected, &execution.script_name)
-                            .clicked()
-                        {
-                            send(
-                                commands,
-                                AppCommand::SelectScriptExecution(execution.execution_id.clone()),
+                let selected =
+                    scripts.selected_execution_id() == Some(execution.execution_id.as_str());
+                let response = Frame::NONE
+                    .fill(if selected {
+                        tokens.accent_selected_bg
+                    } else {
+                        tokens.panel_bg
+                    })
+                    .stroke(Stroke::new(
+                        1.0,
+                        if selected {
+                            tokens.accent
+                        } else {
+                            tokens.border
+                        },
+                    ))
+                    .corner_radius(egui::CornerRadius::same(4))
+                    .inner_margin(egui::Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(execution.status.label())
+                                    .color(execution_color(execution.status, tokens))
+                                    .strong(),
                             );
-                        }
-                    });
-                    row.col(|ui| {
-                        ui.label(
-                            RichText::new(execution.status.label())
-                                .color(execution_color(execution.status, tokens)),
-                        );
-                    });
-                    row.col(|ui| {
-                        ui.label(&execution.duration);
-                    });
-                    row.col(|ui| {
-                        ui.label(&execution.timestamp);
-                    });
-                    row.col(|ui| {
-                        if let Some(error) = &execution.error {
-                            ui.label(format!("{}: {}", error.kind.label(), error.message));
-                        }
-                    });
-                });
+                            ui.label(RichText::new(&execution.script_name).strong());
+                            ui.label(
+                                RichText::new(&execution.duration).color(tokens.text_secondary),
+                            );
+                        });
+                        ui.label(RichText::new(&execution.timestamp).color(tokens.text_secondary));
+                    })
+                    .response;
+                if response.clicked() {
+                    send(
+                        commands,
+                        AppCommand::SelectScriptExecution(execution.execution_id.clone()),
+                    );
+                }
+                ui.add_space(6.0);
             }
         });
 }
 
-fn log_view(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) {
-    ui.heading("Execution log");
+fn log_view(
+    ui: &mut Ui,
+    scripts: &ScriptSurfaceSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     let selected_execution_id = scripts.selected_execution_id();
+    ui.horizontal(|ui| {
+        ui.heading("Execution log");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let can_stop =
+                scripts.running && selected_execution_id == scripts.active_execution_id.as_deref();
+            if ui
+                .add_enabled(can_stop, Button::new("Stop Script"))
+                .on_hover_text("Stop the selected running execution")
+                .clicked()
+            {
+                send(commands, AppCommand::CancelScript);
+            }
+        });
+    });
+    ui.add_space(4.0);
     ScrollArea::vertical()
         .id_salt("script-log")
-        .max_height(160.0)
         .stick_to_bottom(true)
         .show(ui, |ui| {
             for line in scripts.log_lines.iter().filter(|line| {
@@ -389,13 +353,26 @@ fn log_view(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) {
         });
 }
 
-fn error_summary(ui: &mut Ui, error: Option<&ScriptExecutionError>, tokens: ThemeTokens) {
-    if let Some(error) = error {
+fn footer(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) {
+    let running = scripts
+        .executions
+        .iter()
+        .filter(|execution| !execution.status.is_terminal())
+        .count();
+    let finished = scripts
+        .executions
+        .iter()
+        .filter(|execution| execution.status.is_terminal())
+        .count();
+    ui.horizontal(|ui| {
         ui.label(
-            RichText::new(format!("{} error: {}", error.kind.label(), error.message))
-                .color(tokens.warning),
+            RichText::new(format!("{running} running / {finished} finished"))
+                .color(tokens.text_secondary),
         );
-    }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.hyperlink_to("Scripting help", SCRIPTING_HELP_URL);
+        });
+    });
 }
 
 fn rename_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
@@ -449,13 +426,6 @@ fn delete_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCom
     if response.should_close() {
         send(commands, AppCommand::CancelDeleteScript);
     }
-}
-
-fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
 }
 
 fn file_status_color(status: ScriptFileStatus, tokens: ThemeTokens) -> egui::Color32 {
