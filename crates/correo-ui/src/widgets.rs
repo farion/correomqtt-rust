@@ -4,7 +4,7 @@ use egui::{
 };
 use egui_phosphor::regular;
 
-use crate::theme::control_margin;
+use crate::theme::{control_margin, control_padding, CONTROL_HEIGHT};
 
 const CHECKBOX_ICON_SCALE: f32 = 2.0;
 const CHECKBOX_TEXT_TRAILING_PADDING: f32 = 8.0;
@@ -19,10 +19,19 @@ pub(crate) fn with_icon_button_padding<R>(
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> R {
     ui.scope(|ui| {
-        ui.spacing_mut().button_padding = crate::theme::control_padding();
+        ui.spacing_mut().button_padding = control_padding();
+        ui.spacing_mut().interact_size = Vec2::splat(square_icon_button_side());
         add_contents(ui)
     })
     .inner
+}
+
+pub(crate) const fn square_icon_button_side() -> f32 {
+    CONTROL_HEIGHT
+}
+
+pub(crate) const fn square_icon_button_size() -> [f32; 2] {
+    [square_icon_button_side(), square_icon_button_side()]
 }
 
 pub(crate) fn checkbox(ui: &mut Ui, checked: &mut bool, text: impl Into<WidgetText>) -> Response {
@@ -171,5 +180,12 @@ mod tests {
     #[test]
     fn checkbox_text_hover_trailing_padding_matches_spec() {
         assert_eq!(CHECKBOX_TEXT_TRAILING_PADDING, 8.0);
+    }
+
+    #[test]
+    fn icon_button_size_is_square_control_height() {
+        let [width, height] = square_icon_button_size();
+        assert_eq!(width, height);
+        assert_eq!(width, CONTROL_HEIGHT);
     }
 }

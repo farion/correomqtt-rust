@@ -9,7 +9,10 @@ use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
-use crate::widgets::{disable_tile_text_selection, tile_list_content_width};
+use crate::widgets::{
+    disable_tile_text_selection, square_icon_button_side, tile_list_content_width,
+    with_icon_button_padding,
+};
 
 const ROW_HEIGHT: f32 = 66.0;
 const ROW_GAP: f32 = 6.0;
@@ -21,7 +24,7 @@ const STATUS_ICON_SIZE: f32 = 21.0;
 const FEATURE_ICON_WIDTH: f32 = 19.0;
 const FEATURE_ICON_SIZE: f32 = 17.0;
 const FEATURE_ICON_GAP: f32 = 2.0;
-const ACTION_BUTTON_SIDE: f32 = 30.0;
+const ACTION_BUTTON_SIDE: f32 = square_icon_button_side();
 const ACTION_ICON_SIZE: f32 = 16.0;
 const ACTION_BUTTON_GAP: f32 = 4.0;
 
@@ -319,15 +322,13 @@ fn edit_button(ui: &mut Ui, i18n: &I18n) -> Response {
 }
 
 fn icon_button(ui: &mut Ui, icon: &'static str, enabled: bool) -> Response {
-    ui.scope(|ui| {
-        ui.spacing_mut().button_padding = egui::vec2(5.0, 4.0);
+    with_icon_button_padding(ui, |ui| {
         ui.add_enabled(
             enabled,
             Button::new(RichText::new(icon).size(ACTION_ICON_SIZE))
                 .min_size(egui::vec2(ACTION_BUTTON_SIDE, ACTION_BUTTON_SIDE)),
         )
     })
-    .inner
 }
 
 fn feature_icon(ui: &mut Ui, feature: FeatureIcon, tokens: ThemeTokens, line_height: f32) {
