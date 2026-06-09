@@ -10,7 +10,10 @@ use egui_extras::{Size, StripBuilder};
 
 use crate::i18n::I18n;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
-use crate::widgets::{disable_tile_text_selection, padded_text_edit};
+use crate::widgets::{
+    disable_tile_text_selection, padded_text_edit, tighten_tile_spacing, tile_inner_padding,
+    tile_list_content_width, TILE_GAP,
+};
 
 #[path = "plugins/installed.rs"]
 mod installed;
@@ -19,10 +22,7 @@ mod keyboard;
 #[path = "plugins/marketplace.rs"]
 mod marketplace;
 
-const TILE_HEIGHT: f32 = 104.0;
-const TILE_PADDING: f32 = 8.0;
-const TILE_CONTENT_GAP: f32 = 4.0;
-const TILE_GAP: f32 = 6.0;
+const TILE_HEIGHT: f32 = 94.0;
 const LIST_WIDTH: f32 = 340.0;
 const MIN_LIST_WIDTH: f32 = 260.0;
 const MAX_LIST_WIDTH: f32 = 520.0;
@@ -254,7 +254,7 @@ pub(super) fn search_field(
     let mut filter = plugins.plugin_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
+            [tile_list_content_width(ui), CONTROL_HEIGHT],
             padded_text_edit(
                 TextEdit::singleline(&mut filter)
                     .id(keyboard::plugin_search_id())
@@ -298,10 +298,10 @@ pub(super) fn plugin_tile(
         StrokeKind::Inside,
     );
 
-    let content_rect = rect.shrink(TILE_PADDING);
+    let content_rect = rect.shrink2(tile_inner_padding());
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
     disable_tile_text_selection(&mut content_ui);
-    content_ui.spacing_mut().item_spacing.y = TILE_CONTENT_GAP;
+    tighten_tile_spacing(&mut content_ui);
     content_ui.spacing_mut().interact_size.y = 20.0;
     content_ui.set_clip_rect(content_rect.intersect(clip_rect));
     add_contents(&mut content_ui);

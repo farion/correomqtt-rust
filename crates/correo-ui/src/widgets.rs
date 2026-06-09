@@ -8,7 +8,12 @@ use crate::theme::{control_margin, control_padding, CONTROL_HEIGHT};
 
 const CHECKBOX_ICON_SCALE: f32 = 2.0;
 const CHECKBOX_TEXT_TRAILING_PADDING: f32 = 8.0;
-const TILE_SCROLLBAR_GUTTER: f32 = 16.0;
+const TILE_SCROLLBAR_GUTTER: f32 = 12.0;
+const TILE_SCROLLBAR_INSET: f32 = 4.0;
+pub(crate) const TILE_GAP: f32 = 4.0;
+pub(crate) const TILE_LINE_GAP: f32 = 2.0;
+const TILE_PADDING_X: i8 = 8;
+const TILE_PADDING_Y: i8 = 6;
 
 pub(crate) fn padded_text_edit<'a>(text_edit: TextEdit<'a>) -> TextEdit<'a> {
     text_edit.margin(control_margin())
@@ -53,6 +58,24 @@ pub(crate) fn disable_tile_text_selection(ui: &mut Ui) {
 
 pub(crate) fn tile_list_content_width(ui: &Ui) -> f32 {
     (ui.available_width() - TILE_SCROLLBAR_GUTTER).max(0.0)
+}
+
+pub(crate) fn tile_scroll_bar_rect(ui: &Ui) -> egui::Rect {
+    let mut rect = ui.available_rect_before_wrap();
+    rect.max.x = (rect.max.x - TILE_SCROLLBAR_INSET).max(rect.min.x);
+    rect
+}
+
+pub(crate) fn tile_inner_margin() -> egui::Margin {
+    egui::Margin::symmetric(TILE_PADDING_X, TILE_PADDING_Y)
+}
+
+pub(crate) fn tile_inner_padding() -> egui::Vec2 {
+    egui::vec2(TILE_PADDING_X as f32, TILE_PADDING_Y as f32)
+}
+
+pub(crate) fn tighten_tile_spacing(ui: &mut Ui) {
+    ui.spacing_mut().item_spacing.y = TILE_LINE_GAP;
 }
 
 fn checkbox_icon_font(mut font: FontId) -> FontId {
@@ -180,6 +203,16 @@ mod tests {
     #[test]
     fn checkbox_text_hover_trailing_padding_matches_spec() {
         assert_eq!(CHECKBOX_TEXT_TRAILING_PADDING, 8.0);
+    }
+
+    #[test]
+    fn tile_rhythm_is_compact_and_symmetric() {
+        assert_eq!(TILE_GAP, 4.0);
+        assert_eq!(TILE_LINE_GAP, 2.0);
+        assert_eq!(TILE_SCROLLBAR_GUTTER, 12.0);
+        assert_eq!(TILE_SCROLLBAR_INSET, 4.0);
+        assert_eq!(tile_inner_margin(), egui::Margin::symmetric(8, 6));
+        assert_eq!(tile_inner_padding(), egui::vec2(8.0, 6.0));
     }
 
     #[test]

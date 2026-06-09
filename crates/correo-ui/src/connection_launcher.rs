@@ -8,17 +8,15 @@ use egui::{
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
     disable_tile_text_selection, square_icon_button_side, tile_list_content_width,
-    with_icon_button_padding,
+    tile_scroll_bar_rect, with_icon_button_padding, TILE_GAP, TILE_LINE_GAP,
 };
 
-const ROW_HEIGHT: f32 = 66.0;
-const ROW_GAP: f32 = 6.0;
+const ROW_HEIGHT: f32 = 62.0;
 const ROW_PADDING_X: f32 = 8.0;
-const ROW_PADDING_Y: f32 = 6.0;
-const ROW_LINE_GAP: f32 = 3.0;
+const ROW_PADDING_Y: f32 = 7.0;
 const STATUS_ICON_WIDTH: f32 = 26.0;
 const STATUS_ICON_SIZE: f32 = 21.0;
 const FEATURE_ICON_WIDTH: f32 = 19.0;
@@ -66,10 +64,10 @@ pub fn panel(
     ui.separator();
 
     let mut filter = snapshot.connection_filter.clone();
-    let response = ui.add(
+    let response = ui.add_sized(
+        [tile_list_content_width(ui), CONTROL_HEIGHT],
         crate::widgets::padded_text_edit(TextEdit::singleline(&mut filter))
-            .hint_text(i18n.text("common-search"))
-            .desired_width(f32::INFINITY),
+            .hint_text(i18n.text("common-search")),
     );
     if response.changed() {
         send(commands, AppCommand::SearchConnections(filter));
@@ -80,6 +78,7 @@ pub fn panel(
     ScrollArea::vertical()
         .id_salt("connection-list")
         .auto_shrink([false, false])
+        .scroll_bar_rect(tile_scroll_bar_rect(ui))
         .show(ui, |ui| {
             ui.set_width(tile_list_content_width(ui));
             for connection in connections {
@@ -181,7 +180,7 @@ fn connection_row(
         send(commands, AppCommand::SelectConnection(connection.id));
     }
 
-    ui.add_space(ROW_GAP);
+    ui.add_space(TILE_GAP);
 }
 
 fn row_contents(
@@ -196,15 +195,17 @@ fn row_contents(
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
         ui.set_height(content_height);
-        ui.add_sized(
-            [STATUS_ICON_WIDTH, content_height],
-            Label::new(
-                RichText::new(state_icon(connection.state))
-                    .size(STATUS_ICON_SIZE)
-                    .color(state_color(connection.state, tokens)),
-            ),
-        )
-        .on_hover_text(i18n.connection_state_label(connection.state));
+        ui.allocate_ui(egui::vec2(STATUS_ICON_WIDTH, content_height), |ui| {
+            ui.add_sized(
+                [STATUS_ICON_WIDTH, STATUS_ICON_SIZE + 2.0],
+                Label::new(
+                    RichText::new(state_icon(connection.state))
+                        .size(STATUS_ICON_SIZE)
+                        .color(state_color(connection.state, tokens)),
+                ),
+            )
+            .on_hover_text(i18n.connection_state_label(connection.state));
+        });
 
         let info_width = ui.available_width().max(96.0);
         ui.allocate_ui(egui::vec2(info_width, content_height), |ui| {
@@ -223,16 +224,24 @@ fn connection_info(
 ) -> bool {
     let mut button_clicked = false;
     let rect = ui.max_rect();
-    let bottom_rect = Rect::from_min_max(
-        egui::pos2(rect.left(), rect.bottom() - ACTION_BUTTON_SIDE),
+    let action_width = (ACTION_BUTTON_SIDE * 2.0) + ACTION_BUTTON_GAP;
+    let action_rect = Rect::from_min_max(
+        egui::pos2((rect.right() - action_width).max(rect.left()), rect.top()),
         rect.right_bottom(),
     );
+    let text_right = (action_rect.left() - 6.0).max(rect.left());
+    let line_height = ((rect.height() - TILE_LINE_GAP) * 0.5).max(0.0);
     let title_rect = Rect::from_min_max(
         rect.left_top(),
-        egui::pos2(rect.right(), bottom_rect.top() - ROW_LINE_GAP),
+        egui::pos2(text_right, rect.top() + line_height),
+    );
+    let endpoint_rect = Rect::from_min_max(
+        egui::pos2(rect.left(), title_rect.bottom() + TILE_LINE_GAP),
+        egui::pos2(text_right, rect.bottom()),
     );
     connection_title_row(ui, connection, tokens, title_rect);
-    if connection_endpoint_row(ui, connection, tokens, commands, i18n, bottom_rect) {
+    connection_endpoint_row(ui, connection, tokens, endpoint_rect);
+    if connection_action_buttons(ui, connection, commands, i18n, action_rect) {
         button_clicked = true;
     }
     button_clicked
@@ -279,34 +288,30 @@ fn connection_endpoint_row(
     ui: &mut Ui,
     connection: &ConnectionSummary,
     tokens: ThemeTokens,
-    commands: &AppCommandSender,
-    i18n: &I18n,
     rect: Rect,
-) -> bool {
-    let mut button_clicked = false;
-    let action_width = (ACTION_BUTTON_SIDE * 2.0) + ACTION_BUTTON_GAP;
+) {
     let endpoint = endpoint_label(connection);
-    let action_rect = Rect::from_min_max(
-        egui::pos2((rect.right() - action_width).max(rect.left()), rect.top()),
-        rect.right_bottom(),
-    );
-    let endpoint_rect = Rect::from_min_max(
-        rect.left_top(),
-        egui::pos2((action_rect.left() - 6.0).max(rect.left()), rect.bottom()),
-    );
-
     let mut endpoint_ui = ui.new_child(
         UiBuilder::new()
-            .max_rect(endpoint_rect)
+            .max_rect(rect)
             .layout(Layout::left_to_right(egui::Align::Center)),
     );
     endpoint_ui
         .add(Label::new(RichText::new(&endpoint).color(tokens.text_secondary)).truncate())
         .on_hover_text(&connection.endpoint);
+}
 
+fn connection_action_buttons(
+    ui: &mut Ui,
+    connection: &ConnectionSummary,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+    rect: Rect,
+) -> bool {
+    let mut button_clicked = false;
     let mut action_ui = ui.new_child(
         UiBuilder::new()
-            .max_rect(action_rect)
+            .max_rect(rect)
             .layout(Layout::right_to_left(egui::Align::Center)),
     );
     action_ui.spacing_mut().item_spacing.x = ACTION_BUTTON_GAP;
@@ -352,7 +357,7 @@ fn feature_icon(ui: &mut Ui, feature: FeatureIcon, tokens: ThemeTokens, line_hei
         Label::new(
             RichText::new(feature.icon)
                 .size(FEATURE_ICON_SIZE)
-                .color(tokens.accent),
+                .color(tokens.text_secondary),
         ),
     )
     .on_hover_text(feature.label);

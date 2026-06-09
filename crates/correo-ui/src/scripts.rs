@@ -5,7 +5,10 @@ use correo_core::{
 use egui::{Button, ComboBox, Frame, Id, Modal, RichText, ScrollArea, Stroke, TextEdit, Ui};
 
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
-use crate::widgets::{disable_tile_text_selection, padded_text_edit, tile_list_content_width};
+use crate::widgets::{
+    disable_tile_text_selection, padded_text_edit, tighten_tile_spacing, tile_inner_margin,
+    tile_list_content_width, tile_scroll_bar_rect, TILE_GAP,
+};
 
 #[path = "scripts/layout.rs"]
 mod layout;
@@ -21,7 +24,7 @@ pub fn sidebar(
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
+            [tile_list_content_width(ui), CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
         )
         .changed()
@@ -69,7 +72,7 @@ fn script_browser(
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
+            [tile_list_content_width(ui), CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
         )
         .changed()
@@ -90,6 +93,7 @@ fn script_browser(
     ScrollArea::vertical()
         .id_salt("script-list")
         .auto_shrink([false, false])
+        .scroll_bar_rect(tile_scroll_bar_rect(ui))
         .show(ui, |ui| {
             ui.set_width(tile_list_content_width(ui));
             script_list(ui, scripts, tokens, commands);
@@ -128,9 +132,10 @@ fn script_list(
             .fill(fill)
             .stroke(Stroke::new(1.0, stroke))
             .corner_radius(egui::CornerRadius::same(4))
-            .inner_margin(egui::Margin::same(8))
+            .inner_margin(tile_inner_margin())
             .show(ui, |ui| {
                 disable_tile_text_selection(ui);
+                tighten_tile_spacing(ui);
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new(title).strong());
                 ui.horizontal_wrapped(|ui| {
@@ -143,17 +148,13 @@ fn script_list(
                             .color(tokens.text_secondary),
                     );
                 });
-                ui.label(
-                    RichText::new(&script.relative_path)
-                        .color(tokens.text_secondary)
-                        .small(),
-                );
+                ui.label(RichText::new(&script.relative_path).color(tokens.text_secondary));
             })
             .response;
         if response.clicked() {
             send(commands, AppCommand::SelectScript(script.name.clone()));
         }
-        ui.add_space(6.0);
+        ui.add_space(TILE_GAP);
     }
 }
 
@@ -260,6 +261,7 @@ fn executions(
     ScrollArea::vertical()
         .id_salt("script-executions")
         .auto_shrink([false, false])
+        .scroll_bar_rect(tile_scroll_bar_rect(ui))
         .show(ui, |ui| {
             ui.set_width(tile_list_content_width(ui));
             if scripts.executions.is_empty() {
@@ -284,9 +286,10 @@ fn executions(
                         },
                     ))
                     .corner_radius(egui::CornerRadius::same(4))
-                    .inner_margin(egui::Margin::same(8))
+                    .inner_margin(tile_inner_margin())
                     .show(ui, |ui| {
                         disable_tile_text_selection(ui);
+                        tighten_tile_spacing(ui);
                         ui.set_width(ui.available_width());
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
@@ -308,7 +311,7 @@ fn executions(
                         AppCommand::SelectScriptExecution(execution.execution_id.clone()),
                     );
                 }
-                ui.add_space(6.0);
+                ui.add_space(TILE_GAP);
             }
         });
 }

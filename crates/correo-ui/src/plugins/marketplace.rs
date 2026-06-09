@@ -3,7 +3,7 @@ use egui::{Button, RichText, ScrollArea, Ui};
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
-use crate::widgets::tile_list_content_width;
+use crate::widgets::{tile_list_content_width, tile_scroll_bar_rect};
 
 use super::{
     install_button, marketplace_capability_chips, metadata_row, plugin_split, plugin_tile,
@@ -43,6 +43,7 @@ fn marketplace_list(
     ScrollArea::vertical()
         .id_salt("plugin-marketplace-list")
         .auto_shrink([false, false])
+        .scroll_bar_rect(tile_scroll_bar_rect(ui))
         .show(ui, |ui| {
             ui.set_width(tile_list_content_width(ui));
             if filtered.is_empty() {
