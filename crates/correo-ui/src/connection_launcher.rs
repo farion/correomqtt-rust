@@ -36,32 +36,14 @@ pub fn panel(
     ui.horizontal(|ui| {
         ui.heading(i18n.text("connections-heading"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.vertical(|ui| {
-                if ui
-                    .button(i18n.text("common-add-connection"))
-                    .on_hover_text(i18n.text("common-add-connection"))
-                    .clicked()
-                {
-                    send(commands, AppCommand::AddConnection);
-                }
-                if ui
-                    .button(i18n.text("common-import-cqc"))
-                    .on_hover_text(i18n.text("connection-import-tooltip"))
-                    .clicked()
-                {
-                    send(commands, AppCommand::ImportConnections);
-                }
-                if ui
-                    .button(i18n.text("common-export-cqc"))
-                    .on_hover_text(i18n.text("connection-export-tooltip"))
-                    .clicked()
-                {
-                    send(commands, AppCommand::ExportConnections);
-                }
-            });
+            if icon_button(ui, regular::PLUS, true)
+                .on_hover_text(i18n.text("common-add-connection"))
+                .clicked()
+            {
+                send(commands, AppCommand::AddConnection);
+            }
         });
     });
-    ui.separator();
 
     let mut filter = snapshot.connection_filter.clone();
     let response = ui.add_sized(
@@ -75,8 +57,10 @@ pub fn panel(
 
     ui.add_space(8.0);
     let connections = snapshot.filtered_connections();
+    let list_height = (ui.available_height() - CONTROL_HEIGHT - 14.0).max(120.0);
     ScrollArea::vertical()
         .id_salt("connection-list")
+        .max_height(list_height)
         .auto_shrink([false, false])
         .scroll_bar_rect(tile_scroll_bar_rect(ui))
         .show(ui, |ui| {
@@ -85,6 +69,23 @@ pub fn panel(
                 connection_row(ui, connection, snapshot, tokens, commands, i18n);
             }
         });
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        if ui
+            .button(i18n.text("common-import-cqc"))
+            .on_hover_text(i18n.text("connection-import-tooltip"))
+            .clicked()
+        {
+            send(commands, AppCommand::ImportConnections);
+        }
+        if ui
+            .button(i18n.text("common-export-cqc"))
+            .on_hover_text(i18n.text("connection-export-tooltip"))
+            .clicked()
+        {
+            send(commands, AppCommand::ExportConnections);
+        }
+    });
 }
 
 fn connection_row(

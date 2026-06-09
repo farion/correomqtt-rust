@@ -19,6 +19,10 @@ mod workbench_detail;
 mod workbench_dialogs;
 mod workbench_header;
 mod workbench_helpers;
+mod workbench_layout;
+mod workbench_messages;
+mod workbench_publish;
+mod workbench_subscribe;
 mod workspace;
 
 pub use shell::{stored_theme, CorreoUi, THEME_KEY};

@@ -1,36 +1,43 @@
-use correo_core::{AppCommand, AppCommandSender, AppSnapshot, MessageInspectorTab, MessageRow};
-use egui::{Frame, RichText, Stroke, Ui};
+use correo_core::{
+    AppCommand, AppCommandSender, AppSnapshot, MessageInspectorTab, MessageRow, PublishHistoryRow,
+};
+use egui::{RichText, Ui};
 
 use crate::theme::ThemeTokens;
 
-pub(crate) fn inspector(
+pub(crate) fn message_window_content(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
+    message: &MessageRow,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    panel(tokens).show(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.heading("Message Detail");
-            for tab in MessageInspectorTab::ALL {
-                if ui
-                    .selectable_label(snapshot.workbench.inspector_tab == tab, tab.label())
-                    .clicked()
-                {
-                    send(commands, AppCommand::SelectInspectorTab(tab));
-                }
-            }
-        });
-        ui.separator();
-        match snapshot.workbench.selected_message() {
-            Some(message) => {
-                selected_message(ui, snapshot.workbench.inspector_tab, message, tokens)
-            }
-            None => {
-                ui.label(RichText::new("No message selected").color(tokens.text_secondary));
+    ui.horizontal_wrapped(|ui| {
+        for tab in MessageInspectorTab::ALL {
+            if ui
+                .selectable_label(snapshot.workbench.inspector_tab == tab, tab.label())
+                .clicked()
+            {
+                send(commands, AppCommand::SelectInspectorTab(tab));
             }
         }
     });
+    ui.separator();
+    selected_message(ui, snapshot.workbench.inspector_tab, message, tokens);
+}
+
+pub(crate) fn outgoing_window_content(ui: &mut Ui, row: &PublishHistoryRow, tokens: ThemeTokens) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(&row.topic).strong());
+        ui.label(RichText::new(&row.timestamp).color(tokens.text_secondary));
+        ui.label(row.qos.label());
+        if row.retained {
+            badge_label(ui, "retained", tokens);
+        }
+    });
+    ui.add_space(6.0);
+    ui.label(format!("Bytes: {}", row.byte_size));
+    ui.label(RichText::new("Published message history").color(tokens.text_secondary));
 }
 
 fn selected_message(
@@ -111,13 +118,6 @@ fn diagnostics_tab(ui: &mut Ui, message: &MessageRow, tokens: ThemeTokens) {
 
 fn badge_label(ui: &mut Ui, label: &str, tokens: ThemeTokens) {
     ui.label(RichText::new(label).color(tokens.accent).strong());
-}
-
-fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
 }
 
 fn send(commands: &AppCommandSender, command: AppCommand) {
