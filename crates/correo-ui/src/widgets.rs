@@ -7,6 +7,7 @@ use egui_phosphor::regular;
 use crate::theme::control_margin;
 
 const CHECKBOX_ICON_SCALE: f32 = 2.0;
+const CHECKBOX_TEXT_TRAILING_PADDING: f32 = 8.0;
 
 pub(crate) fn padded_text_edit<'a>(text_edit: TextEdit<'a>) -> TextEdit<'a> {
     text_edit.margin(control_margin())
@@ -61,6 +62,11 @@ impl Widget for IconCheckbox<'_> {
         let icon_side = spacing.interact_size.y.max(spacing.icon_width);
         let icon_spacing = spacing.icon_spacing;
         let has_text = !text.is_empty();
+        let trailing_padding = if has_text {
+            CHECKBOX_TEXT_TRAILING_PADDING
+        } else {
+            0.0
+        };
 
         let icon_font = checkbox_icon_font(TextStyle::Button.resolve(ui.style()));
         let icon_galley = ui.painter().layout_no_wrap(
@@ -69,7 +75,8 @@ impl Widget for IconCheckbox<'_> {
             egui::Color32::PLACEHOLDER,
         );
         let galley = if has_text {
-            let wrap_width = (ui.available_width() - icon_side - icon_spacing).max(0.0);
+            let wrap_width =
+                (ui.available_width() - icon_side - icon_spacing - trailing_padding).max(0.0);
             Some(text.into_galley(ui, None, wrap_width, TextStyle::Button))
         } else {
             None
@@ -78,7 +85,8 @@ impl Widget for IconCheckbox<'_> {
         let text_size = galley.as_ref().map_or(Vec2::ZERO, |galley| galley.size());
         let desired_size = if has_text {
             vec2(
-                (icon_side + icon_spacing + text_size.x).max(spacing.interact_size.x),
+                (icon_side + icon_spacing + text_size.x + trailing_padding)
+                    .max(spacing.interact_size.x),
                 icon_side.max(text_size.y).max(spacing.interact_size.y),
             )
         } else {
@@ -148,5 +156,10 @@ mod tests {
     fn checkbox_icon_font_doubles_button_font_size() {
         let font = FontId::proportional(13.0);
         assert_eq!(checkbox_icon_font(font).size, 26.0);
+    }
+
+    #[test]
+    fn checkbox_text_hover_trailing_padding_matches_spec() {
+        assert_eq!(CHECKBOX_TEXT_TRAILING_PADDING, 8.0);
     }
 }
