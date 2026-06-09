@@ -8,6 +8,19 @@ use crate::{
 };
 
 impl AppModel {
+    pub(super) fn normalize_connection_surface(&mut self) {
+        self.ensure_selected_connection();
+        if self.snapshot.connection_surface == crate::ConnectionSurface::Launcher {
+            self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
+        }
+    }
+
+    pub(super) fn open_default_connection_surface(&mut self) {
+        self.snapshot.active_workspace = crate::Workspace::Connections;
+        self.ensure_selected_connection();
+        self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
+    }
+
     pub(super) fn add_connection(&mut self) {
         self.snapshot.active_workspace = crate::Workspace::Connections;
         self.snapshot.selected_connection = None;
@@ -97,6 +110,7 @@ impl AppModel {
             .push(connection_summary(id, &settings));
         self.snapshot.connection_count = self.snapshot.connections.len();
         self.snapshot.selected_connection = Some(id);
+        self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
         self.snapshot.connection_settings = settings;
         self.push_diagnostic(Diagnostic::info(
             "New connection profile added to the current session.",
@@ -117,7 +131,7 @@ impl AppModel {
 
         self.snapshot.connection_settings = ConnectionSettingsSnapshot::default();
         self.snapshot.connection_settings_overlay = None;
-        self.snapshot.connection_surface = crate::ConnectionSurface::Launcher;
+        self.open_default_connection_surface();
         self.push_diagnostic(Diagnostic::info("New connection draft discarded."));
     }
 
@@ -236,6 +250,22 @@ impl AppModel {
             .connections
             .iter()
             .position(|connection| connection.id == id)
+    }
+
+    fn ensure_selected_connection(&mut self) {
+        if self
+            .snapshot
+            .selected_connection
+            .is_some_and(|id| self.connection_index(id).is_some())
+        {
+            return;
+        }
+
+        self.snapshot.selected_connection = self
+            .snapshot
+            .connections
+            .first()
+            .map(|connection| connection.id);
     }
 
     pub(super) fn update_connection_state(

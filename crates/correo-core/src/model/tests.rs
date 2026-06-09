@@ -251,6 +251,10 @@ fn add_connection_opens_settings_draft_and_save_adds_profile() {
     assert_eq!(model.snapshot().connection_count, 1);
     assert_eq!(connection.name, "New connection");
     assert_eq!(connection.endpoint, "localhost:1883");
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Workbench
+    );
     assert!(!model.snapshot().connection_settings.dirty);
     assert!(model
         .mqtt_commands_for_app_command(&AppCommand::Connect(connection_id))
@@ -309,7 +313,7 @@ fn diagnostic_events_are_redacted_before_snapshot_exposure() {
 }
 
 #[test]
-fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
+fn migrated_fixture_opens_workbench_and_settings_without_secret_values() {
     let profile = LegacyProfile::read_from(storage_fixture("legacy_profile")).unwrap();
     let preview = MigrationPreview::from_legacy_profile(profile).unwrap();
     let state = startup_state_from_migration(preview, ThemeMode::Dark);
@@ -363,7 +367,7 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
 }
 
 #[test]
-fn first_run_without_legacy_data_keeps_launcher_available() {
+fn first_run_without_legacy_data_keeps_connections_workspace_available() {
     let state = StartupState::empty(
         ThemeMode::Light,
         Diagnostic::info("No existing CorreoMQTT config found; empty workspace ready."),

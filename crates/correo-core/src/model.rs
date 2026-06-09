@@ -59,13 +59,15 @@ impl AppModel {
     ) -> Self {
         let saved_global_settings = snapshot.global_settings.clone();
         let saved_theme_mode = snapshot.theme_mode;
-        Self {
+        let mut model = Self {
             snapshot,
             connection_settings,
             storage_connection_ids,
             saved_global_settings,
             saved_theme_mode,
-        }
+        };
+        model.normalize_connection_surface();
+        model
     }
 
     pub fn snapshot(&self) -> &AppSnapshot {
@@ -101,7 +103,7 @@ impl AppModel {
                 after,
             } => self.move_connection(connection_id, target_connection_id, after),
             AppCommand::OpenConnectionLauncher => {
-                self.snapshot.connection_surface = crate::ConnectionSurface::Launcher;
+                self.open_default_connection_surface();
             }
             AppCommand::OpenConnectionWorkbench(id) => {
                 self.snapshot.selected_connection = Some(id);
@@ -237,6 +239,9 @@ impl AppModel {
                         .connections
                         .first()
                         .map(|connection| connection.id);
+                }
+                if self.snapshot.connection_surface == crate::ConnectionSurface::Launcher {
+                    self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
                 }
             }
             AppEvent::ConnectionOpened { connection_id } => {

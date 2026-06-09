@@ -33,6 +33,23 @@ fn connection_selection_opens_workbench_and_preserves_pending_editor() {
 }
 
 #[test]
+fn launcher_command_selects_first_connection_workbench() {
+    let mut model = AppModel::default();
+    let first_id = model.snapshot().connections[0].id;
+
+    model.apply_command(AppCommand::AddConnection);
+    assert_eq!(model.snapshot().selected_connection, None);
+
+    model.apply_command(AppCommand::OpenConnectionLauncher);
+
+    assert_eq!(model.snapshot().selected_connection, Some(first_id));
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Workbench
+    );
+}
+
+#[test]
 fn move_connection_reorders_visible_connections() {
     let mut model = AppModel::default();
     let original: Vec<_> = model

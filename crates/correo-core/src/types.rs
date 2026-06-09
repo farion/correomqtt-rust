@@ -47,7 +47,7 @@ impl AppSnapshot {
             connection_filter: String::new(),
             connection_settings: ConnectionSettingsSnapshot::default(),
             connection_settings_overlay: None,
-            connection_surface: ConnectionSurface::Launcher,
+            connection_surface: ConnectionSurface::Workbench,
             connections: Vec::new(),
             diagnostics: Vec::new(),
             global_settings: GlobalSettingsSnapshot::default(),
@@ -168,7 +168,7 @@ pub enum ConnectionSurface {
 
 impl Default for ConnectionSurface {
     fn default() -> Self {
-        Self::Launcher
+        Self::Workbench
     }
 }
 

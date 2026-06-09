@@ -107,7 +107,7 @@ fn stepper(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, tokens: ThemeToken
 
 fn no_legacy_data(ui: &mut Ui, tokens: ThemeTokens) {
     ui.heading("No legacy data detected");
-    ui.label(RichText::new("Connection launcher is available.").color(tokens.text_secondary));
+    ui.label(RichText::new("Connections workspace is available.").color(tokens.text_secondary));
 }
 
 fn detecting(ui: &mut Ui, tokens: ThemeTokens) {

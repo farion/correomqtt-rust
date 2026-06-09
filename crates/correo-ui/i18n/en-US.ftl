@@ -70,8 +70,7 @@ legacy-failed = Failed
 legacy-restored = Backup restored
 
 connections-heading = Connections
-connection-launcher = Connection Launcher
-connection-no-selected = No connection selected
+connection-none-available = No connection available
 connection-connect-disabled = Connect disabled
 connection-state = State
 connection-protocol = Protocol

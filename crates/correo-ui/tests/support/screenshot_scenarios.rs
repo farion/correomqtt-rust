@@ -4,7 +4,6 @@ use correo_core::{
     PluginHookKind, PluginLoadState, PluginSurfaceTab, SettingsSection, ThemeMode,
     TransferFeedback, TransferOutcome, TransferSection, TransferStep, WorkbenchTab, Workspace,
 };
-
 pub(super) const REQUIRED_SIZES: [(u32, u32); 3] = [(1280, 800), (1024, 768), (900, 640)];
 const PLUGIN_MANAGER_SIZES: [(u32, u32); 3] = [(1280, 800), (1024, 700), (900, 600)];
 const PLUGIN_STATE_SIZE: (u32, u32) = (1024, 700);
@@ -12,7 +11,7 @@ const TRANSFER_STATE_SIZE: (u32, u32) = (900, 640);
 const SETTINGS_SECTION_SIZE: (u32, u32) = (900, 640);
 const REQUIRED_MODES: [ThemeMode; 2] = [ThemeMode::Light, ThemeMode::Dark];
 
-const FULL_MATRIX_SCENARIOS: [Scenario; 2] = [Scenario::Launcher, Scenario::Workbench];
+const FULL_MATRIX_SCENARIOS: [Scenario; 2] = [Scenario::ConnectionsEmpty, Scenario::Workbench];
 const SECONDARY_SCENARIOS: [Scenario; 6] = [
     Scenario::Settings,
     Scenario::Scripts,
@@ -50,7 +49,6 @@ const SETTINGS_STATE_SCENARIOS: [Scenario; 3] = [
     Scenario::GlobalSettingsKeyring,
 ];
 const CONNECTION_STATE_SCENARIOS: [Scenario; 1] = [Scenario::SettingsOverlay];
-
 #[derive(Clone)]
 pub(super) struct Capture {
     pub(super) scenario: Scenario,
@@ -75,10 +73,9 @@ impl Capture {
         }
     }
 }
-
 #[derive(Clone, Copy)]
 pub(super) enum Scenario {
-    Launcher,
+    ConnectionsEmpty,
     Workbench,
     Settings,
     SettingsOverlay,
@@ -114,7 +111,7 @@ pub(super) enum Scenario {
 impl Scenario {
     fn slug(self) -> &'static str {
         match self {
-            Self::Launcher => "launcher",
+            Self::ConnectionsEmpty => "connections-empty",
             Self::Workbench => "workbench",
             Self::Settings => "connection-settings",
             Self::SettingsOverlay => "connection-settings-overlay",
@@ -150,7 +147,7 @@ impl Scenario {
 
     pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Launcher => "launcher",
+            Self::ConnectionsEmpty => "empty connections",
             Self::Workbench => "active workbench",
             Self::Settings => "connection settings",
             Self::SettingsOverlay => "connection settings modal overlay",
@@ -273,7 +270,7 @@ pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
     let connection_transfer = transfer_section_for(capture.scenario, TransferSection::Messages)
         != TransferSection::Messages;
     snapshot.connection_surface = match capture.scenario {
-        Scenario::Launcher => ConnectionSurface::Launcher,
+        Scenario::ConnectionsEmpty => ConnectionSurface::Workbench,
         Scenario::Settings => ConnectionSurface::Settings,
         Scenario::SettingsOverlay => ConnectionSurface::Workbench,
         _ if connection_transfer => ConnectionSurface::Transfer,
@@ -281,6 +278,12 @@ pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
     };
     if matches!(capture.scenario, Scenario::SettingsOverlay) {
         snapshot.connection_settings_overlay = snapshot.selected_connection;
+    }
+    if matches!(capture.scenario, Scenario::ConnectionsEmpty) {
+        snapshot.active_connection = None;
+        snapshot.connection_count = 0;
+        snapshot.connections.clear();
+        snapshot.selected_connection = None;
     }
     if matches!(capture.scenario, Scenario::Workbench) && capture.size.0 <= 1024 {
         snapshot.workbench.narrow_tab = WorkbenchTab::Subscribe;
@@ -301,7 +304,7 @@ pub(super) fn mode_slug(mode: ThemeMode) -> &'static str {
 
 fn workspace_for(scenario: Scenario) -> Workspace {
     match scenario {
-        Scenario::Launcher
+        Scenario::ConnectionsEmpty
         | Scenario::Workbench
         | Scenario::Settings
         | Scenario::SettingsOverlay

@@ -14,7 +14,7 @@ use crate::{
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     let Some(connection) = snapshot.selected_connection() else {
-        ui.heading("No active connection");
+        ui.label("No connection available");
         return;
     };
 

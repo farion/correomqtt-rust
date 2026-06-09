@@ -55,14 +55,18 @@ pub(super) fn fallback_shell_capture(capture: Capture) -> RgbaImage {
     );
     text_bar(&mut image, 64, 96, 120, tokens.text_primary);
     draw_text(&mut image, 64, 88, "CONNECTIONS", tokens.text_primary, 2);
-    for index in 0..4 {
-        row(&mut image, tokens, 64, 132 + index * 64, index == 0);
+    if !matches!(capture.scenario, Scenario::ConnectionsEmpty) {
+        for index in 0..4 {
+            row(&mut image, tokens, 64, 132 + index * 64, index == 0);
+        }
     }
     let main_x = 308;
     let main_w = width.saturating_sub(main_x);
     let narrow_workbench = capture.size.0 <= 1024;
     match capture.scenario {
-        Scenario::Launcher => fallback_launcher(&mut image, tokens, main_x, 88, main_w),
+        Scenario::ConnectionsEmpty => {
+            fallback_connections_empty(&mut image, tokens, main_x, 88, main_w)
+        }
         Scenario::Workbench => {
             fallback_workbench(&mut image, tokens, main_x, 88, main_w, narrow_workbench)
         }
@@ -84,56 +88,21 @@ pub(super) fn fallback_shell_capture(capture: Capture) -> RgbaImage {
     image
 }
 
-fn fallback_launcher(image: &mut RgbaImage, tokens: theme::ThemeTokens, x: u32, y: u32, w: u32) {
-    panel(image, tokens, x + 20, y, w.saturating_sub(40), 120);
-    text_bar(image, x + 38, y + 34, 180, tokens.text_primary);
+fn fallback_connections_empty(
+    image: &mut RgbaImage,
+    tokens: theme::ThemeTokens,
+    x: u32,
+    y: u32,
+    w: u32,
+) {
     draw_text(
         image,
-        x + 38,
-        y + 24,
-        "CONNECTION LAUNCHER",
-        tokens.text_primary,
-        2,
-    );
-    text_bar(
-        image,
-        x + 38,
-        y + 72,
-        w.saturating_sub(180),
+        x + (w / 2).saturating_sub(118),
+        y + 260,
+        "NO CONNECTION AVAILABLE",
         tokens.text_secondary,
-    );
-    button(image, tokens, x + w.saturating_sub(170), y + 22, 132, 30);
-    draw_text(
-        image,
-        x + w.saturating_sub(156),
-        y + 31,
-        "ADD IMPORT",
-        tokens.accent,
-        1,
-    );
-    for index in 0..3 {
-        let row_y = y + 148 + index * 116;
-        panel(image, tokens, x + 20, row_y, w.saturating_sub(40), 92);
-        text_bar(image, x + 42, row_y + 28, 146, tokens.text_primary);
-        text_bar(image, x + 42, row_y + 52, 260, tokens.text_secondary);
-        text_bar(
-            image,
-            x + w.saturating_sub(150),
-            row_y + 36,
-            88,
-            tokens.success,
-        );
-    }
-    draw_text(
-        image,
-        x + 42,
-        y + 166,
-        "LOCAL BROKER",
-        tokens.text_primary,
         2,
     );
-    draw_text(image, x + 42, y + 282, "QA TLS", tokens.text_primary, 2);
-    draw_text(image, x + 42, y + 398, "STAGING", tokens.text_primary, 2);
 }
 
 fn fallback_workbench(

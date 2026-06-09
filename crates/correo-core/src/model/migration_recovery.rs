@@ -316,8 +316,7 @@ impl AppModel {
 
     fn open_connections_after_migration(&mut self) {
         self.snapshot.migration_recovery = MigrationRecoverySnapshot::default();
-        self.snapshot.active_workspace = Workspace::Connections;
-        self.snapshot.connection_surface = crate::ConnectionSurface::Launcher;
+        self.open_default_connection_surface();
     }
 
     fn refresh_legacy_settings(&mut self, status: LegacyMigrationStatus) {

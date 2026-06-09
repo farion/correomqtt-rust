@@ -189,7 +189,7 @@ fn write_manifest(artifacts: &[ScreenshotArtifact]) {
     let mut manifest = String::from("# CorreoMQTT screenshot manifest\n\n");
     manifest.push_str("## Coverage\n\n");
     manifest.push_str(
-        "- Launcher and active workbench cover light/dark at 1280x800, 1024x768, and 900x640.\n",
+        "- Empty connections and active workbench cover light/dark at 1280x800, 1024x768, and 900x640.\n",
     );
     manifest.push_str(
         "- Connection transfer covers .cqc import choose/password/review/outcome states and export \
