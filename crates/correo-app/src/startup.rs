@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use correo_core::{startup_state_from_current, startup_state_from_migration, Diagnostic};
 use correo_core::{StartupState, ThemeMode};
-use correo_storage::current::{AppConfig, ConfigStore, HistoryPersistenceSnapshot, HistoryStore};
+use correo_storage::current::{
+    AppConfig, ConfigStore, HistoryPersistenceSnapshot, HistoryStore, ScriptPersistenceSnapshot,
+    ScriptStore,
+};
 use correo_storage::legacy::LegacyProfile;
 use correo_storage::migration::MigrationPreview;
 use directories::ProjectDirs;
@@ -52,9 +55,11 @@ fn load_root(root: &Path, fallback_theme: ThemeMode) -> Result<StartupState, Str
     match read_current_config(root) {
         Ok(config) => {
             let histories = load_current_histories(root, &config)?;
+            let scripts = load_current_scripts(root)?;
             Ok(startup_state_from_current(
                 config,
                 histories,
+                scripts,
                 Vec::new(),
                 fallback_theme,
             ))
@@ -70,6 +75,12 @@ fn load_root(root: &Path, fallback_theme: ThemeMode) -> Result<StartupState, Str
             )),
         },
     }
+}
+
+fn load_current_scripts(root: &Path) -> Result<ScriptPersistenceSnapshot, String> {
+    ScriptStore::new(root)
+        .load_snapshot(200)
+        .map_err(|error| error.to_string())
 }
 
 fn read_current_config(root: &Path) -> Result<AppConfig, String> {

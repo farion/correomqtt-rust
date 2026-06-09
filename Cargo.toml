@@ -4,10 +4,19 @@ members = [
     "crates/correo-core",
     "crates/correo-diagnostics",
     "crates/correo-mqtt",
+    "crates/correo-plugin-base64",
+    "crates/correo-plugin-zip-manipulator",
     "crates/correo-plugins",
     "crates/correo-scripting",
     "crates/correo-storage",
     "crates/correo-ui",
+    "plugins/correo-plugins-advanced-validator",
+    "plugins/correo-plugins-json-format",
+    "plugins/xml-format",
+    "plugins/correo-plugins-contains-string-validator",
+    "plugins/correo-plugins-systopic",
+    "plugins/save-manipulator",
+    "plugins/correo-plugins-xml-xsd-validator",
     "xtask",
 ]
 resolver = "2"
@@ -31,9 +40,12 @@ color-eyre = "0.6"
 directories = "6"
 eframe = { version = "0.31", default-features = false, features = ["accesskit", "default_fonts", "glow", "persistence", "wayland", "x11"] }
 egui = "0.31"
+egui-phosphor = { version = "0.9", default-features = false, features = ["regular"] }
 egui_extras = "0.31"
 egui_kittest = { version = "0.31", features = ["snapshot", "wgpu"] }
 flume = "0.11"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+fluent-bundle = "0.16"
 futures = "0.3"
 image = "0.25"
 keyring = "3"
@@ -60,6 +72,8 @@ toml = "0.8"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+unic-langid = "0.9"
+uppsala = "0.4"
 uuid = { version = "1", features = ["serde", "v4"] }
 wasmtime = "31"
 zeroize = "1"

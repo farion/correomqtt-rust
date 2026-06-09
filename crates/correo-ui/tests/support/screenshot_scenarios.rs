@@ -4,7 +4,6 @@ use correo_core::{
     PluginHookKind, PluginLoadState, PluginSurfaceTab, SettingsSection, ThemeMode,
     TransferFeedback, TransferOutcome, TransferSection, TransferStep, WorkbenchTab, Workspace,
 };
-
 pub(super) const REQUIRED_SIZES: [(u32, u32); 3] = [(1280, 800), (1024, 768), (900, 640)];
 const PLUGIN_MANAGER_SIZES: [(u32, u32); 3] = [(1280, 800), (1024, 700), (900, 600)];
 const PLUGIN_STATE_SIZE: (u32, u32) = (1024, 700);
@@ -12,7 +11,7 @@ const TRANSFER_STATE_SIZE: (u32, u32) = (900, 640);
 const SETTINGS_SECTION_SIZE: (u32, u32) = (900, 640);
 const REQUIRED_MODES: [ThemeMode; 2] = [ThemeMode::Light, ThemeMode::Dark];
 
-const FULL_MATRIX_SCENARIOS: [Scenario; 2] = [Scenario::Launcher, Scenario::Workbench];
+const FULL_MATRIX_SCENARIOS: [Scenario; 2] = [Scenario::ConnectionsEmpty, Scenario::Workbench];
 const SECONDARY_SCENARIOS: [Scenario; 6] = [
     Scenario::Settings,
     Scenario::Scripts,
@@ -49,7 +48,7 @@ const SETTINGS_STATE_SCENARIOS: [Scenario; 3] = [
     Scenario::GlobalSettingsSearch,
     Scenario::GlobalSettingsKeyring,
 ];
-
+const CONNECTION_STATE_SCENARIOS: [Scenario; 1] = [Scenario::SettingsOverlay];
 #[derive(Clone)]
 pub(super) struct Capture {
     pub(super) scenario: Scenario,
@@ -74,12 +73,12 @@ impl Capture {
         }
     }
 }
-
 #[derive(Clone, Copy)]
 pub(super) enum Scenario {
-    Launcher,
+    ConnectionsEmpty,
     Workbench,
     Settings,
+    SettingsOverlay,
     Scripts,
     ImportExport,
     Plugins,
@@ -112,9 +111,10 @@ pub(super) enum Scenario {
 impl Scenario {
     fn slug(self) -> &'static str {
         match self {
-            Self::Launcher => "launcher",
+            Self::ConnectionsEmpty => "connections-empty",
             Self::Workbench => "workbench",
             Self::Settings => "connection-settings",
+            Self::SettingsOverlay => "connection-settings-overlay",
             Self::Scripts => "scripts",
             Self::ImportExport => "import-export",
             Self::Plugins => "plugins",
@@ -138,7 +138,7 @@ impl Scenario {
             Self::ExportInvalidPath => "export-cqc-invalid-path",
             Self::ExportSuccess => "export-cqc-success",
             Self::ExportFailure => "export-cqc-failure",
-            Self::MessageTransfer => "message-import-export",
+            Self::MessageTransfer => "message-cqm-actions",
             Self::GlobalSettingsLanguage => "global-settings-language",
             Self::GlobalSettingsSearch => "global-settings-search",
             Self::GlobalSettingsKeyring => "global-settings-keyring",
@@ -147,9 +147,10 @@ impl Scenario {
 
     pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Launcher => "launcher",
+            Self::ConnectionsEmpty => "empty connections",
             Self::Workbench => "active workbench",
             Self::Settings => "connection settings",
+            Self::SettingsOverlay => "connection settings modal overlay",
             Self::Scripts => "scripts",
             Self::ImportExport => "import/export",
             Self::Plugins => "plugins",
@@ -173,7 +174,7 @@ impl Scenario {
             Self::ExportInvalidPath => ".cqc export invalid path",
             Self::ExportSuccess => ".cqc export success outcome",
             Self::ExportFailure => ".cqc export failure outcome",
-            Self::MessageTransfer => "message import/export entry points",
+            Self::MessageTransfer => "message .cqm entry points",
             Self::GlobalSettingsLanguage => "global settings language",
             Self::GlobalSettingsSearch => "global settings search",
             Self::GlobalSettingsKeyring => "global settings keyring",
@@ -253,17 +254,37 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
             scenario.representative_size(),
         ));
     }
+    for scenario in CONNECTION_STATE_SCENARIOS {
+        captures.push(Capture::new(
+            scenario,
+            ThemeMode::Light,
+            scenario.representative_size(),
+        ));
+    }
     captures
 }
 
 pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
     let mut snapshot = sample_snapshot(capture.mode);
     snapshot.active_workspace = workspace_for(capture.scenario);
+    let connection_transfer = transfer_section_for(capture.scenario, TransferSection::Messages)
+        != TransferSection::Messages;
     snapshot.connection_surface = match capture.scenario {
-        Scenario::Launcher => ConnectionSurface::Launcher,
+        Scenario::ConnectionsEmpty => ConnectionSurface::Workbench,
         Scenario::Settings => ConnectionSurface::Settings,
+        Scenario::SettingsOverlay => ConnectionSurface::Workbench,
+        _ if connection_transfer => ConnectionSurface::Transfer,
         _ => ConnectionSurface::Workbench,
     };
+    if matches!(capture.scenario, Scenario::SettingsOverlay) {
+        snapshot.connection_settings_overlay = snapshot.selected_connection;
+    }
+    if matches!(capture.scenario, Scenario::ConnectionsEmpty) {
+        snapshot.active_connection = None;
+        snapshot.connection_count = 0;
+        snapshot.connections.clear();
+        snapshot.selected_connection = None;
+    }
     if matches!(capture.scenario, Scenario::Workbench) && capture.size.0 <= 1024 {
         snapshot.workbench.narrow_tab = WorkbenchTab::Subscribe;
     }
@@ -283,22 +304,12 @@ pub(super) fn mode_slug(mode: ThemeMode) -> &'static str {
 
 fn workspace_for(scenario: Scenario) -> Workspace {
     match scenario {
-        Scenario::Launcher | Scenario::Workbench | Scenario::Settings => Workspace::Connections,
+        Scenario::ConnectionsEmpty
+        | Scenario::Workbench
+        | Scenario::Settings
+        | Scenario::SettingsOverlay
+        | Scenario::MessageTransfer => Workspace::Connections,
         Scenario::Scripts => Workspace::Scripts,
-        Scenario::ImportExport
-        | Scenario::ImportChooseFile
-        | Scenario::ImportPasswordNeeded
-        | Scenario::ImportPasswordError
-        | Scenario::ImportReviewWarnings
-        | Scenario::ImportCompleteSuccess
-        | Scenario::ImportCompleteFailure
-        | Scenario::ExportPlain
-        | Scenario::ExportEncrypted
-        | Scenario::ExportMissingExtension
-        | Scenario::ExportInvalidPath
-        | Scenario::ExportSuccess
-        | Scenario::ExportFailure
-        | Scenario::MessageTransfer => Workspace::ImportExport,
         Scenario::Plugins
         | Scenario::PluginsLoading
         | Scenario::PluginsEmpty
@@ -311,6 +322,7 @@ fn workspace_for(scenario: Scenario) -> Workspace {
         | Scenario::GlobalSettingsLanguage
         | Scenario::GlobalSettingsSearch
         | Scenario::GlobalSettingsKeyring => Workspace::Settings,
+        _ => Workspace::Connections,
     }
 }
 
@@ -397,7 +409,7 @@ fn apply_transfer_scenario(scenario: Scenario, snapshot: &mut correo_core::AppSn
         }
         Scenario::MessageTransfer => {
             snapshot.transfer.messages.feedback = Some(TransferFeedback::info(
-                "Message import/export uses JSON archives and keeps connection secrets out.",
+                "Message .cqm files load into publish and export from message rows.",
             ));
         }
         _ => {}

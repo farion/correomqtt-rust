@@ -1,0 +1,29 @@
+manifest_version = 1
+id = "builtin.base64"
+name = "Base64 Transform"
+version = "0.1.0"
+description = "Encodes outgoing payloads and decodes incoming payloads with Base64."
+provider = "CorreoMQTT"
+license = "GPL-3.0-or-later"
+compatible_correomqtt = ">=0.1.0, <1.0.0"
+
+[capabilities]
+hooks = ["outgoing_message_transform", "incoming_message_transform"]
+
+[capabilities.host]
+filesystem = false
+network = false
+secrets = false
+mqtt = false
+
+[config_schema]
+schema_version = 1
+document = { type = "object", additionalProperties = false }
+
+[[entrypoints]]
+hook = "outgoing_message_transform"
+export = "correo_outgoing_transform"
+
+[[entrypoints]]
+hook = "incoming_message_transform"
+export = "correo_incoming_transform"

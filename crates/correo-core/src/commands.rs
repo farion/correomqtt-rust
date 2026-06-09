@@ -2,23 +2,28 @@ use correo_mqtt::ConnectionId;
 use thiserror::Error;
 
 use crate::{
-    ConnectDisabledReason, ConnectionSettingField, ConnectionSettingsSnapshot,
-    ConnectionSettingsTab, ConnectionState, ConnectionSummary, Diagnostic, GlobalSettingField,
-    GlobalSettingFlag, GlobalSettingsSnapshot, MessageInspectorTab, MigrationApplyStage,
-    MigrationRecoveryCompletion, MigrationRecoveryCounts, MigrationRecoveryDiagnostic,
-    MigrationRecoveryFailure, MigrationRecoveryRow, MigrationRecoveryWarning, MqttCommand,
-    MqttEvent, PluginHookKind, PluginSurfaceTab, PluginWorkflowEvent, QosLevel, ScriptDetailTab,
-    ScriptExecutionError, ScriptExecutionStatus, ScriptLogLevel, SettingsSection, ThemeMode,
-    TransferSection, TransferStep, WorkbenchTab, Workspace,
+    ConnectDisabledReason, ConnectionSecretField, ConnectionSettingField, ConnectionSettingFlag,
+    ConnectionSettingsSnapshot, ConnectionSettingsTab, ConnectionState, ConnectionSummary,
+    Diagnostic, GlobalSettingField, GlobalSettingFlag, GlobalSettingsSnapshot, MessageInspectorTab,
+    MigrationApplyStage, MigrationRecoveryCompletion, MigrationRecoveryCounts,
+    MigrationRecoveryDiagnostic, MigrationRecoveryFailure, MigrationRecoveryRow,
+    MigrationRecoveryWarning, MqttCommand, MqttEvent, PluginHookKind, PluginSurfaceTab,
+    PluginWorkflowEvent, QosLevel, ScriptDetailTab, ScriptExecutionError, ScriptExecutionStatus,
+    ScriptLogLevel, SecretInput, SettingsSection, StartupState, ThemeMode, TransferSection,
+    TransferStep, WorkbenchTab, Workspace,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppCommand {
     SelectWorkspace(Workspace),
     SetThemeMode(ThemeMode),
-    ToggleDiagnostics,
     SearchConnections(String),
     SelectConnection(ConnectionId),
+    MoveConnection {
+        connection_id: ConnectionId,
+        target_connection_id: ConnectionId,
+        after: bool,
+    },
     OpenConnectionLauncher,
     OpenConnectionWorkbench(ConnectionId),
     OpenConnectionSettings(ConnectionId),
@@ -47,6 +52,8 @@ pub enum AppCommand {
     StartConnectionExport,
     ImportMessages,
     ExportMessages,
+    ExportPublishHistoryMessage(String),
+    ExportIncomingMessage(u32),
     MigrationRecovery(MigrationRecoveryCommand),
     SelectWorkbenchTab(WorkbenchTab),
     UpdatePublishTopic(String),
@@ -73,6 +80,15 @@ pub enum AppCommand {
         field: ConnectionSettingField,
         value: String,
     },
+    UpdateConnectionSecret {
+        field: ConnectionSecretField,
+        value: SecretInput,
+    },
+    SetConnectionSettingFlag {
+        flag: ConnectionSettingFlag,
+        enabled: bool,
+    },
+    GenerateClientId,
     SetLwtEnabled(bool),
     SaveConnectionSettings,
     DiscardConnectionSettings,
@@ -90,14 +106,24 @@ pub enum AppCommand {
         flag: GlobalSettingFlag,
         enabled: bool,
     },
+    AddPluginRepository,
+    UpdatePluginRepository {
+        index: usize,
+        url: String,
+    },
+    RemovePluginRepository {
+        index: usize,
+    },
     SaveGlobalSettings,
     DiscardGlobalSettings,
     SearchScripts(String),
+    SelectScriptConnection(String),
     SelectScript(String),
     UpdateNewScriptName(String),
     CreateScript,
     UpdateScriptSource(String),
     SaveScript,
+    DiscardScriptChanges,
     RequestRenameScript,
     UpdateRenameScriptName(String),
     CancelRenameScript,
@@ -106,11 +132,20 @@ pub enum AppCommand {
     CancelDeleteScript,
     ConfirmDeleteScript,
     SelectScriptDetailTab(ScriptDetailTab),
+    SelectScriptExecution(String),
     RunScript,
     CancelScript,
+    ClearFinishedScriptExecutions,
     SearchPlugins(String),
     SelectPlugin(String),
+    SelectMarketplacePlugin(String),
     SelectPluginSurfaceTab(PluginSurfaceTab),
+    InstallMarketplacePlugin {
+        marketplace_plugin_id: String,
+    },
+    UninstallPlugin {
+        plugin_id: String,
+    },
     SetPluginEnabled {
         plugin_id: String,
         enabled: bool,
@@ -202,6 +237,11 @@ pub enum AppEvent {
     ThemeModeChanged {
         mode: ThemeMode,
     },
+    MigrationApplied {
+        state: Box<StartupState>,
+        completion: MigrationRecoveryCompletion,
+        diagnostics: Vec<MigrationRecoveryDiagnostic>,
+    },
     DiagnosticRaised(Diagnostic),
     ScriptExecutionLogAppended {
         execution_id: String,
@@ -249,6 +289,7 @@ pub enum MigrationRecoveryEvent {
         skipped_count: usize,
     },
     ReviewReady {
+        counts: MigrationRecoveryCounts,
         rows: Vec<MigrationRecoveryRow>,
         warnings: Vec<MigrationRecoveryWarning>,
     },

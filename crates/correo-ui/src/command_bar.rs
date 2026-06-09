@@ -1,130 +1,113 @@
-use correo_core::{AppCommand, AppCommandSender, AppSnapshot, ConnectionState, ThemeMode};
-use egui::{Align, Button, ComboBox, Layout, RichText, Ui};
+use correo_core::{
+    AppCommand, AppCommandSender, AppSnapshot, GlobalSettingField, SettingsOption, ThemeMode,
+};
+use egui::{Align, ComboBox, Layout, RichText, Ui};
 
+use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
 
-pub fn menu_bar(ui: &mut Ui, commands: &AppCommandSender) {
-    egui::menu::bar(ui, |ui| {
-        ui.menu_button("File", |ui| {
-            if ui.button("Add connection").clicked() {
-                let _ = commands.send(AppCommand::AddConnection);
-                ui.close_menu();
-            }
-            if ui.button("Import .cqc").clicked() {
-                let _ = commands.send(AppCommand::ImportConnections);
-                ui.close_menu();
-            }
-            if ui.button("Export .cqc").clicked() {
-                let _ = commands.send(AppCommand::ExportConnections);
-                ui.close_menu();
-            }
-            ui.separator();
-            if ui.button("Import messages...").clicked() {
-                let _ = commands.send(AppCommand::ImportMessages);
-                ui.close_menu();
-            }
-            if ui.button("Export messages...").clicked() {
-                let _ = commands.send(AppCommand::ExportMessages);
-                ui.close_menu();
-            }
-        });
-        ui.menu_button("Edit", |ui| {
-            ui.add_enabled(false, Button::new("Undo"));
-            ui.add_enabled(false, Button::new("Redo"));
-        });
-        ui.menu_button("View", |ui| {
-            if ui.button("Toggle diagnostics").clicked() {
-                let _ = commands.send(AppCommand::ToggleDiagnostics);
-                ui.close_menu();
-            }
-        });
-        ui.menu_button("Tools", |ui| {
-            ui.add_enabled(false, Button::new("Run script"));
-            ui.add_enabled(false, Button::new("Plugin manager"));
-        });
-        ui.menu_button("Help", |ui| {
-            ui.add_enabled(false, Button::new("About CorreoMQTT"));
-        });
-    });
-}
+const APP_TITLE_BASE_SIZE: f32 = 16.0;
+const APP_TITLE_SIZE: f32 = APP_TITLE_BASE_SIZE * 1.5;
 
 pub fn command_bar(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
-    tokens: ThemeTokens,
+    _tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     ui.horizontal_centered(|ui| {
-        ui.label(
-            RichText::new(snapshot.active_workspace.label())
-                .strong()
-                .size(16.0),
-        );
-        ui.separator();
-        if let Some(connection) = snapshot.selected_connection() {
-            ui.label(RichText::new(&connection.name).color(tokens.text_primary));
-            ui.label(
-                RichText::new(connection.state.label())
-                    .color(state_color(connection.state, tokens)),
-            );
-        } else {
-            ui.label(RichText::new("No connection selected").color(tokens.text_secondary));
-        }
+        ui.label(RichText::new("CorreoMQTT").strong().size(APP_TITLE_SIZE));
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            theme_selector(ui, snapshot.theme_mode, commands);
-            let diagnostics = format!("Diagnostics {}", snapshot.diagnostics.len());
-            if ui
-                .add(Button::new(
-                    RichText::new(diagnostics).color(highest_diagnostic_color(snapshot, tokens)),
-                ))
-                .on_hover_text("Open diagnostics")
-                .clicked()
-            {
-                let _ = commands.send(AppCommand::ToggleDiagnostics);
-            }
+            theme_selector(ui, snapshot.theme_mode, commands, i18n);
+            language_selector(
+                ui,
+                &snapshot.global_settings.language,
+                &snapshot.global_settings.language_options,
+                commands,
+                i18n,
+            );
         });
     });
 }
 
-fn theme_selector(ui: &mut Ui, current: ThemeMode, commands: &AppCommandSender) {
+fn theme_selector(ui: &mut Ui, current: ThemeMode, commands: &AppCommandSender, i18n: &I18n) {
     let mut selected = current;
     ComboBox::from_id_salt("theme-mode")
-        .selected_text(current.label())
+        .selected_text(i18n.theme_label(current))
         .width(96.0)
         .show_ui(ui, |ui| {
             for mode in ThemeMode::ALL {
-                ui.selectable_value(&mut selected, mode, mode.label());
+                ui.selectable_value(&mut selected, mode, i18n.theme_label(mode));
             }
         });
     if selected != current {
         let _ = commands.send(AppCommand::SetThemeMode(selected));
+        let _ = commands.send(AppCommand::SaveGlobalSettings);
     }
 }
 
-fn state_color(state: ConnectionState, tokens: ThemeTokens) -> egui::Color32 {
-    match state {
-        ConnectionState::Connected => tokens.success,
-        ConnectionState::Connecting | ConnectionState::Reconnecting => tokens.warning,
-        ConnectionState::Error => tokens.danger,
-        ConnectionState::Disconnected => tokens.text_secondary,
+fn language_selector(
+    ui: &mut Ui,
+    current: &str,
+    options: &[SettingsOption],
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    let mut selected = current.to_owned();
+    ComboBox::from_id_salt("header-language")
+        .selected_text(language_label(current, options, i18n))
+        .width(124.0)
+        .show_ui(ui, |ui| {
+            for option in options {
+                let label = i18n.language_option_label(&option.id, &option.label);
+                ui.selectable_value(&mut selected, option.id.clone(), label);
+            }
+        });
+    if selected != current {
+        let _ = commands.send(AppCommand::UpdateGlobalSetting {
+            field: GlobalSettingField::Language,
+            value: selected,
+        });
+        let _ = commands.send(AppCommand::SaveGlobalSettings);
     }
 }
 
-fn highest_diagnostic_color(snapshot: &AppSnapshot, tokens: ThemeTokens) -> egui::Color32 {
-    if snapshot
-        .diagnostics
+fn language_label(current: &str, options: &[SettingsOption], i18n: &I18n) -> String {
+    options
         .iter()
-        .any(|diagnostic| diagnostic.severity == correo_core::DiagnosticSeverity::Error)
-    {
-        tokens.danger
-    } else if snapshot
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == correo_core::DiagnosticSeverity::Warning)
-    {
-        tokens.warning
-    } else {
-        tokens.accent
+        .find(|option| option.id == current)
+        .map(|option| i18n.language_option_label(&option.id, &option.label))
+        .unwrap_or_else(|| current.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn language_label_uses_available_option_labels() {
+        let options = vec![
+            SettingsOption {
+                id: "system".to_owned(),
+                label: "System".to_owned(),
+            },
+            SettingsOption {
+                id: "de_DE".to_owned(),
+                label: "Deutsch".to_owned(),
+            },
+        ];
+        let i18n = I18n::new("en_US");
+
+        assert_eq!(language_label("system", &options, &i18n), "System");
+        assert_eq!(language_label("de_DE", &options, &i18n), "Deutsch");
+        assert_eq!(language_label("custom", &options, &i18n), "custom");
+    }
+
+    #[test]
+    fn app_title_font_size_is_scaled_by_one_and_a_half() {
+        assert_eq!(APP_TITLE_SIZE, 24.0);
+        assert_eq!(APP_TITLE_SIZE, APP_TITLE_BASE_SIZE * 1.5);
     }
 }

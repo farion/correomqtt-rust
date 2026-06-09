@@ -1,0 +1,25 @@
+manifest_version = 1
+id = "builtin.advanced-validator"
+name = "Advanced Validator"
+version = "0.1.0"
+description = "Composes configured validator rules with AND and OR groups."
+provider = "CorreoMQTT"
+license = "GPL-3.0-or-later"
+compatible_correomqtt = ">=0.1.0, <1.0.0"
+
+[capabilities]
+hooks = ["message_validator"]
+
+[capabilities.host]
+filesystem = false
+network = false
+secrets = false
+mqtt = false
+
+[config_schema]
+schema_version = 1
+document = { type = "object", properties = { and = { type = "array" }, or = { type = "array" }, extensions = { type = "array" } }, additionalProperties = false }
+
+[[entrypoints]]
+hook = "message_validator"
+export = "correo_message_validator"

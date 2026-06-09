@@ -5,7 +5,7 @@ use correo_core::{
 use egui::{Button, Ui};
 
 const BUTTON_WIDTH: f32 = 190.0;
-const BUTTON_HEIGHT: f32 = 28.0;
+const BUTTON_HEIGHT: f32 = crate::theme::CONTROL_HEIGHT;
 
 pub(super) fn action_bar(
     ui: &mut Ui,
@@ -70,12 +70,6 @@ fn actions(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &AppComm
         MigrationRecoveryState::Complete => {
             button(
                 ui,
-                "View diagnostics",
-                commands,
-                MigrationRecoveryCommand::OpenDiagnostics,
-            );
-            button(
-                ui,
                 "Open Connections",
                 commands,
                 MigrationRecoveryCommand::OpenConnections,
@@ -97,12 +91,6 @@ fn actions(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &AppComm
                     MigrationRecoveryCommand::RequestRestoreBackup,
                 );
             }
-            button(
-                ui,
-                "View diagnostics",
-                commands,
-                MigrationRecoveryCommand::OpenDiagnostics,
-            );
         }
         MigrationRecoveryState::RestoreConfirm => {
             button(
@@ -126,12 +114,12 @@ fn action_width(snapshot: &MigrationRecoverySnapshot) -> f32 {
     let count = match snapshot.state {
         MigrationRecoveryState::NeedsDecision
         | MigrationRecoveryState::Reviewing
-        | MigrationRecoveryState::Complete
         | MigrationRecoveryState::RestoreConfirm => 2,
+        MigrationRecoveryState::Complete => 1,
         MigrationRecoveryState::NeedsPassword => 3,
-        MigrationRecoveryState::Failed if snapshot.backup_name.is_some() => 4,
-        MigrationRecoveryState::Failed
-        | MigrationRecoveryState::CreatingBackup
+        MigrationRecoveryState::Failed if snapshot.backup_name.is_some() => 3,
+        MigrationRecoveryState::Failed => 2,
+        MigrationRecoveryState::CreatingBackup
         | MigrationRecoveryState::Applying
         | MigrationRecoveryState::Restoring => 1,
         MigrationRecoveryState::NotDetected | MigrationRecoveryState::Detecting => 0,

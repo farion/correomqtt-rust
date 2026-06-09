@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+#[path = "plugins/repository.rs"]
+mod repository;
+pub use repository::*;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginSurfaceSnapshot {
     pub active_tab: PluginSurfaceTab,
@@ -7,7 +11,11 @@ pub struct PluginSurfaceSnapshot {
     pub plugin_filter: String,
     pub diagnostic_filter: String,
     pub plugins: Vec<PluginRow>,
+    #[serde(default)]
+    pub marketplace_plugins: Vec<PluginMarketplaceRow>,
     pub selected_plugin_id: String,
+    #[serde(default)]
+    pub selected_marketplace_plugin_id: String,
     pub selected_diagnostic_id: Option<String>,
     pub feedback: Option<PluginFeedback>,
     pub disable_confirmation: Option<PluginDisableConfirmation>,
@@ -19,6 +27,22 @@ impl PluginSurfaceSnapshot {
         self.plugins
             .iter()
             .find(|plugin| plugin.id == self.selected_plugin_id)
+    }
+
+    pub fn selected_marketplace_plugin(&self) -> Option<&PluginMarketplaceRow> {
+        self.marketplace_plugins
+            .iter()
+            .find(|plugin| plugin.id == self.selected_marketplace_plugin_id)
+    }
+
+    pub fn installed_plugin_for_marketplace(
+        &self,
+        marketplace_plugin: &PluginMarketplaceRow,
+    ) -> Option<&PluginRow> {
+        marketplace_plugin
+            .installed_plugin_id
+            .as_ref()
+            .and_then(|plugin_id| self.plugins.iter().find(|plugin| &plugin.id == plugin_id))
     }
 
     pub fn filtered_plugins(&self) -> Vec<&PluginRow> {
@@ -33,6 +57,33 @@ impl PluginSurfaceSnapshot {
                 filter.is_empty()
                     || plugin.name.to_ascii_lowercase().contains(&filter)
                     || plugin.id.to_ascii_lowercase().contains(&filter)
+                    || plugin.description.to_ascii_lowercase().contains(&filter)
+                    || plugin.provider.to_ascii_lowercase().contains(&filter)
+                    || plugin.license.to_ascii_lowercase().contains(&filter)
+                    || plugin
+                        .capabilities
+                        .iter()
+                        .any(|capability| capability.label.to_ascii_lowercase().contains(&filter))
+            })
+            .collect()
+    }
+
+    pub fn filtered_marketplace_plugins(&self) -> Vec<&PluginMarketplaceRow> {
+        if self.load_state != PluginLoadState::Ready {
+            return Vec::new();
+        }
+
+        let filter = self.plugin_filter.trim().to_ascii_lowercase();
+        self.marketplace_plugins
+            .iter()
+            .filter(|plugin| {
+                filter.is_empty()
+                    || plugin.name.to_ascii_lowercase().contains(&filter)
+                    || plugin.id.to_ascii_lowercase().contains(&filter)
+                    || plugin.description.to_ascii_lowercase().contains(&filter)
+                    || plugin.provider.to_ascii_lowercase().contains(&filter)
+                    || plugin.license.to_ascii_lowercase().contains(&filter)
+                    || plugin.repository.to_ascii_lowercase().contains(&filter)
                     || plugin
                         .capabilities
                         .iter()
@@ -99,7 +150,13 @@ pub struct PluginRow {
     pub id: String,
     pub name: String,
     pub version: String,
+    #[serde(default)]
+    pub description: String,
     pub provider: String,
+    #[serde(default)]
+    pub license: String,
+    #[serde(default)]
+    pub location: String,
     pub source: PluginSource,
     pub enabled: bool,
     pub status: PluginStatus,
@@ -110,9 +167,35 @@ pub struct PluginRow {
     pub legacy_note: Option<String>,
 }
 
-impl PluginRow {
-    pub fn diagnostic_count(&self) -> usize {
-        self.diagnostics.len()
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginMarketplaceRow {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub provider: String,
+    pub repository: String,
+    pub description: String,
+    #[serde(default)]
+    pub license: String,
+    #[serde(default)]
+    pub location: String,
+    pub capabilities: Vec<PluginCapabilityRow>,
+    #[serde(default)]
+    pub install_source: PluginMarketplaceSource,
+    pub installed_plugin_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PluginMarketplaceSource {
+    Bundled { plugin_id: String },
+    LocalPackage { path: String },
+    Unknown,
+}
+
+impl Default for PluginMarketplaceSource {
+    fn default() -> Self {
+        Self::Unknown
     }
 }
 
@@ -120,22 +203,19 @@ impl PluginRow {
 pub enum PluginSurfaceTab {
     #[default]
     Installed,
+    Marketplace,
     Configuration,
     Hooks,
     Diagnostics,
 }
 
 impl PluginSurfaceTab {
-    pub const ALL: [Self; 4] = [
-        Self::Installed,
-        Self::Configuration,
-        Self::Hooks,
-        Self::Diagnostics,
-    ];
+    pub const ALL: [Self; 2] = [Self::Installed, Self::Marketplace];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Installed => "Installed",
+            Self::Marketplace => "Marketplace",
             Self::Configuration => "Configuration",
             Self::Hooks => "Hooks",
             Self::Diagnostics => "Diagnostics",
@@ -156,6 +236,49 @@ impl PluginSource {
             Self::Bundled => "Bundled WASM",
             Self::UserManifest => "User manifest",
             Self::LegacyJava => "Legacy Java",
+        }
+    }
+}
+
+impl PluginMarketplaceSource {
+    pub fn is_bundled(&self) -> bool {
+        matches!(self, Self::Bundled { .. })
+    }
+
+    fn plugin_source(&self) -> PluginSource {
+        match self {
+            Self::Bundled { .. } => PluginSource::Bundled,
+            Self::LocalPackage { .. } | Self::Unknown => PluginSource::UserManifest,
+        }
+    }
+
+    pub fn location_label(&self) -> String {
+        match self {
+            Self::Bundled { plugin_id } => format!("bundled://{plugin_id}/plugin.toml"),
+            Self::LocalPackage { path } => path.clone(),
+            Self::Unknown => "Repository catalog".to_owned(),
+        }
+    }
+}
+
+impl PluginMarketplaceRow {
+    pub fn to_installed_plugin(&self) -> PluginRow {
+        PluginRow {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            version: self.version.clone(),
+            description: self.description.clone(),
+            provider: self.provider.clone(),
+            license: self.license.clone(),
+            location: self.location.clone(),
+            source: self.install_source.plugin_source(),
+            enabled: true,
+            status: PluginStatus::Active,
+            capabilities: self.capabilities.clone(),
+            config_fields: Vec::new(),
+            hooks: Vec::new(),
+            diagnostics: Vec::new(),
+            legacy_note: None,
         }
     }
 }

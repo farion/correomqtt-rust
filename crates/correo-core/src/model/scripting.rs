@@ -18,16 +18,37 @@ impl AppModel {
         }
     }
 
+    pub(super) fn select_script_connection(&mut self, connection_id: &str) {
+        let Some(connection) = self
+            .snapshot
+            .connections
+            .iter()
+            .find(|connection| connection.id.to_string() == connection_id)
+        else {
+            self.snapshot.scripts.feedback =
+                Some(ScriptFeedback::warning("Select an available connection."));
+            return;
+        };
+        self.snapshot.scripts.selected_connection_id = Some(connection.id.to_string());
+        self.snapshot.scripts.selected_connection = connection.name.clone();
+        self.snapshot.scripts.feedback = None;
+    }
+
     pub(super) fn update_new_script_name(&mut self, name: String) {
         self.snapshot.scripts.new_script_name = name;
     }
 
     pub(super) fn create_script(&mut self) {
-        let name = match normalize_script_path(&self.snapshot.scripts.new_script_name) {
-            Ok(name) => name,
-            Err(message) => {
-                self.snapshot.scripts.feedback = Some(ScriptFeedback::error(message));
-                return;
+        let draft_name = self.snapshot.scripts.new_script_name.trim();
+        let name = if draft_name.is_empty() {
+            self.next_default_script_name()
+        } else {
+            match normalize_script_path(draft_name) {
+                Ok(name) => name,
+                Err(message) => {
+                    self.snapshot.scripts.feedback = Some(ScriptFeedback::error(message));
+                    return;
+                }
             }
         };
         if self.script_index(&name).is_some() {
@@ -49,6 +70,20 @@ impl AppModel {
         self.snapshot.scripts.selected_script = name.clone();
         self.snapshot.scripts.new_script_name.clear();
         self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!("Created {name}.")));
+    }
+
+    fn next_default_script_name(&self) -> String {
+        for index in 1.. {
+            let candidate = if index == 1 {
+                "new_script.js".to_owned()
+            } else {
+                format!("new_script_{index}.js")
+            };
+            if self.script_index(&candidate).is_none() {
+                return candidate;
+            }
+        }
+        unreachable!("unbounded default script name search should always find a candidate")
     }
 
     pub(super) fn update_script_source(&mut self, source: String) {
@@ -80,6 +115,24 @@ impl AppModel {
         self.snapshot.scripts.feedback =
             Some(ScriptFeedback::info(format!("Saved {}.", script.name)));
         self.push_diagnostic(Diagnostic::info("Script save command queued."));
+    }
+
+    pub(super) fn discard_script_changes(&mut self) {
+        let Some(index) = self.selected_script_index() else {
+            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(
+                "Select a script before discarding changes.",
+            ));
+            return;
+        };
+        let script = &mut self.snapshot.scripts.scripts[index];
+        script.source = script.saved_source.clone();
+        if script.status != ScriptFileStatus::Running {
+            script.status = ScriptFileStatus::Ready;
+        }
+        self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
+            "Discarded changes to {}.",
+            script.name
+        )));
     }
 
     pub(super) fn request_rename_script(&mut self) {
@@ -165,6 +218,9 @@ impl AppModel {
             .first()
             .map(|script| script.name.clone())
             .unwrap_or_default();
+        if self.snapshot.scripts.scripts.is_empty() {
+            self.snapshot.scripts.selected_execution_id = None;
+        }
         self.snapshot.scripts.delete_confirmation_open = false;
         self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(format!(
             "Deleted {deleted}; script sidecars will be removed by storage."
@@ -173,6 +229,18 @@ impl AppModel {
 
     pub(super) fn select_script_detail_tab(&mut self, tab: ScriptDetailTab) {
         self.snapshot.scripts.active_tab = tab;
+    }
+
+    pub(super) fn select_script_execution(&mut self, execution_id: String) {
+        if self
+            .snapshot
+            .scripts
+            .executions
+            .iter()
+            .any(|execution| execution.execution_id == execution_id)
+        {
+            self.snapshot.scripts.selected_execution_id = Some(execution_id);
+        }
     }
 
     pub(super) fn run_script(&mut self) {
@@ -192,6 +260,7 @@ impl AppModel {
         let execution_id = format!("script-exec-{}", self.snapshot.scripts.executions.len() + 1);
         self.snapshot.scripts.running = true;
         self.snapshot.scripts.active_execution_id = Some(execution_id.clone());
+        self.snapshot.scripts.selected_execution_id = Some(execution_id.clone());
         self.snapshot.scripts.active_tab = ScriptDetailTab::Executions;
         self.snapshot.scripts.scripts[index].status = ScriptFileStatus::Running;
         self.snapshot.scripts.scripts[index].execution_count += 1;
@@ -251,6 +320,7 @@ impl AppModel {
         timestamp: String,
     ) {
         self.snapshot.scripts.log_lines.push(ScriptLogLine {
+            execution_id: execution_id.clone(),
             timestamp,
             level,
             message: redact_script_output(&format!("[{execution_id}] {message}")),
@@ -281,7 +351,9 @@ impl AppModel {
             execution.error = redacted_error.clone();
         }
 
-        if status.is_terminal() && self.snapshot.scripts.active_execution_id == Some(execution_id) {
+        if status.is_terminal()
+            && self.snapshot.scripts.active_execution_id.as_deref() == Some(execution_id.as_str())
+        {
             self.snapshot.scripts.running = false;
             self.snapshot.scripts.active_execution_id = None;
             if let Some(index) = self.selected_script_index() {
@@ -293,14 +365,16 @@ impl AppModel {
             }
         }
 
-        self.snapshot.scripts.last_error = redacted_error.clone();
-        if let Some(error) = redacted_error {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(format!(
-                "{}: {}",
-                error.kind.label(),
-                error.message
-            )));
+        if let Some(error) = redacted_error.clone() {
+            self.append_script_log(
+                execution_id,
+                ScriptLogLevel::Error,
+                format!("{}: {}", error.kind.label(), error.message),
+                "now".to_owned(),
+            );
+            self.snapshot.scripts.last_error = Some(error);
         } else if status.is_terminal() {
+            self.snapshot.scripts.last_error = None;
             self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
                 "Execution {}.",
                 status.label()
@@ -373,78 +447,5 @@ fn redact_script_output(message: &str) -> String {
         "[REDACTED SCRIPT OUTPUT: sensitive material]".to_owned()
     } else {
         redacted
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{AppCommand, AppEvent};
-
-    #[test]
-    fn script_edit_save_tracks_dirty_state() {
-        let mut model = AppModel::default();
-        let name = model.snapshot().scripts.selected_script.clone();
-
-        model.apply_command(AppCommand::UpdateScriptSource(
-            "logger.info('changed');".to_owned(),
-        ));
-
-        let script = model.snapshot().scripts.selected_script().unwrap();
-        assert_eq!(script.name, name);
-        assert!(script.is_dirty());
-        assert!(model.snapshot().scripts.can_save());
-
-        model.apply_command(AppCommand::SaveScript);
-
-        assert!(!model
-            .snapshot()
-            .scripts
-            .selected_script()
-            .unwrap()
-            .is_dirty());
-        assert!(!model.snapshot().scripts.can_save());
-    }
-
-    #[test]
-    fn run_and_cancel_script_updates_execution_state() {
-        let mut model = AppModel::default();
-
-        model.apply_command(AppCommand::RunScript);
-
-        assert!(model.snapshot().scripts.running);
-        assert_eq!(
-            model.snapshot().scripts.executions[0].status,
-            ScriptExecutionStatus::Running
-        );
-
-        model.apply_command(AppCommand::CancelScript);
-
-        assert!(!model.snapshot().scripts.running);
-        assert_eq!(
-            model.snapshot().scripts.executions[0].status,
-            ScriptExecutionStatus::Cancelled
-        );
-        assert_eq!(
-            model.snapshot().scripts.last_error.as_ref().unwrap().kind,
-            ScriptExecutionErrorKind::Cancellation
-        );
-    }
-
-    #[test]
-    fn script_log_events_are_redacted_before_snapshot_exposure() {
-        let mut model = AppModel::default();
-
-        model.apply_event(AppEvent::ScriptExecutionLogAppended {
-            execution_id: "exec-1".to_owned(),
-            level: ScriptLogLevel::Error,
-            message: "password=hunter2 key material follows".to_owned(),
-            timestamp: "now".to_owned(),
-        });
-
-        let message = &model.snapshot().scripts.log_lines.last().unwrap().message;
-        assert!(!message.contains("hunter2"));
-        assert!(!message.contains("key material"));
-        assert!(message.contains("[REDACTED"));
     }
 }

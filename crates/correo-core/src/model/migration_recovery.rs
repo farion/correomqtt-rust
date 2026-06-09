@@ -3,7 +3,7 @@ use crate::{
     MigrationDiagnosticCategory, MigrationPasswordError, MigrationRecoveryCommand,
     MigrationRecoveryCompletion, MigrationRecoveryDiagnostic, MigrationRecoveryEvent,
     MigrationRecoveryFailure, MigrationRecoverySnapshot, MigrationRecoveryState, SettingsSection,
-    Workspace,
+    StartupState, Workspace,
 };
 
 use super::AppModel;
@@ -38,7 +38,6 @@ impl AppModel {
             MigrationRecoveryCommand::ConfirmRestoreBackup => self.start_restore(),
             MigrationRecoveryCommand::OpenDiagnostics => {
                 self.snapshot.active_workspace = Workspace::Diagnostics;
-                self.snapshot.diagnostics_expanded = true;
             }
             MigrationRecoveryCommand::OpenSettingsData => {
                 self.snapshot.active_workspace = Workspace::Settings;
@@ -106,8 +105,13 @@ impl AppModel {
                 self.snapshot.migration_recovery.counts.skipped_secrets = skipped_count;
                 self.skip_secrets();
             }
-            MigrationRecoveryEvent::ReviewReady { rows, warnings } => {
+            MigrationRecoveryEvent::ReviewReady {
+                counts,
+                rows,
+                warnings,
+            } => {
                 self.snapshot.migration_recovery.state = MigrationRecoveryState::Reviewing;
+                self.snapshot.migration_recovery.counts = counts;
                 self.snapshot.migration_recovery.rows = rows;
                 self.snapshot.migration_recovery.counts.warnings = warnings.len();
                 self.snapshot.migration_recovery.warnings = warnings;
@@ -175,12 +179,6 @@ impl AppModel {
         recovery.state = MigrationRecoveryState::Reviewing;
         recovery.secrets_skipped = true;
         recovery.password_error = None;
-        recovery
-            .diagnostics
-            .push(MigrationRecoveryDiagnostic::warning(
-                MigrationDiagnosticCategory::Secret,
-                "Secret must be restored before connecting.",
-            ));
     }
 
     fn select_migration_item(&mut self, item_id: &str, selected: bool) {
@@ -212,13 +210,28 @@ impl AppModel {
         recovery.completion = Some(completion);
         recovery.current_stage = Some(MigrationApplyStage::DiagnosticsRecorded);
         recovery.diagnostics.extend(diagnostics);
-        self.snapshot.diagnostics_expanded = recovery.warning_count() > 0;
         let status = match completion {
             MigrationRecoveryCompletion::Success => LegacyMigrationStatus::Complete,
             MigrationRecoveryCompletion::PartialSuccess => LegacyMigrationStatus::PartialSuccess,
             MigrationRecoveryCompletion::RestoreSuccess => LegacyMigrationStatus::Restored,
         };
         self.refresh_legacy_settings(status);
+    }
+
+    pub(super) fn apply_migrated_startup_state(
+        &mut self,
+        state: StartupState,
+        completion: MigrationRecoveryCompletion,
+        diagnostics: Vec<MigrationRecoveryDiagnostic>,
+    ) {
+        let recovery = self.snapshot.migration_recovery.clone();
+        self.snapshot = state.snapshot;
+        self.connection_settings = state.connection_settings;
+        self.storage_connection_ids = state.storage_connection_ids;
+        self.saved_global_settings = self.snapshot.global_settings.clone();
+        self.saved_theme_mode = self.snapshot.theme_mode;
+        self.snapshot.migration_recovery = recovery;
+        self.apply_completed(completion, diagnostics);
     }
 
     fn apply_failed(&mut self, failure: MigrationRecoveryFailure) {
@@ -303,8 +316,7 @@ impl AppModel {
 
     fn open_connections_after_migration(&mut self) {
         self.snapshot.migration_recovery = MigrationRecoverySnapshot::default();
-        self.snapshot.active_workspace = Workspace::Connections;
-        self.snapshot.connection_surface = crate::ConnectionSurface::Launcher;
+        self.open_default_connection_surface();
     }
 
     fn refresh_legacy_settings(&mut self, status: LegacyMigrationStatus) {

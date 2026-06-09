@@ -7,6 +7,12 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
+correo-plugins-advanced-validator = { path = "../../plugins/correo-plugins-advanced-validator" }
+correo-plugins-json-format = { path = "../../plugins/correo-plugins-json-format" }
+correo-plugins-systopic = { path = "../../plugins/correo-plugins-systopic" }
+correo-plugins-xml-xsd-validator = { path = "../../plugins/correo-plugins-xml-xsd-validator" }
+correo-plugin-xml-format = { path = "../../plugins/xml-format" }
+correo-plugin-zip-manipulator = { path = "../correo-plugin-zip-manipulator" }
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true

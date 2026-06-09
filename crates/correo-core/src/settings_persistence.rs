@@ -5,7 +5,7 @@ use std::time::Duration;
 use correo_storage::current::{ConfigStore, Settings};
 use thiserror::Error;
 
-use crate::{GlobalSettingsSnapshot, PluginRepositoryRow, ThemeMode};
+use crate::{normalize_keyring_backend, GlobalSettingsSnapshot, PluginRepositoryRow, ThemeMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsPersistenceCommand {
@@ -101,10 +101,12 @@ fn storage_settings(snapshot: GlobalSettingsSnapshot) -> Settings {
     settings.plugin_repositories = snapshot
         .plugin_repositories
         .into_iter()
+        .filter(|row| !row.url.trim().is_empty())
         .map(repository_entry)
         .collect();
     settings.first_start = snapshot.first_start;
-    settings.keyring_identifier = keyring_identifier(snapshot.keyring_backend);
+    settings.keyring_identifier =
+        keyring_identifier(normalize_keyring_backend(snapshot.keyring_backend));
     settings.config_created_with_correo_version = non_unknown(snapshot.config_version);
     settings
 }
@@ -146,8 +148,8 @@ mod tests {
     use correo_storage::current::ConfigStore;
 
     use crate::{
-        GlobalSettingFlag, GlobalSettingsSnapshot, SettingsPersistenceCommand,
-        SettingsPersistenceEvent, SettingsPersistenceWorker, ThemeMode,
+        available_keyring_options, GlobalSettingFlag, GlobalSettingsSnapshot, PluginRepositoryRow,
+        SettingsPersistenceCommand, SettingsPersistenceEvent, SettingsPersistenceWorker, ThemeMode,
     };
 
     #[test]
@@ -155,10 +157,25 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let worker = SettingsPersistenceWorker::start(temp.path());
         let mut settings = GlobalSettingsSnapshot::default();
+        let keyring_backend = available_keyring_options()
+            .into_iter()
+            .find(|option| option.id != "os")
+            .expect("at least one explicit keyring backend should be available")
+            .id;
         settings.language = "de_DE".to_owned();
         settings.search_use_regex = true;
         settings.search_ignore_case = true;
-        settings.keyring_backend = "LibSecret".to_owned();
+        settings.keyring_backend = keyring_backend.clone();
+        settings.plugin_repositories = vec![
+            PluginRepositoryRow {
+                id: "empty".to_owned(),
+                url: "  ".to_owned(),
+            },
+            PluginRepositoryRow {
+                id: "custom".to_owned(),
+                url: "https://example.invalid/plugins.json".to_owned(),
+            },
+        ];
 
         worker
             .dispatch(SettingsPersistenceCommand::Save {
@@ -178,7 +195,12 @@ mod tests {
         assert!(config.settings.use_ignore_case);
         assert_eq!(
             config.settings.keyring_identifier.as_deref(),
-            Some("LibSecret")
+            Some(keyring_backend.as_str())
+        );
+        assert_eq!(config.settings.plugin_repositories.len(), 1);
+        assert_eq!(
+            config.settings.plugin_repositories.get("custom"),
+            Some(&"https://example.invalid/plugins.json".to_owned())
         );
         assert_eq!(
             config

@@ -11,7 +11,7 @@ use crate::theme::ThemeTokens;
 mod actions;
 use actions::{action_bar, button, handle_keyboard, send};
 
-pub fn top_bar(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &AppCommandSender) {
+pub fn top_bar(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot) {
     ui.horizontal_centered(|ui| {
         ui.label(
             RichText::new("CorreoMQTT Beta Migration Recovery")
@@ -20,11 +20,6 @@ pub fn top_bar(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &App
         );
         ui.separator();
         ui.label(state_label(snapshot.state));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Diagnostics").clicked() {
-                send(commands, MigrationRecoveryCommand::OpenDiagnostics);
-            }
-        });
     });
 }
 
@@ -112,7 +107,7 @@ fn stepper(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, tokens: ThemeToken
 
 fn no_legacy_data(ui: &mut Ui, tokens: ThemeTokens) {
     ui.heading("No legacy data detected");
-    ui.label(RichText::new("Connection launcher is available.").color(tokens.text_secondary));
+    ui.label(RichText::new("Connections workspace is available.").color(tokens.text_secondary));
 }
 
 fn detecting(ui: &mut Ui, tokens: ThemeTokens) {
@@ -153,8 +148,8 @@ fn unlock(
     let mut password = String::new();
     ui.horizontal(|ui| {
         ui.add_sized(
-            [260.0, 28.0],
-            TextEdit::singleline(&mut password)
+            [260.0, crate::theme::CONTROL_HEIGHT],
+            crate::widgets::padded_text_edit(TextEdit::singleline(&mut password))
                 .password(true)
                 .hint_text("Legacy master password"),
         );
@@ -181,7 +176,7 @@ fn review(
         let count = snapshot.counts.skipped_secrets.max(1);
         ui.label(
             RichText::new(format!(
-                "{count} connection secret(s) will need manual restore before Connect is enabled."
+                "{count} connection secret(s) were skipped during migration."
             ))
             .color(tokens.warning),
         );
@@ -190,7 +185,7 @@ fn review(
     for row in &snapshot.rows {
         ui.horizontal_wrapped(|ui| {
             let mut selected = row.selected;
-            if ui.checkbox(&mut selected, row.task.label()).changed() {
+            if crate::widgets::checkbox(ui, &mut selected, row.task.label()).changed() {
                 send(
                     commands,
                     MigrationRecoveryCommand::SelectMigrationItem {

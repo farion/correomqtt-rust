@@ -2,13 +2,15 @@ use std::sync::Arc;
 
 use crate::{
     AppCommand, AppCommandSender, AppEvent, AppEventSender, AppModel, AppSnapshot, Diagnostic,
-    HistoryPersistenceEvent, HistoryPersistenceKind, HistoryPersistenceWorker, MqttCommandSender,
-    MqttService, NoopPluginHookExecutor, PluginHookExecutor, SettingsPersistenceCommand,
+    HistoryPersistenceEvent, HistoryPersistenceKind, HistoryPersistenceWorker,
+    MigrationPersistenceCommand, MigrationPersistenceWorker, MqttCommandSender, MqttService,
+    NoopPluginHookExecutor, PluginHookExecutor, ScriptingWorker, SettingsPersistenceCommand,
     SettingsPersistenceEvent, SettingsPersistenceWorker, StartupState,
 };
 
 mod plugin_helpers;
 mod plugins;
+mod scripting;
 
 #[derive(Debug)]
 pub struct AppRuntime {
@@ -19,8 +21,10 @@ pub struct AppRuntime {
     event_receiver: flume::Receiver<AppEvent>,
     mqtt_service: Option<MqttService>,
     history_worker: Option<HistoryPersistenceWorker>,
+    migration_worker: Option<MigrationPersistenceWorker>,
     plugin_hooks: Arc<dyn PluginHookExecutor>,
     settings_worker: Option<SettingsPersistenceWorker>,
+    scripting_worker: Option<ScriptingWorker>,
     shutdown_requested: bool,
 }
 
@@ -48,8 +52,10 @@ impl AppRuntime {
             event_receiver,
             mqtt_service: None,
             history_worker: None,
+            migration_worker: None,
             plugin_hooks: Arc::new(NoopPluginHookExecutor),
             settings_worker: None,
+            scripting_worker: None,
             shutdown_requested: false,
         }
     }
@@ -74,6 +80,10 @@ impl AppRuntime {
         self.history_worker = Some(worker);
     }
 
+    pub fn attach_migration_worker(&mut self, worker: MigrationPersistenceWorker) {
+        self.migration_worker = Some(worker);
+    }
+
     pub fn attach_plugin_hook_executor(&mut self, executor: impl PluginHookExecutor) {
         self.plugin_hooks = Arc::new(executor);
     }
@@ -81,7 +91,9 @@ impl AppRuntime {
     pub fn attach_settings_worker(&mut self, worker: SettingsPersistenceWorker) {
         self.settings_worker = Some(worker);
     }
-
+    pub fn attach_scripting_worker(&mut self, worker: ScriptingWorker) {
+        self.scripting_worker = Some(worker);
+    }
     pub fn mqtt_command_sender(&self) -> Option<MqttCommandSender> {
         self.mqtt_service.as_ref().map(MqttService::command_sender)
     }
@@ -119,18 +131,30 @@ impl AppRuntime {
             report.events_processed += 1;
         }
 
+        while let Some(event) = self.try_recv_scripting_event() {
+            self.apply_scripting_event(event);
+            report.events_processed += 1;
+        }
+
+        while let Some(event) = self.try_recv_migration_event() {
+            self.model.apply_event(event);
+            report.events_processed += 1;
+        }
+
         while let Ok(event) = self.event_receiver.try_recv() {
             self.model.apply_event(event);
             report.events_processed += 1;
         }
 
         while let Ok(command) = self.command_receiver.try_recv() {
+            let command_before = self.model.snapshot().clone();
             let should_persist_settings = matches!(command, AppCommand::SaveGlobalSettings)
                 && self.model.snapshot().global_settings.dirty;
             if matches!(command, AppCommand::Shutdown) {
                 self.shutdown_requested = true;
             }
             self.forward_mqtt_commands(&command);
+            self.forward_migration_command(&command);
             self.model.apply_command(command.clone());
             if self.should_refresh_detail_for_command(&command) {
                 self.refresh_message_detail();
@@ -138,6 +162,7 @@ impl AppRuntime {
             if should_persist_settings {
                 self.dispatch_global_settings_save();
             }
+            self.dispatch_scripting_command(&command, &command_before);
             report.commands_processed += 1;
         }
 
@@ -162,6 +187,18 @@ impl AppRuntime {
         self.settings_worker
             .as_ref()
             .and_then(SettingsPersistenceWorker::try_recv_event)
+    }
+
+    fn try_recv_scripting_event(&self) -> Option<crate::ScriptingEvent> {
+        self.scripting_worker
+            .as_ref()
+            .and_then(ScriptingWorker::try_recv_event)
+    }
+
+    fn try_recv_migration_event(&self) -> Option<AppEvent> {
+        self.migration_worker
+            .as_ref()
+            .and_then(MigrationPersistenceWorker::try_recv_event)
     }
 
     fn dispatch_history_for_mqtt_event(&self, event: &crate::MqttEvent) {
@@ -232,6 +269,57 @@ impl AppRuntime {
             .emit(AppEvent::DiagnosticRaised(diagnostic));
     }
 
+    fn forward_migration_command(&self, command: &AppCommand) {
+        let Some(command) = self.migration_command_for_app_command(command) else {
+            return;
+        };
+        let Some(worker) = &self.migration_worker else {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                    "Migration worker is not running.",
+                )));
+            return;
+        };
+        if let Err(error) = worker.dispatch(command) {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                    error.to_string(),
+                )));
+        }
+    }
+
+    fn migration_command_for_app_command(
+        &self,
+        command: &AppCommand,
+    ) -> Option<MigrationPersistenceCommand> {
+        let AppCommand::MigrationRecovery(command) = command else {
+            return None;
+        };
+        match command {
+            crate::MigrationRecoveryCommand::ChooseMigrate => self
+                .model
+                .snapshot()
+                .migration_recovery
+                .legacy_path
+                .as_ref()
+                .map(|legacy_path| MigrationPersistenceCommand::Prepare {
+                    legacy_path: legacy_path.clone(),
+                }),
+            crate::MigrationRecoveryCommand::SubmitPassword
+            | crate::MigrationRecoveryCommand::SkipSecrets => {
+                Some(MigrationPersistenceCommand::LoadReview)
+            }
+            crate::MigrationRecoveryCommand::ApplyMigration => {
+                Some(MigrationPersistenceCommand::Apply {
+                    fallback_theme: self.model.snapshot().theme_mode,
+                })
+            }
+            _ => None,
+        }
+    }
+
     fn forward_mqtt_commands(&self, command: &AppCommand) {
         let commands = match self.mqtt_commands_for_app_command_with_plugins(command) {
             Ok(commands) => commands,
@@ -293,7 +381,13 @@ pub struct PumpReport {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AppCommand, AppEvent, AppRuntime, Diagnostic, ThemeMode};
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+
+    use crate::{
+        AppCommand, AppEvent, AppRuntime, Diagnostic, MigrationPersistenceWorker,
+        MigrationRecoveryCommand, MigrationRecoveryState, StartupState, ThemeMode,
+    };
 
     #[test]
     fn pump_processes_commands_without_awaiting() {
@@ -325,6 +419,79 @@ mod tests {
         let message = &runtime.snapshot().diagnostics[0].message;
         assert!(!message.contains("open-sesame"));
         assert!(message.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn migration_worker_advances_recovery_flow_to_complete() {
+        let temp = tempfile::tempdir().unwrap();
+        let legacy_path = storage_fixture("legacy_profile").display().to_string();
+        let mut runtime = AppRuntime::with_startup_state(StartupState::legacy_migration_detected(
+            ThemeMode::Dark,
+            legacy_path,
+        ));
+        runtime.attach_migration_worker(MigrationPersistenceWorker::start(temp.path()));
+
+        runtime
+            .command_sender()
+            .send(AppCommand::MigrationRecovery(
+                MigrationRecoveryCommand::ChooseMigrate,
+            ))
+            .unwrap();
+        runtime.pump();
+        assert_eq!(
+            runtime.snapshot().migration_recovery.state,
+            MigrationRecoveryState::CreatingBackup
+        );
+
+        pump_until(&mut runtime, |runtime| {
+            runtime.snapshot().migration_recovery.state == MigrationRecoveryState::NeedsPassword
+        });
+        assert!(runtime.snapshot().migration_recovery.backup_name.is_some());
+
+        runtime
+            .command_sender()
+            .send(AppCommand::MigrationRecovery(
+                MigrationRecoveryCommand::SkipSecrets,
+            ))
+            .unwrap();
+        runtime.pump();
+        pump_until(&mut runtime, |runtime| {
+            let recovery = &runtime.snapshot().migration_recovery;
+            recovery.state == MigrationRecoveryState::Reviewing && recovery.counts.connections == 2
+        });
+
+        runtime
+            .command_sender()
+            .send(AppCommand::MigrationRecovery(
+                MigrationRecoveryCommand::ApplyMigration,
+            ))
+            .unwrap();
+        runtime.pump();
+        pump_until(&mut runtime, |runtime| {
+            runtime.snapshot().migration_recovery.state == MigrationRecoveryState::Complete
+        });
+
+        assert_eq!(runtime.snapshot().connection_count, 2);
+        assert!(temp.path().join("config.json").exists());
+    }
+
+    fn storage_fixture(path: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../correo-storage/tests/fixtures")
+            .join(path)
+    }
+
+    fn pump_until(runtime: &mut AppRuntime, mut predicate: impl FnMut(&AppRuntime) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            runtime.pump();
+            if predicate(runtime) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        runtime.pump();
+        assert!(predicate(runtime));
     }
 }
 

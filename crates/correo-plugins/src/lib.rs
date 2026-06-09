@@ -8,6 +8,7 @@ pub mod fixture;
 pub mod manifest;
 pub mod package;
 pub mod registry;
+pub mod repository;
 pub mod runtime;
 
 pub use abi::*;
@@ -20,4 +21,5 @@ pub use fixture::*;
 pub use manifest::*;
 pub use package::*;
 pub use registry::*;
+pub use repository::*;
 pub use runtime::*;

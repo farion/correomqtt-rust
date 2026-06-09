@@ -7,6 +7,9 @@ pub use workflow::*;
 #[path = "types/plugin_workflow.rs"]
 mod plugin_workflow;
 pub use plugin_workflow::*;
+#[path = "types/connection_settings.rs"]
+mod connection_settings;
+pub use connection_settings::*;
 
 use crate::{
     Diagnostic, GlobalSettingsSnapshot, MigrationRecoverySnapshot, PluginSurfaceSnapshot,
@@ -20,10 +23,11 @@ pub struct AppSnapshot {
     pub connection_count: usize,
     pub connection_filter: String,
     pub connection_settings: ConnectionSettingsSnapshot,
+    #[serde(default)]
+    pub connection_settings_overlay: Option<ConnectionId>,
     pub connection_surface: ConnectionSurface,
     pub connections: Vec<ConnectionSummary>,
     pub diagnostics: Vec<Diagnostic>,
-    pub diagnostics_expanded: bool,
     pub global_settings: GlobalSettingsSnapshot,
     pub migration_recovery: MigrationRecoverySnapshot,
     pub plugins: PluginSurfaceSnapshot,
@@ -42,10 +46,10 @@ impl AppSnapshot {
             connection_count: 0,
             connection_filter: String::new(),
             connection_settings: ConnectionSettingsSnapshot::default(),
-            connection_surface: ConnectionSurface::Launcher,
+            connection_settings_overlay: None,
+            connection_surface: ConnectionSurface::Workbench,
             connections: Vec::new(),
             diagnostics: Vec::new(),
-            diagnostics_expanded: false,
             global_settings: GlobalSettingsSnapshot::default(),
             migration_recovery: MigrationRecoverySnapshot::default(),
             plugins: PluginSurfaceSnapshot::default(),
@@ -116,26 +120,28 @@ pub enum Workspace {
     Plugins,
     Diagnostics,
     Settings,
+    About,
 }
 
 impl Workspace {
     pub const ALL: [Self; 6] = [
         Self::Connections,
-        Self::ImportExport,
         Self::Scripts,
         Self::Plugins,
         Self::Diagnostics,
         Self::Settings,
+        Self::About,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Connections => "Connections",
             Self::ImportExport => "Import/Export",
-            Self::Scripts => "Scripts",
+            Self::Scripts => "Scripting",
             Self::Plugins => "Plugins",
             Self::Diagnostics => "Diagnostics",
             Self::Settings => "Settings",
+            Self::About => "About",
         }
     }
 
@@ -147,6 +153,7 @@ impl Workspace {
             Self::Plugins => "P",
             Self::Diagnostics => "D",
             Self::Settings => "G",
+            Self::About => "?",
         }
     }
 }
@@ -156,11 +163,12 @@ pub enum ConnectionSurface {
     Launcher,
     Workbench,
     Settings,
+    Transfer,
 }
 
 impl Default for ConnectionSurface {
     fn default() -> Self {
-        Self::Launcher
+        Self::Workbench
     }
 }
 
@@ -194,19 +202,19 @@ impl ConnectionState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConnectionBadge {
+    Credentials,
     Tls,
     Proxy,
     Lwt,
-    KeyringWarning,
 }
 
 impl ConnectionBadge {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Credentials => "Credentials",
             Self::Tls => "TLS",
-            Self::Proxy => "Proxy",
+            Self::Proxy => "Tunnel",
             Self::Lwt => "LWT",
-            Self::KeyringWarning => "Keyring",
         }
     }
 }
@@ -215,7 +223,6 @@ impl ConnectionBadge {
 pub enum ConnectDisabledReason {
     AlreadyConnected,
     MissingHost,
-    MissingSecret,
     Busy,
 }
 
@@ -224,7 +231,6 @@ impl ConnectDisabledReason {
         match self {
             Self::AlreadyConnected => "Already connected",
             Self::MissingHost => "Host is required",
-            Self::MissingSecret => "Secret must be restored before connecting.",
             Self::Busy => "Connection is busy",
         }
     }
@@ -389,96 +395,4 @@ pub struct MessageRow {
     pub badges: Vec<String>,
     pub diagnostics: Vec<MessageDiagnosticRow>,
     pub formatted_detail: Option<FormattedMessageDetail>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ConnectionSettingsTab {
-    #[default]
-    Mqtt,
-    Tls,
-    Proxy,
-    Lwt,
-    Advanced,
-}
-
-impl ConnectionSettingsTab {
-    pub const ALL: [Self; 5] = [
-        Self::Mqtt,
-        Self::Tls,
-        Self::Proxy,
-        Self::Lwt,
-        Self::Advanced,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Mqtt => "MQTT",
-            Self::Tls => "TLS/SSL",
-            Self::Proxy => "Proxy/Tunnel",
-            Self::Lwt => "LWT",
-            Self::Advanced => "Advanced",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum KeyringState {
-    #[default]
-    Available,
-    Locked,
-    Unavailable,
-    MigrationRequired,
-}
-
-impl KeyringState {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Available => "Keyring available",
-            Self::Locked => "Keyring locked",
-            Self::Unavailable => "Keyring unavailable",
-            Self::MigrationRequired => "Keyring migration required",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConnectionSettingsSnapshot {
-    pub selected_tab: ConnectionSettingsTab,
-    pub profile_name: String,
-    pub host: String,
-    pub port: String,
-    pub mqtt_version: String,
-    pub client_id: String,
-    pub auth_mode: String,
-    pub username_status: String,
-    pub tls_mode: String,
-    pub tls_store: String,
-    pub proxy_mode: String,
-    pub proxy_endpoint: String,
-    pub lwt_enabled: bool,
-    pub lwt_topic: String,
-    pub lwt_payload: String,
-    pub advanced_options: Vec<String>,
-    pub dirty: bool,
-    pub valid: bool,
-    pub save_disabled_reason: String,
-    pub delete_confirmation_open: bool,
-    pub keyring_state: KeyringState,
-    pub validation_errors: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ConnectionSettingField {
-    ProfileName,
-    Host,
-    Port,
-    MqttVersion,
-    ClientId,
-    AuthMode,
-    TlsMode,
-    TlsStore,
-    ProxyMode,
-    ProxyEndpoint,
-    LwtTopic,
-    LwtPayload,
 }

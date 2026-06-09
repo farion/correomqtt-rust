@@ -192,6 +192,99 @@ fn wasm_load_error_plugin_cannot_be_enabled() {
 }
 
 #[test]
+fn marketplace_install_and_uninstall_updates_manager_state() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::SelectPluginSurfaceTab(
+        crate::PluginSurfaceTab::Marketplace,
+    ));
+    model.apply_command(AppCommand::SelectMarketplacePlugin(
+        "marketplace.schema-validator".to_owned(),
+    ));
+    model.apply_command(AppCommand::InstallMarketplacePlugin {
+        marketplace_plugin_id: "marketplace.schema-validator".to_owned(),
+    });
+
+    let installed = plugin(&model, "marketplace.schema-validator");
+    assert!(installed.enabled);
+    assert_eq!(installed.status, crate::PluginStatus::Active);
+    assert_eq!(
+        model
+            .snapshot()
+            .plugins
+            .selected_marketplace_plugin()
+            .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+        Some("marketplace.schema-validator")
+    );
+
+    model.apply_command(AppCommand::UninstallPlugin {
+        plugin_id: "marketplace.schema-validator".to_owned(),
+    });
+
+    assert!(model
+        .snapshot()
+        .plugins
+        .plugins
+        .iter()
+        .all(|plugin| plugin.id != "marketplace.schema-validator"));
+    assert_eq!(
+        model
+            .snapshot()
+            .plugins
+            .selected_marketplace_plugin()
+            .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+        None
+    );
+}
+
+#[test]
+fn marketplace_installs_every_plugin_from_local_repository_fixture() {
+    let marketplace_plugins = crate::marketplace_rows_from_repository_json(include_str!(
+        "../../../correo-plugins/tests/fixtures/repository.json"
+    ))
+    .unwrap();
+    let marketplace_ids = marketplace_plugins
+        .iter()
+        .map(|plugin| plugin.id.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        marketplace_plugins
+            .iter()
+            .filter(|plugin| plugin.install_source.is_bundled())
+            .count(),
+        8
+    );
+    assert!(marketplace_plugins
+        .iter()
+        .find(|plugin| plugin.id == "org.correomqtt.plugins.save-manipulator")
+        .is_some_and(|plugin| !plugin.install_source.is_bundled()));
+    let mut model = AppModel::default();
+    model.snapshot.plugins.marketplace_plugins = marketplace_plugins;
+
+    for plugin_id in &marketplace_ids {
+        model.apply_command(AppCommand::SelectMarketplacePlugin(plugin_id.clone()));
+        model.apply_command(AppCommand::InstallMarketplacePlugin {
+            marketplace_plugin_id: plugin_id.clone(),
+        });
+
+        assert!(model
+            .snapshot()
+            .plugins
+            .plugins
+            .iter()
+            .any(|plugin| &plugin.id == plugin_id));
+        assert_eq!(
+            model
+                .snapshot()
+                .plugins
+                .selected_marketplace_plugin()
+                .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+            Some(plugin_id.as_str())
+        );
+    }
+}
+
+#[test]
 fn plugin_denials_legacy_plugins_and_diagnostics_stay_visible() {
     let mut model = AppModel::default();
 

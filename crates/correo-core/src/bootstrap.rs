@@ -3,18 +3,27 @@ use std::collections::HashMap;
 use correo_mqtt::ConnectionId;
 use correo_storage::current::{
     AppConfig, Auth, ConnectionConfig, ConnectionHistorySnapshot, HistoryPersistenceSnapshot, Lwt,
-    MqttVersion, Proxy, Qos as StorageQos, Settings, ThemeSettings, TlsSsl,
+    MqttVersion, Proxy, Qos as StorageQos, ScriptPersistenceSnapshot, Settings, ThemeSettings,
+    TlsSsl,
 };
 use correo_storage::migration::MigrationPreview;
 
 use crate::{
-    AppSnapshot, ConnectDisabledReason, ConnectionBadge, ConnectionSettingsSnapshot,
-    ConnectionState, ConnectionSummary, Diagnostic, GlobalSettingsSnapshot, KeyringState,
-    LegacyMigrationStatus, MigrationRecoverySnapshot, PluginRepositoryRow, PublishHistoryRow,
-    QosLevel, SubscribePaneSnapshot, SubscriptionRow, ThemeMode,
+    normalize_keyring_backend, AppSnapshot, ConnectDisabledReason, ConnectionBadge,
+    ConnectionSettingsSnapshot, ConnectionState, ConnectionSummary, Diagnostic,
+    GlobalSettingsSnapshot, KeyringState, LegacyMigrationStatus, MigrationRecoverySnapshot,
+    PluginRepositoryRow, PublishHistoryRow, QosLevel, SubscribePaneSnapshot, SubscriptionRow,
+    ThemeMode,
 };
 
-#[derive(Debug, Clone)]
+#[path = "bootstrap_scripts.rs"]
+mod bootstrap_scripts;
+use bootstrap_scripts::{apply_default_script_connection, script_surface};
+#[path = "bootstrap_plugins.rs"]
+mod bootstrap_plugins;
+use bootstrap_plugins::plugin_surface;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupState {
     pub snapshot: AppSnapshot,
     pub connection_settings: HashMap<ConnectionId, ConnectionSettingsSnapshot>,
@@ -60,6 +69,7 @@ impl StartupState {
 pub fn startup_state_from_current(
     config: AppConfig,
     histories: HistoryPersistenceSnapshot,
+    scripts: ScriptPersistenceSnapshot,
     warnings: Vec<String>,
     fallback_theme: ThemeMode,
 ) -> StartupState {
@@ -82,6 +92,8 @@ pub fn startup_state_from_current(
     snapshot.connections = mapped;
     snapshot.theme_mode = theme_mode;
     snapshot.global_settings = global_settings(&config.settings);
+    snapshot.plugins = plugin_surface(config.settings.install_bundled_plugins);
+    snapshot.scripts = script_surface(&scripts);
     snapshot.diagnostics = warnings
         .into_iter()
         .map(|warning| Diagnostic::warning(warning).redacted())
@@ -99,6 +111,7 @@ pub fn startup_state_from_current(
             apply_history(&mut snapshot, histories.connections.get(storage_id));
         }
     }
+    apply_default_script_connection(&mut snapshot);
 
     StartupState {
         snapshot,
@@ -123,6 +136,7 @@ pub fn startup_state_from_migration(
             settings: preview.settings,
         },
         preview.histories,
+        preview.scripts,
         warnings,
         fallback_theme,
     )
@@ -133,15 +147,18 @@ fn summary(
     connection: &ConnectionConfig,
     history: Option<&ConnectionHistorySnapshot>,
 ) -> ConnectionSummary {
-    let needs_secret = needs_secret_restore(connection);
     ConnectionSummary {
         id,
         name: connection.name.clone(),
         endpoint: format!("{}:{}", connection.url, connection.port),
         mqtt_version: mqtt_label(connection.mqtt_version).to_owned(),
-        badges: badges(connection, needs_secret),
+        badges: badges(connection),
         state: ConnectionState::Disconnected,
-        disabled_reason: needs_secret.then_some(ConnectDisabledReason::MissingSecret),
+        disabled_reason: connection
+            .url
+            .trim()
+            .is_empty()
+            .then_some(ConnectDisabledReason::MissingHost),
         recent_subscriptions: history
             .map(|history| history.subscriptions.topics.len())
             .unwrap_or_default(),
@@ -160,29 +177,38 @@ fn settings_snapshot(
 ) -> ConnectionSettingsSnapshot {
     let valid = !connection.name.trim().is_empty() && !connection.url.trim().is_empty();
     ConnectionSettingsSnapshot {
+        internal_id: connection.id.clone(),
         profile_name: connection.name.clone(),
         host: connection.url.clone(),
         port: connection.port.to_string(),
         mqtt_version: mqtt_label(connection.mqtt_version).to_owned(),
+        clean_session: connection.clean_session,
         client_id: connection.client_id.clone().unwrap_or_default(),
+        username: connection.username.clone().unwrap_or_default(),
+        password_status: password_status(connection).to_owned(),
         auth_mode: auth_label(connection).to_owned(),
-        username_status: username_status(connection).to_owned(),
         tls_mode: tls_label(connection).to_owned(),
-        tls_store: tls_store_label(connection).to_owned(),
+        tls_store: connection.ssl_keystore.clone().unwrap_or_default(),
+        tls_password_status: tls_password_status(connection).to_owned(),
+        tls_host_verification: connection.ssl_host_verification,
         proxy_mode: proxy_label(connection).to_owned(),
-        proxy_endpoint: proxy_endpoint(connection),
+        ssh_host: connection.ssh_host.clone().unwrap_or_default(),
+        ssh_port: connection.ssh_port.to_string(),
+        local_mqtt_port: connection
+            .local_port
+            .map(|port| port.to_string())
+            .unwrap_or_default(),
+        auth_username: connection.auth_username.clone().unwrap_or_default(),
+        ssh_password_status: ssh_password_status(connection).to_owned(),
+        ssh_key_file: connection.auth_keyfile.clone().unwrap_or_default(),
         lwt_enabled: connection.lwt == Lwt::On,
         lwt_topic: connection.lwt_topic.clone().unwrap_or_default(),
+        lwt_retained: connection.lwt_retained,
         lwt_payload: connection.lwt_payload.clone().unwrap_or_default(),
-        advanced_options: advanced_options(connection),
         dirty: false,
         valid,
         save_disabled_reason: "No changes to save".to_owned(),
-        keyring_state: if needs_secret_restore(connection) {
-            KeyringState::MigrationRequired
-        } else {
-            KeyringState::Available
-        },
+        keyring_state: KeyringState::Available,
         validation_errors: warnings.to_vec(),
         ..ConnectionSettingsSnapshot::default()
     }
@@ -232,10 +258,9 @@ fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
             .clone()
             .or_else(|| settings.current_locale.clone())
             .unwrap_or_else(|| "system".to_owned()),
-        keyring_backend: settings
-            .keyring_identifier
-            .clone()
-            .unwrap_or_else(|| "os".to_owned()),
+        keyring_backend: normalize_keyring_backend(
+            settings.keyring_identifier.as_deref().unwrap_or("os"),
+        ),
         update_checks_enabled: settings.search_updates,
         last_update_check: "Not checked this session".to_owned(),
         cleanup_status: "Sensitive values remain outside the UI snapshot".to_owned(),
@@ -271,8 +296,15 @@ fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
     snapshot
 }
 
-fn badges(connection: &ConnectionConfig, needs_secret: bool) -> Vec<ConnectionBadge> {
+fn badges(connection: &ConnectionConfig) -> Vec<ConnectionBadge> {
     let mut badges = Vec::new();
+    if connection
+        .username
+        .as_ref()
+        .is_some_and(|name| !name.trim().is_empty())
+    {
+        badges.push(ConnectionBadge::Credentials);
+    }
     if connection.ssl != TlsSsl::Off {
         badges.push(ConnectionBadge::Tls);
     }
@@ -282,16 +314,7 @@ fn badges(connection: &ConnectionConfig, needs_secret: bool) -> Vec<ConnectionBa
     if connection.lwt == Lwt::On {
         badges.push(ConnectionBadge::Lwt);
     }
-    if needs_secret {
-        badges.push(ConnectionBadge::KeyringWarning);
-    }
     badges
-}
-
-fn needs_secret_restore(connection: &ConnectionConfig) -> bool {
-    connection.username.is_some()
-        || connection.auth == Auth::Password
-        || connection.ssl_keystore.is_some()
 }
 
 fn theme_mode(settings: Option<&ThemeSettings>) -> Option<ThemeMode> {
@@ -329,78 +352,110 @@ fn history_activity(history: &ConnectionHistorySnapshot) -> String {
 }
 
 fn auth_label(connection: &ConnectionConfig) -> &'static str {
-    if connection.username.is_some() {
-        "Username/password in keyring"
-    } else {
-        match connection.auth {
-            Auth::Off => "Disabled",
-            Auth::Password => "SSH password in keyring",
-            Auth::Keyfile => "SSH key file configured",
-        }
+    match connection.auth {
+        Auth::Off => "No Auth",
+        Auth::Password => "Password",
+        Auth::Keyfile => "Keyfile",
     }
 }
 
-fn username_status(connection: &ConnectionConfig) -> &'static str {
+fn password_status(connection: &ConnectionConfig) -> &'static str {
     if connection.username.is_some() {
-        "Username configured; password stays in keyring"
+        "MQTT password managed by keyring"
     } else {
-        "No MQTT username configured"
+        "No MQTT password configured"
     }
 }
 
 fn tls_label(connection: &ConnectionConfig) -> &'static str {
     match connection.ssl {
-        TlsSsl::Off => "Disabled",
-        TlsSsl::Keystore => "TLS enabled",
+        TlsSsl::Off => "No TLS/SSL",
+        TlsSsl::Keystore => "Keystore",
     }
 }
 
-fn tls_store_label(connection: &ConnectionConfig) -> &'static str {
+fn tls_password_status(connection: &ConnectionConfig) -> &'static str {
     if connection.ssl_keystore.is_some() {
-        "Keystore path configured"
+        "SSL password managed by keyring"
     } else {
-        "No certificate store selected"
+        "No SSL password configured"
     }
 }
 
 fn proxy_label(connection: &ConnectionConfig) -> &'static str {
     match connection.proxy {
-        Proxy::Off => "Disabled",
-        Proxy::Ssh => "SSH tunnel",
+        Proxy::Off => "No proxy/tunnel",
+        Proxy::Ssh => "SSH",
     }
 }
 
-fn proxy_endpoint(connection: &ConnectionConfig) -> String {
-    match (&connection.ssh_host, connection.local_port) {
-        (Some(host), Some(local_port)) => {
-            format!("{host}:{} via localhost:{local_port}", connection.ssh_port)
-        }
-        (Some(host), None) => format!("{host}:{}", connection.ssh_port),
-        _ => "No tunnel configured".to_owned(),
+fn ssh_password_status(connection: &ConnectionConfig) -> &'static str {
+    if connection.auth == Auth::Password {
+        "SSH password managed by keyring"
+    } else {
+        "No SSH password configured"
     }
 }
 
-fn advanced_options(connection: &ConnectionConfig) -> Vec<String> {
-    vec![
-        format!(
-            "Clean session {}",
-            if connection.clean_session {
-                "enabled"
-            } else {
-                "disabled"
-            }
-        ),
-        format!(
-            "TLS hostname verification {}",
-            if connection.ssl_host_verification {
-                "enabled"
-            } else {
-                "disabled"
-            }
-        ),
-        format!(
-            "Last will retained {}",
-            if connection.lwt_retained { "yes" } else { "no" }
-        ),
-    ]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PluginLoadState, PluginSource, PluginStatus};
+
+    #[test]
+    fn current_startup_populates_marketplace_and_installs_bundled_plugins() {
+        let state = startup_state_from_current(
+            AppConfig::default(),
+            HistoryPersistenceSnapshot::default(),
+            ScriptPersistenceSnapshot::default(),
+            Vec::new(),
+            ThemeMode::System,
+        );
+        let plugins = &state.snapshot.plugins;
+
+        assert_eq!(plugins.load_state, PluginLoadState::Ready);
+        assert_eq!(plugins.marketplace_plugins.len(), 9);
+        assert_eq!(plugins.plugins.len(), 8);
+        assert!(!plugins.selected_plugin_id.is_empty());
+        assert!(!plugins.selected_marketplace_plugin_id.is_empty());
+        assert!(plugins.plugins.iter().all(|plugin| {
+            plugin.source == PluginSource::Bundled && plugin.status == PluginStatus::Active
+        }));
+        assert!(plugins
+            .marketplace_plugins
+            .iter()
+            .filter(|plugin| plugin.install_source.is_bundled())
+            .all(|plugin| plugin.installed_plugin_id.as_deref() == Some(plugin.id.as_str())));
+        assert_eq!(
+            plugins
+                .marketplace_plugins
+                .iter()
+                .find(|plugin| plugin.id == "org.correomqtt.plugins.save-manipulator")
+                .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+            None
+        );
+    }
+
+    #[test]
+    fn current_startup_keeps_bundled_plugins_uninstalled_when_setting_is_off() {
+        let mut config = AppConfig::default();
+        config.settings.install_bundled_plugins = false;
+
+        let state = startup_state_from_current(
+            config,
+            HistoryPersistenceSnapshot::default(),
+            ScriptPersistenceSnapshot::default(),
+            Vec::new(),
+            ThemeMode::System,
+        );
+        let plugins = &state.snapshot.plugins;
+
+        assert_eq!(plugins.load_state, PluginLoadState::Ready);
+        assert_eq!(plugins.marketplace_plugins.len(), 9);
+        assert!(plugins.plugins.is_empty());
+        assert!(plugins
+            .marketplace_plugins
+            .iter()
+            .all(|plugin| plugin.installed_plugin_id.is_none()));
+    }
 }

@@ -2,100 +2,65 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, PluginDisableConfirmation, PluginFeedbackSeverity,
     PluginLoadState, PluginRow, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
 };
-use egui::{Frame, RichText, ScrollArea, Stroke, TextEdit, Ui, Window};
+use egui::{
+    Button, CornerRadius, CursorIcon, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui, UiBuilder,
+    Window,
+};
+use egui_extras::{Size, StripBuilder};
 
-use crate::theme::ThemeTokens;
+use crate::i18n::I18n;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::widgets::{
+    disable_tile_text_selection, padded_text_edit, tighten_tile_spacing, tile_inner_padding,
+    tile_list_content_width, TILE_GAP,
+};
 
-#[path = "plugins/diagnostics.rs"]
-mod diagnostics;
-#[path = "plugins/hooks.rs"]
-mod hooks;
 #[path = "plugins/installed.rs"]
 mod installed;
 #[path = "plugins/keyboard.rs"]
 mod keyboard;
+#[path = "plugins/marketplace.rs"]
+mod marketplace;
 
-pub fn sidebar(
+const TILE_HEIGHT: f32 = 88.0;
+const LIST_WIDTH: f32 = 340.0;
+const MIN_LIST_WIDTH: f32 = 260.0;
+const MAX_LIST_WIDTH: f32 = 520.0;
+const DETAIL_MIN_WIDTH: f32 = 280.0;
+const SPLIT_GUTTER: f32 = 24.0;
+
+pub fn show(
     ui: &mut Ui,
-    plugins: &PluginSurfaceSnapshot,
+    snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    let mut filter = plugins.plugin_filter.clone();
-    if ui
-        .add_sized(
-            [ui.available_width(), 28.0],
-            TextEdit::singleline(&mut filter)
-                .id(keyboard::plugin_search_id())
-                .hint_text("Search plugins..."),
-        )
-        .changed()
-    {
-        send(commands, AppCommand::SearchPlugins(filter));
-    }
-    ui.add_space(8.0);
-    if plugins.load_state != PluginLoadState::Ready {
-        ui.label(RichText::new(plugins.load_state.message()).color(tokens.text_secondary));
-        return;
-    }
-    ScrollArea::vertical()
-        .id_salt("plugin-sidebar")
-        .show(ui, |ui| {
-            let filtered = plugins.filtered_plugins();
-            if filtered.is_empty() {
-                ui.label(
-                    RichText::new("No plugins match this search.").color(tokens.text_secondary),
-                );
-                return;
-            }
-            for plugin in filtered {
-                let selected = plugins.selected_plugin_id == plugin.id;
-                if ui
-                    .selectable_label(selected, RichText::new(&plugin.name).strong())
-                    .clicked()
-                {
-                    send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
-                }
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(plugin.status.label())
-                            .color(status_color(plugin.status, tokens)),
-                    );
-                    ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
-                });
-                ui.label(
-                    RichText::new(format!("{} diagnostics", plugin.diagnostic_count()))
-                        .color(tokens.text_secondary)
-                        .small(),
-                );
-                ui.separator();
-            }
-        });
-}
-
-pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     keyboard::handle(ui.ctx(), &snapshot.plugins, commands);
 
-    ui.heading("Plugins");
+    ui.heading(i18n.text("plugin-header"));
     ui.add_space(8.0);
-    panel(tokens).show(ui, |ui| {
-        toolbar(ui, &snapshot.plugins, tokens, commands);
-        ui.separator();
-        if snapshot.plugins.load_state != PluginLoadState::Ready {
-            empty_state(ui, &snapshot.plugins, tokens);
-            return;
+    toolbar(ui, &snapshot.plugins, tokens, commands, i18n);
+    ui.add_space(8.0);
+    if snapshot.plugins.load_state != PluginLoadState::Ready {
+        empty_state(ui, &snapshot.plugins, tokens, i18n);
+        return;
+    }
+    match snapshot.plugins.active_tab {
+        PluginSurfaceTab::Installed => {
+            installed::tab(ui, &snapshot.plugins, tokens, commands, i18n)
         }
-        match snapshot.plugins.active_tab {
-            PluginSurfaceTab::Installed => installed::tab(ui, &snapshot.plugins, tokens, commands),
-            PluginSurfaceTab::Configuration => config_tab(ui, &snapshot.plugins, tokens, commands),
-            PluginSurfaceTab::Hooks => hooks::tab(ui, &snapshot.plugins, tokens, commands),
-            PluginSurfaceTab::Diagnostics => {
-                diagnostics::tab(ui, &snapshot.plugins, tokens, commands)
-            }
+        PluginSurfaceTab::Marketplace => {
+            marketplace::tab(ui, &snapshot.plugins, tokens, commands, i18n)
         }
-    });
+        PluginSurfaceTab::Configuration
+        | PluginSurfaceTab::Hooks
+        | PluginSurfaceTab::Diagnostics => {
+            installed::tab(ui, &snapshot.plugins, tokens, commands, i18n)
+        }
+    }
     if let Some(confirmation) = &snapshot.plugins.disable_confirmation {
-        disable_confirmation(ui, confirmation, tokens, commands);
+        disable_confirmation(ui, confirmation, tokens, commands, i18n);
     }
 }
 
@@ -104,122 +69,30 @@ fn toolbar(
     plugins: &PluginSurfaceSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     ui.horizontal_wrapped(|ui| {
         for tab in PluginSurfaceTab::ALL {
             if ui
-                .selectable_label(plugins.active_tab == tab, tab.label())
+                .selectable_label(plugins.active_tab == tab, i18n.plugin_tab_label(tab))
                 .clicked()
             {
                 send(commands, AppCommand::SelectPluginSurfaceTab(tab));
             }
         }
-        ui.separator();
-        ui.label(RichText::new(plugin_counts(plugins)).color(tokens.text_secondary));
+        ui.add_space(8.0);
+        ui.label(RichText::new(plugin_counts(plugins, i18n)).color(tokens.text_secondary));
     });
     if let Some(feedback) = &plugins.feedback {
         ui.label(RichText::new(&feedback.message).color(feedback_color(feedback.severity, tokens)));
     }
 }
 
-fn config_tab(
-    ui: &mut Ui,
-    plugins: &PluginSurfaceSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    if ui.available_width() < 720.0 {
-        selected_summary(ui, plugins, tokens, commands);
-        ui.separator();
-        config_editor(ui, plugins, tokens, commands);
-    } else {
-        ui.columns(2, |columns| {
-            selected_summary(&mut columns[0], plugins, tokens, commands);
-            config_editor(&mut columns[1], plugins, tokens, commands);
-        });
-    }
-}
-
-fn config_editor(
-    ui: &mut Ui,
-    plugins: &PluginSurfaceSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    ui.heading("Config Schema");
-    let Some(plugin) = plugins.selected_plugin() else {
-        ui.label("No plugin selected");
-        return;
-    };
-    if plugin.config_fields.is_empty() {
-        ui.label("No editable config schema");
-        return;
-    }
-    ui.horizontal_wrapped(|ui| {
-        if ui.button("Apply").clicked() {
-            send(
-                commands,
-                AppCommand::ApplyPluginConfig {
-                    plugin_id: plugin.id.clone(),
-                },
-            );
-        }
-        if ui.button("Cancel").clicked() {
-            send(
-                commands,
-                AppCommand::CancelPluginConfig {
-                    plugin_id: plugin.id.clone(),
-                },
-            );
-        }
-        if ui.button("Reset to saved").clicked() {
-            send(
-                commands,
-                AppCommand::ResetPluginConfig {
-                    plugin_id: plugin.id.clone(),
-                },
-            );
-        }
-    });
-    ui.add_space(8.0);
-    for field in &plugin.config_fields {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(&field.label).strong());
-            if field.required {
-                ui.label(RichText::new("required").color(tokens.warning));
-            }
-            if field.sensitive {
-                ui.label(RichText::new("keyring").color(tokens.text_secondary));
-            }
-        });
-        let mut value = field.value.clone();
-        if ui
-            .add_enabled(
-                !field.sensitive,
-                TextEdit::singleline(&mut value).desired_width(f32::INFINITY),
-            )
-            .changed()
-        {
-            send(
-                commands,
-                AppCommand::UpdatePluginConfigValue {
-                    plugin_id: plugin.id.clone(),
-                    key: field.key.clone(),
-                    value,
-                },
-            );
-        }
-        ui.label(RichText::new(&field.schema_hint).color(tokens.text_secondary));
-        if let Some(error) = &field.error {
-            ui.label(RichText::new(error).color(tokens.danger));
-        }
-        ui.add_space(8.0);
-    }
-}
-
-fn empty_state(ui: &mut Ui, plugins: &PluginSurfaceSnapshot, tokens: ThemeTokens) {
+fn empty_state(ui: &mut Ui, plugins: &PluginSurfaceSnapshot, tokens: ThemeTokens, i18n: &I18n) {
     ui.add_space(24.0);
-    ui.label(RichText::new(plugins.load_state.message()).color(tokens.text_secondary));
+    ui.label(
+        RichText::new(i18n.plugin_load_message(plugins.load_state)).color(tokens.text_secondary),
+    );
 }
 
 fn disable_confirmation(
@@ -227,47 +100,71 @@ fn disable_confirmation(
     confirmation: &PluginDisableConfirmation,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    Window::new("Disable plugin")
+    Window::new(i18n.text("plugin-disable-title"))
         .collapsible(false)
         .resizable(false)
         .show(ui.ctx(), |ui| {
             ui.label(RichText::new(&confirmation.plugin_name).strong());
-            ui.label("Disabling this plugin will turn off active hook assignments.");
+            ui.label(i18n.text("plugin-disable-warning"));
             for hook in &confirmation.active_hooks {
                 ui.label(RichText::new(hook.label()).color(tokens.warning));
             }
             ui.horizontal(|ui| {
-                if ui.button("Disable plugin").clicked() {
+                if ui.button(i18n.text("plugin-disable-action")).clicked() {
                     send(commands, AppCommand::ConfirmPluginDisable);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(i18n.text("common-cancel")).clicked() {
                     send(commands, AppCommand::CancelPluginDisable);
                 }
             });
         });
 }
 
-fn selected_summary(
+pub(super) fn plugin_detail(
     ui: &mut Ui,
-    plugins: &PluginSurfaceSnapshot,
+    plugin: &PluginRow,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    let Some(plugin) = plugins.selected_plugin() else {
-        ui.label("No plugin selected");
-        return;
-    };
     ui.heading(&plugin.name);
-    enabled_checkbox(ui, plugin, commands);
-    ui.label(format!("{} by {}", plugin.version, plugin.provider));
-    ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
-    ui.label(RichText::new(plugin.status.label()).color(status_color(plugin.status, tokens)));
+    ui.label(format!(
+        "{} {} {}",
+        plugin.version,
+        i18n.text("plugin-by"),
+        plugin.provider
+    ));
+    ui.label(RichText::new(i18n.plugin_source_label(plugin.source)).color(tokens.text_secondary));
+    ui.label(
+        RichText::new(i18n.plugin_status_label(plugin.status))
+            .color(status_color(plugin.status, tokens)),
+    );
+    ui.add_space(8.0);
+    ui.label(&plugin.description);
+    metadata_row(
+        ui,
+        &i18n.text("plugin-license"),
+        &plugin.license,
+        tokens,
+        i18n,
+    );
+    metadata_row(
+        ui,
+        &i18n.text("plugin-path"),
+        &plugin.location,
+        tokens,
+        i18n,
+    );
     if let Some(note) = &plugin.legacy_note {
         ui.label(RichText::new(note).color(tokens.warning));
     }
-    ui.separator();
+    ui.add_space(8.0);
+    plugin_action_bar(ui, plugin, commands, i18n);
+    ui.add_space(8.0);
     capability_chips(ui, plugin, tokens);
+    plugin_operational_summary(ui, plugin, tokens, i18n);
 }
 
 pub(super) fn capability_chips(ui: &mut Ui, plugin: &PluginRow, tokens: ThemeTokens) {
@@ -283,41 +180,214 @@ pub(super) fn capability_chips(ui: &mut Ui, plugin: &PluginRow, tokens: ThemeTok
     });
 }
 
-pub(super) fn enabled_checkbox(ui: &mut Ui, plugin: &PluginRow, commands: &AppCommandSender) {
-    let mut enabled = plugin.enabled;
-    if ui
-        .checkbox(&mut enabled, "")
-        .on_hover_text("Enable plugin")
-        .changed()
-    {
+pub(super) fn marketplace_capability_chips(
+    ui: &mut Ui,
+    capabilities: &[correo_core::PluginCapabilityRow],
+    tokens: ThemeTokens,
+) {
+    ui.horizontal_wrapped(|ui| {
+        for capability in capabilities {
+            let color = if capability.granted {
+                tokens.success
+            } else {
+                tokens.warning
+            };
+            ui.label(RichText::new(&capability.label).color(color));
+        }
+    });
+}
+
+pub(super) fn plugin_action_bar(
+    ui: &mut Ui,
+    plugin: &PluginRow,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    ui.horizontal_wrapped(|ui| {
+        let toggle_label = if plugin.enabled {
+            i18n.text("plugin-disable")
+        } else {
+            i18n.text("plugin-enable")
+        };
+        if ui.button(toggle_label).clicked() {
+            send(
+                commands,
+                AppCommand::SetPluginEnabled {
+                    plugin_id: plugin.id.clone(),
+                    enabled: !plugin.enabled,
+                },
+            );
+        }
+        if ui.add(Button::new(i18n.text("plugin-uninstall"))).clicked() {
+            send(
+                commands,
+                AppCommand::UninstallPlugin {
+                    plugin_id: plugin.id.clone(),
+                },
+            );
+        }
+    });
+}
+
+pub(super) fn install_button(
+    ui: &mut Ui,
+    marketplace_plugin_id: &str,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    if ui.button(i18n.text("plugin-install")).clicked() {
         send(
             commands,
-            AppCommand::SetPluginEnabled {
-                plugin_id: plugin.id.clone(),
-                enabled,
+            AppCommand::InstallMarketplacePlugin {
+                marketplace_plugin_id: marketplace_plugin_id.to_owned(),
             },
         );
     }
 }
 
-fn plugin_counts(plugins: &PluginSurfaceSnapshot) -> String {
+pub(super) fn search_field(
+    ui: &mut Ui,
+    plugins: &PluginSurfaceSnapshot,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    let mut filter = plugins.plugin_filter.clone();
+    if ui
+        .add_sized(
+            [tile_list_content_width(ui), CONTROL_HEIGHT],
+            padded_text_edit(
+                TextEdit::singleline(&mut filter)
+                    .id(keyboard::plugin_search_id())
+                    .hint_text(i18n.text("plugin-search")),
+            ),
+        )
+        .changed()
+    {
+        send(commands, AppCommand::SearchPlugins(filter));
+    }
+}
+
+pub(super) fn plugin_tile(
+    ui: &mut Ui,
+    selected: bool,
+    tokens: ThemeTokens,
+    add_contents: impl FnOnce(&mut Ui),
+) -> egui::Response {
+    let width = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, TILE_HEIGHT), Sense::click());
+    let response = response.on_hover_cursor(CursorIcon::PointingHand);
+    let fill = if selected {
+        tokens.accent_selected_bg
+    } else if response.hovered() || response.contains_pointer() {
+        tokens.panel_raised
+    } else {
+        tokens.panel_bg
+    };
+    let stroke = if selected {
+        tokens.accent
+    } else {
+        tokens.border
+    };
+    let clip_rect = rect.intersect(ui.clip_rect());
+    let painter = ui.painter().with_clip_rect(clip_rect);
+    painter.rect_filled(rect, CornerRadius::same(4), fill);
+    painter.rect_stroke(
+        rect,
+        CornerRadius::same(4),
+        Stroke::new(1.0, stroke),
+        StrokeKind::Inside,
+    );
+
+    let content_rect = rect.shrink2(tile_inner_padding());
+    let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+    disable_tile_text_selection(&mut content_ui);
+    tighten_tile_spacing(&mut content_ui);
+    content_ui.set_clip_rect(content_rect.intersect(clip_rect));
+    add_contents(&mut content_ui);
+    ui.add_space(TILE_GAP);
+    response
+}
+
+pub(super) fn plugin_split(
+    ui: &mut Ui,
+    tokens: ThemeTokens,
+    add_list: impl FnOnce(&mut Ui),
+    add_detail: impl FnOnce(&mut Ui),
+) {
+    let list_width = plugin_list_width(ui.available_width());
+    StripBuilder::new(ui)
+        .clip(true)
+        .size(Size::exact(list_width))
+        .size(Size::exact(SPLIT_GUTTER))
+        .size(Size::remainder().at_least(DETAIL_MIN_WIDTH))
+        .horizontal(|mut strip| {
+            strip.cell(add_list);
+            strip.cell(|ui| divider(ui, tokens));
+            strip.cell(add_detail);
+        });
+}
+
+fn plugin_list_width(available_width: f32) -> f32 {
+    let max_for_detail = (available_width - SPLIT_GUTTER - DETAIL_MIN_WIDTH).max(MIN_LIST_WIDTH);
+    LIST_WIDTH.clamp(MIN_LIST_WIDTH, MAX_LIST_WIDTH.min(max_for_detail))
+}
+
+fn divider(ui: &mut Ui, tokens: ThemeTokens) {
+    let rect = ui.max_rect();
+    let x = rect.center().x;
+    ui.painter().line_segment(
+        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+        Stroke::new(1.0, tokens.border),
+    );
+}
+
+pub(super) fn metadata_row(
+    ui: &mut Ui,
+    label: &str,
+    value: &str,
+    tokens: ThemeTokens,
+    i18n: &I18n,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(format!("{label}:")).strong());
+        ui.label(RichText::new(metadata_value(value, i18n)).color(tokens.text_secondary));
+    });
+}
+
+fn plugin_operational_summary(ui: &mut Ui, plugin: &PluginRow, tokens: ThemeTokens, i18n: &I18n) {
+    ui.add_space(8.0);
+    ui.label(
+        RichText::new(format!(
+            "{} {}",
+            plugin.hooks.len(),
+            i18n.text("plugin-hook-assignments")
+        ))
+        .color(tokens.text_secondary),
+    );
+    if !plugin.config_fields.is_empty() {
+        ui.label(
+            RichText::new(format!(
+                "{} {}",
+                plugin.config_fields.len(),
+                i18n.text("plugin-config-fields")
+            ))
+            .color(tokens.text_secondary),
+        );
+    }
+}
+
+fn plugin_counts(plugins: &PluginSurfaceSnapshot, i18n: &I18n) -> String {
     let enabled = plugins
         .plugins
         .iter()
         .filter(|plugin| plugin.enabled)
         .count();
     format!(
-        "{} installed, {enabled} enabled, {} diagnostics",
+        "{} {}, {enabled} {}",
         plugins.plugins.len(),
-        plugins.diagnostics().len()
+        i18n.text("plugin-installed-word"),
+        i18n.text("plugin-enabled-word")
     )
-}
-
-fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
 }
 
 pub(super) fn status_color(status: PluginStatus, tokens: ThemeTokens) -> egui::Color32 {
@@ -336,6 +406,15 @@ fn feedback_color(severity: PluginFeedbackSeverity, tokens: ThemeTokens) -> egui
         PluginFeedbackSeverity::Info => tokens.success,
         PluginFeedbackSeverity::Warning => tokens.warning,
         PluginFeedbackSeverity::Error => tokens.danger,
+    }
+}
+
+fn metadata_value(value: &str, i18n: &I18n) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        i18n.text("plugin-not-recorded")
+    } else {
+        value.to_owned()
     }
 }
 

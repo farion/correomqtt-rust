@@ -9,7 +9,11 @@ repository.workspace = true
 correo-core = { path = "../correo-core" }
 eframe.workspace = true
 egui.workspace = true
+egui-phosphor.workspace = true
 egui_extras.workspace = true
+fluent-bundle.workspace = true
+rfd.workspace = true
+unic-langid.workspace = true
 
 [dev-dependencies]
 egui_kittest.workspace = true

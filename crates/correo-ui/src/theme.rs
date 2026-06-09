@@ -1,5 +1,11 @@
 use correo_core::{DiagnosticSeverity, ThemeMode};
 use egui::{Color32, CornerRadius, Stroke, Theme, ThemePreference, Visuals};
+use std::collections::BTreeMap;
+
+pub const CONTROL_PADDING: i8 = 8;
+pub const BUTTON_HORIZONTAL_PADDING: f32 = 16.0;
+pub const CONTROL_HEIGHT: f32 = 34.0;
+pub const FONT_SIZE_SCALE: f32 = 1.15;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ThemeTokens {
@@ -33,9 +39,11 @@ pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
     ctx.set_visuals_of(Theme::Dark, visuals_for(dark_tokens(), true));
     ctx.set_visuals_of(Theme::Light, visuals_for(light_tokens(), false));
     ctx.all_styles_mut(|style| {
+        style.text_styles = scaled_text_styles();
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = egui::vec2(8.0, 4.0);
-        style.spacing.menu_margin = egui::Margin::same(8);
+        style.spacing.button_padding = button_padding();
+        style.spacing.interact_size.y = style.spacing.interact_size.y.max(CONTROL_HEIGHT);
+        style.spacing.menu_margin = control_margin();
         style.visuals.window_corner_radius = CornerRadius::same(4);
         for widget in [
             &mut style.visuals.widgets.noninteractive,
@@ -52,6 +60,26 @@ pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
         ThemeMode::Light => ThemePreference::Light,
         ThemeMode::Dark => ThemePreference::Dark,
     });
+}
+
+fn scaled_text_styles() -> BTreeMap<egui::TextStyle, egui::FontId> {
+    let mut text_styles = egui::Style::default().text_styles;
+    for font in text_styles.values_mut() {
+        font.size *= FONT_SIZE_SCALE;
+    }
+    text_styles
+}
+
+pub fn control_margin() -> egui::Margin {
+    egui::Margin::same(CONTROL_PADDING)
+}
+
+pub fn control_padding() -> egui::Vec2 {
+    egui::vec2(CONTROL_PADDING as f32, CONTROL_PADDING as f32)
+}
+
+pub fn button_padding() -> egui::Vec2 {
+    egui::vec2(BUTTON_HORIZONTAL_PADDING, CONTROL_PADDING as f32)
 }
 
 pub fn tokens(ctx: &egui::Context, mode: ThemeMode) -> ThemeTokens {
@@ -112,14 +140,14 @@ fn visuals_for(tokens: ThemeTokens, dark_mode: bool) -> Visuals {
 
 fn dark_tokens() -> ThemeTokens {
     ThemeTokens {
-        window_bg: rgb(0x11, 0x14, 0x18),
-        panel_bg: rgb(0x18, 0x1D, 0x22),
-        panel_raised: rgb(0x20, 0x26, 0x2D),
-        field_bg: rgb(0x0F, 0x12, 0x15),
-        border: rgb(0x33, 0x3C, 0x45),
-        text_primary: rgb(0xE7, 0xED, 0xF3),
-        text_secondary: rgb(0x9A, 0xA6, 0xB2),
-        text_disabled: rgb(0x5E, 0x68, 0x72),
+        window_bg: gray(0x12),
+        panel_bg: gray(0x1B),
+        panel_raised: gray(0x26),
+        field_bg: gray(0x10),
+        border: gray(0x42),
+        text_primary: gray(0xEE),
+        text_secondary: gray(0xB0),
+        text_disabled: gray(0x72),
         accent: rgb(0x2E, 0x8F, 0xCA),
         accent_selected_bg: rgb(0x17, 0x38, 0x4D),
         success: rgb(0x3F, 0xB9, 0x74),
@@ -150,4 +178,53 @@ fn light_tokens() -> ThemeTokens {
 
 fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
+}
+
+fn gray(value: u8) -> Color32 {
+    Color32::from_gray(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dark_neutral_tokens_are_grayscale() {
+        let tokens = dark_tokens();
+        for color in [
+            tokens.window_bg,
+            tokens.panel_bg,
+            tokens.panel_raised,
+            tokens.field_bg,
+            tokens.border,
+            tokens.text_primary,
+            tokens.text_secondary,
+            tokens.text_disabled,
+        ] {
+            let [r, g, b, _] = color.to_array();
+            assert_eq!(r, g);
+            assert_eq!(g, b);
+        }
+    }
+
+    #[test]
+    fn control_spacing_matches_styling_spec() {
+        assert_eq!(control_margin(), egui::Margin::same(8));
+        assert_eq!(control_padding(), egui::vec2(8.0, 8.0));
+        assert_eq!(button_padding(), egui::vec2(16.0, 8.0));
+    }
+
+    #[test]
+    fn text_styles_are_scaled_from_egui_defaults() {
+        let defaults = egui::Style::default().text_styles;
+        let scaled = scaled_text_styles();
+
+        for (style, default_font) in defaults {
+            let scaled_font = scaled
+                .get(&style)
+                .expect("scaled text styles should preserve default styles");
+            assert_eq!(scaled_font.family, default_font.family);
+            assert!((scaled_font.size - default_font.size * FONT_SIZE_SCALE).abs() < f32::EPSILON);
+        }
+    }
 }

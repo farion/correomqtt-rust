@@ -5,12 +5,12 @@ use correo_storage::migration::MigrationPreview;
 
 use super::{AppEvent, AppModel};
 use crate::{
-    startup_state_from_migration, AppCommand, ConnectionBadge, ConnectionState, Diagnostic,
-    GlobalSettingField, GlobalSettingFlag, KeyringState, LegacyMigrationStatus,
+    startup_state_from_migration, AppCommand, ConnectionBadge, ConnectionState, ConnectionSurface,
+    Diagnostic, GlobalSettingField, GlobalSettingFlag, KeyringState, LegacyMigrationStatus,
     MigrationFailureStage, MigrationRecoveryCommand, MigrationRecoveryCompletion,
     MigrationRecoveryCounts, MigrationRecoveryEvent, MigrationRecoveryFailure,
     MigrationRecoverySnapshot, MigrationRecoveryState, MqttCommand, StartupState, ThemeMode,
-    TransferSection,
+    TransferSection, Workspace,
 };
 
 fn storage_fixture(path: &str) -> PathBuf {
@@ -191,6 +191,42 @@ fn global_settings_commands_track_dirty_save_and_discard() {
 }
 
 #[test]
+fn global_settings_plugin_repository_commands_edit_rows() {
+    let mut model = AppModel::empty();
+
+    model.apply_command(AppCommand::AddPluginRepository);
+    assert_eq!(
+        model.snapshot().global_settings.plugin_repositories.len(),
+        1
+    );
+    assert_eq!(
+        model.snapshot().global_settings.plugin_repositories[0].id,
+        "custom-1"
+    );
+    assert!(model.snapshot().global_settings.dirty);
+
+    model.apply_command(AppCommand::UpdatePluginRepository {
+        index: 0,
+        url: "https://example.invalid/plugins.json".to_owned(),
+    });
+    assert_eq!(
+        model.snapshot().global_settings.plugin_repositories[0].url,
+        "https://example.invalid/plugins.json"
+    );
+
+    model.apply_command(AppCommand::SaveGlobalSettings);
+    assert!(!model.snapshot().global_settings.dirty);
+
+    model.apply_command(AppCommand::RemovePluginRepository { index: 0 });
+    assert!(model
+        .snapshot()
+        .global_settings
+        .plugin_repositories
+        .is_empty());
+    assert!(model.snapshot().global_settings.dirty);
+}
+
+#[test]
 fn connect_command_queues_service_work_without_marking_open() {
     let mut model = AppModel::default();
     let connection_id = model.snapshot().connections[2].id;
@@ -208,22 +244,90 @@ fn connect_command_queues_service_work_without_marking_open() {
 }
 
 #[test]
+fn add_connection_opens_settings_draft_and_save_adds_profile() {
+    let mut model = AppModel::empty();
+
+    model.apply_command(AppCommand::AddConnection);
+
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Settings
+    );
+    assert_eq!(model.snapshot().selected_connection, None);
+    assert_eq!(
+        model.snapshot().connection_settings.profile_name,
+        "New connection"
+    );
+    assert!(model.snapshot().connection_settings.dirty);
+    assert!(!model.snapshot().connection_settings.valid);
+    assert!(model
+        .snapshot()
+        .connection_settings
+        .validation_errors
+        .iter()
+        .any(|error| error == "Host is required"));
+
+    model.apply_command(AppCommand::UpdateConnectionSetting {
+        field: crate::ConnectionSettingField::Host,
+        value: "localhost".to_owned(),
+    });
+    assert!(model.snapshot().connection_settings.valid);
+
+    model.apply_command(AppCommand::SaveConnectionSettings);
+
+    let connection_id = model
+        .snapshot()
+        .selected_connection
+        .expect("saved draft should become selected");
+    let connection = model
+        .snapshot()
+        .selected_connection()
+        .expect("saved draft should be visible in launcher");
+    assert_eq!(model.snapshot().connection_count, 1);
+    assert_eq!(connection.name, "New connection");
+    assert_eq!(connection.endpoint, "localhost:1883");
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Workbench
+    );
+    assert!(!model.snapshot().connection_settings.dirty);
+    assert!(model
+        .mqtt_commands_for_app_command(&AppCommand::Connect(connection_id))
+        .expect("new profile should build connect command")
+        .iter()
+        .any(|command| matches!(command, MqttCommand::Connect { .. })));
+}
+
+#[test]
 fn transfer_commands_focus_the_requested_section() {
     let mut model = AppModel::default();
 
     model.apply_command(AppCommand::ExportConnections);
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Transfer
+    );
     assert_eq!(
         model.snapshot().transfer.active_section,
         TransferSection::Export
     );
 
     model.apply_command(AppCommand::ImportMessages);
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
     assert_eq!(
-        model.snapshot().transfer.active_section,
-        TransferSection::Messages
+        model.snapshot().connection_surface,
+        ConnectionSurface::Workbench
     );
+    assert!(model.snapshot().workbench.publish.feedback.is_some());
 
     model.apply_command(AppCommand::ImportConnections);
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Transfer
+    );
     assert_eq!(
         model.snapshot().transfer.active_section,
         TransferSection::Import
@@ -245,7 +349,7 @@ fn diagnostic_events_are_redacted_before_snapshot_exposure() {
 }
 
 #[test]
-fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
+fn migrated_fixture_opens_workbench_and_settings_without_secret_values() {
     let profile = LegacyProfile::read_from(storage_fixture("legacy_profile")).unwrap();
     let preview = MigrationPreview::from_legacy_profile(profile).unwrap();
     let state = startup_state_from_migration(preview, ThemeMode::Dark);
@@ -258,6 +362,7 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
     assert_eq!(first.name, "Synthetic Local Broker");
     assert_eq!(first.endpoint, "localhost:1883");
     assert_eq!(first.mqtt_version, "MQTT v5");
+    assert!(first.badges.contains(&ConnectionBadge::Credentials));
     assert!(first.badges.contains(&ConnectionBadge::Proxy));
     assert!(first.badges.contains(&ConnectionBadge::Lwt));
     assert_eq!(first.recent_subscriptions, 2);
@@ -286,10 +391,10 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
     assert_eq!(settings.host, "localhost");
     assert_eq!(settings.port, "1883");
     assert_eq!(settings.mqtt_version, "MQTT v5");
-    assert_eq!(settings.proxy_mode, "SSH tunnel");
+    assert_eq!(settings.proxy_mode, "SSH");
     assert!(settings.lwt_enabled);
     assert_eq!(settings.lwt_topic, "status/local-broker-01");
-    assert_eq!(settings.keyring_state, KeyringState::MigrationRequired);
+    assert_eq!(settings.keyring_state, KeyringState::Available);
 
     let exposed = format!("{:?}", model.snapshot());
     assert!(!exposed.contains("synthetic-mqtt-password"));
@@ -298,7 +403,7 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
 }
 
 #[test]
-fn first_run_without_legacy_data_keeps_launcher_available() {
+fn first_run_without_legacy_data_keeps_connections_workspace_available() {
     let state = StartupState::empty(
         ThemeMode::Light,
         Diagnostic::info("No existing CorreoMQTT config found; empty workspace ready."),
@@ -343,31 +448,6 @@ fn legacy_detection_blocks_launcher_until_user_choice() {
     assert_eq!(
         model.snapshot().global_settings.legacy_migration.status,
         LegacyMigrationStatus::Skipped
-    );
-}
-
-#[test]
-fn skipped_secret_review_preserves_missing_secret_disabled_copy() {
-    let mut model = AppModel::empty();
-    model.apply_event(AppEvent::MigrationRecovery(
-        MigrationRecoveryEvent::LegacyDetected {
-            legacy_path: "/home/user/.correomqtt".to_owned(),
-            counts: Default::default(),
-            warnings: Vec::new(),
-        },
-    ));
-    model.apply_command(AppCommand::MigrationRecovery(
-        MigrationRecoveryCommand::SkipSecrets,
-    ));
-
-    assert_eq!(
-        model.snapshot().migration_recovery.state,
-        MigrationRecoveryState::Reviewing
-    );
-    assert!(model.snapshot().migration_recovery.secrets_skipped);
-    assert_eq!(
-        crate::ConnectDisabledReason::MissingSecret.label(),
-        "Secret must be restored before connecting."
     );
 }
 

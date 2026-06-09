@@ -1,143 +1,106 @@
 use correo_core::{AppCommand, AppCommandSender, PluginRow, PluginSurfaceSnapshot};
 use egui::{RichText, ScrollArea, Ui};
-use egui_extras::{Column, TableBuilder};
 
+use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
+use crate::widgets::{tile_list_content_width, tile_scroll_bar_rect};
 
-use super::{capability_chips, enabled_checkbox, send, status_color};
-
-const COMPACT_WIDTH: f32 = 720.0;
+use super::{
+    capability_chips, plugin_detail, plugin_split, plugin_tile, search_field, send, status_color,
+};
 
 pub(super) fn tab(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     let filtered = plugins.filtered_plugins();
-    if filtered.is_empty() {
-        ui.label(RichText::new("No plugins match this search.").color(tokens.text_secondary));
-        return;
-    }
-
-    if ui.available_width() < COMPACT_WIDTH {
-        compact_list(ui, plugins, filtered, tokens, commands);
-    } else {
-        table(ui, plugins, filtered, tokens, commands);
-    }
+    plugin_split(
+        ui,
+        tokens,
+        |ui| {
+            plugin_list(ui, plugins, &filtered, tokens, commands, i18n);
+        },
+        |ui| selected_detail(ui, plugins, tokens, commands, i18n),
+    );
 }
 
-fn compact_list(
+fn plugin_list(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
-    filtered: Vec<&PluginRow>,
+    filtered: &[&PluginRow],
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
+    ui.heading(i18n.text("plugin-tab-installed"));
+    ui.add_space(4.0);
+    search_field(ui, plugins, commands, i18n);
+    ui.add_space(8.0);
     ScrollArea::vertical()
-        .id_salt("plugin-installed-compact")
+        .id_salt("plugin-installed-list")
+        .auto_shrink([false, false])
+        .scroll_bar_rect(tile_scroll_bar_rect(ui))
         .show(ui, |ui| {
+            ui.set_width(tile_list_content_width(ui));
+            if filtered.is_empty() {
+                ui.label(
+                    RichText::new(i18n.text("plugin-no-installed-match"))
+                        .color(tokens.text_secondary),
+                );
+                return;
+            }
             for plugin in filtered {
-                compact_row(ui, plugins, plugin, tokens, commands);
-                ui.separator();
+                plugin_row(ui, plugins, plugin, tokens, commands, i18n);
             }
         });
 }
 
-fn compact_row(
+fn plugin_row(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
     plugin: &PluginRow,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    ui.horizontal_wrapped(|ui| {
-        enabled_checkbox(ui, plugin, commands);
-        if ui
-            .selectable_label(
-                plugins.selected_plugin_id == plugin.id,
-                RichText::new(&plugin.name).strong(),
-            )
-            .clicked()
-        {
-            send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
+    let response = plugin_tile(ui, plugins.selected_plugin_id == plugin.id, tokens, |ui| {
+        ui.label(RichText::new(&plugin.name).strong());
+        ui.label(RichText::new(&plugin.description).color(tokens.text_secondary));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(i18n.plugin_status_label(plugin.status))
+                    .color(status_color(plugin.status, tokens)),
+            );
+            ui.label(RichText::new(&plugin.version).color(tokens.text_secondary));
+            ui.label(
+                RichText::new(i18n.plugin_source_label(plugin.source)).color(tokens.text_secondary),
+            );
+        });
+        if !plugin.capabilities.is_empty() {
+            capability_chips(ui, plugin, tokens);
         }
-        ui.label(RichText::new(&plugin.version).color(tokens.text_secondary));
     });
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(plugin.status.label()).color(status_color(plugin.status, tokens)));
-        ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
-        ui.label(RichText::new(format!("{} diagnostics", plugin.diagnostic_count())).small());
-    });
-    if !plugin.capabilities.is_empty() {
-        capability_chips(ui, plugin, tokens);
-    }
-    if let Some(note) = &plugin.legacy_note {
-        ui.label(RichText::new(note).color(tokens.warning));
+    if response.clicked() {
+        send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
     }
 }
 
-fn table(
+fn selected_detail(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
-    filtered: Vec<&PluginRow>,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    TableBuilder::new(ui)
-        .striped(true)
-        .column(Column::exact(64.0))
-        .column(Column::remainder())
-        .column(Column::exact(74.0))
-        .column(Column::exact(120.0))
-        .column(Column::remainder())
-        .column(Column::exact(78.0))
-        .header(22.0, |mut header| {
-            for title in [
-                "Enabled",
-                "Plugin",
-                "Version",
-                "Status",
-                "Capabilities",
-                "Diagnostics",
-            ] {
-                header.col(|ui| {
-                    ui.strong(title);
-                });
-            }
-        })
-        .body(|mut body| {
-            for plugin in filtered {
-                body.row(48.0, |mut row| {
-                    row.col(|ui| {
-                        enabled_checkbox(ui, plugin, commands);
-                    });
-                    row.col(|ui| {
-                        if ui
-                            .selectable_label(
-                                plugins.selected_plugin_id == plugin.id,
-                                RichText::new(&plugin.name).strong(),
-                            )
-                            .clicked()
-                        {
-                            send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
-                        }
-                        ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
-                    });
-                    row.col(|ui| {
-                        ui.label(&plugin.version);
-                    });
-                    row.col(|ui| {
-                        ui.label(
-                            RichText::new(plugin.status.label())
-                                .color(status_color(plugin.status, tokens)),
-                        );
-                    });
-                    row.col(|ui| capability_chips(ui, plugin, tokens));
-                    row.col(|ui| {
-                        ui.label(plugin.diagnostic_count().to_string());
-                    });
-                });
-            }
-        });
+    let Some(plugin) = plugins.selected_plugin() else {
+        ui.heading(i18n.text("plugin-details"));
+        ui.label(
+            RichText::new(i18n.text("plugin-no-installed-selected")).color(tokens.text_secondary),
+        );
+        return;
+    };
+    plugin_detail(ui, plugin, tokens, commands, i18n);
 }

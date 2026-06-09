@@ -5,7 +5,8 @@ use correo_core::{
 use egui::{RichText, ScrollArea, TextEdit, Ui};
 use egui_extras::{Column, TableBuilder};
 
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::widgets::padded_text_edit;
 
 const COMPACT_WIDTH: f32 = 760.0;
 
@@ -19,10 +20,12 @@ pub(super) fn tab(
         let mut filter = plugins.diagnostic_filter.clone();
         if ui
             .add_sized(
-                [220.0, 24.0],
-                TextEdit::singleline(&mut filter)
-                    .id(super::keyboard::diagnostic_search_id())
-                    .hint_text("Filter diagnostics..."),
+                [220.0, CONTROL_HEIGHT],
+                    padded_text_edit(
+                        TextEdit::singleline(&mut filter)
+                            .id(super::keyboard::plugin_search_id())
+                            .hint_text("Filter diagnostics..."),
+                    ),
             )
             .changed()
         {

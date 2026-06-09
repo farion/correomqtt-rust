@@ -1,7 +1,8 @@
 use correo_plugins::{
     bundled_plugin_by_id, bundled_plugin_manifests, legacy_plugin_replacement_decisions,
-    DetailFormatDto, DetailFormatterRequest, HookInvocation, HookOutput, MessageDto,
-    MessageTransformOutcomeDto, MessageValidatorRequest, ValidationResultDto,
+    DetailByteTransformRequest, DetailFormatDto, DetailFormatterRequest, HookInvocation,
+    HookOutput, MessageDto, MessageTransformOutcomeDto, MessageValidatorRequest, PluginManifest,
+    ValidationResultDto,
 };
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -17,10 +18,14 @@ fn bundled_manifests_cover_mvp_replacements_with_config_schemas() {
     assert_eq!(
         ids,
         BTreeSet::from([
+            "builtin.advanced-validator",
             "builtin.base64",
             "builtin.contains-string-validator",
             "builtin.json-format",
+            "builtin.system-topic",
             "builtin.xml-format",
+            "builtin.xml-xsd-validator",
+            "builtin.zip-manipulator",
         ])
     );
 
@@ -63,28 +68,51 @@ fn legacy_plugin_decisions_are_explicit_for_supported_and_deferred_plugins() {
     assert_eq!(
         supported,
         BTreeSet::from([
+            "advanced-validator",
             "base64",
             "contains-string-validator",
             "json-format",
-            "xml-format",
-        ])
-    );
-    assert_eq!(
-        unsupported,
-        BTreeSet::from([
-            "advanced-validator",
             "save-manipulator",
             "systopic",
+            "xml-format",
             "xml-xsd-validator",
             "zip-manipulator",
         ])
     );
+    assert!(unsupported.is_empty());
     assert!(decisions
         .iter()
         .filter(|decision| {
             decision.status == correo_plugins::LegacyPluginReplacementStatus::Unsupported
         })
-        .all(|decision| !decision.reason.is_empty() && decision.bundled_plugin_id.is_none()));
+        .all(|decision| !decision.reason.is_empty() && decision.replacement_plugin_id.is_none()));
+}
+
+#[test]
+fn xml_xsd_package_manifest_declares_validator_hook_without_host_access() {
+    let manifest = PluginManifest::from_toml_str(include_str!(
+        "../../../plugins/correo-plugins-xml-xsd-validator/plugin.toml"
+    ))
+    .unwrap();
+
+    manifest.validate().unwrap();
+    assert_eq!(manifest.id, "org.correomqtt.plugins.xml-xsd-validator");
+    assert_eq!(
+        manifest.capabilities.hooks,
+        vec![correo_plugins::HookKind::MessageValidator]
+    );
+    assert!(!manifest
+        .capabilities
+        .grants_host_surface(correo_plugins::HostSurface::Filesystem));
+    assert!(!manifest
+        .capabilities
+        .grants_host_surface(correo_plugins::HostSurface::Network));
+    assert!(!manifest
+        .capabilities
+        .grants_host_surface(correo_plugins::HostSurface::Secrets));
+    assert!(!manifest
+        .capabilities
+        .grants_host_surface(correo_plugins::HostSurface::Mqtt));
 }
 
 #[test]
@@ -141,6 +169,33 @@ fn detail_formatters_return_pretty_json_and_xml_text() {
 }
 
 #[test]
+fn system_topic_formatter_labels_known_broker_metrics() {
+    let plugin = bundled_plugin_by_id("builtin.system-topic").unwrap();
+    let mut request = DetailFormatterRequest::new(b"7".to_vec());
+    request.context.subscription_topic = Some("$SYS/broker/clients/connected".to_owned());
+
+    let output = plugin
+        .dispatch(HookInvocation::DetailFormatter(request))
+        .unwrap();
+
+    assert_formatted(output, DetailFormatDto::PlainText, "Connected clients");
+}
+
+#[test]
+fn system_topic_formatter_reports_aggregated_windows() {
+    let plugin = bundled_plugin_by_id("builtin.system-topic").unwrap();
+    let mut request = DetailFormatterRequest::new(b"42".to_vec());
+    request.context.subscription_topic =
+        Some("$SYS/broker/load/messages/received/15min".to_owned());
+
+    let output = plugin
+        .dispatch(HookInvocation::DetailFormatter(request))
+        .unwrap();
+
+    assert_formatted(output, DetailFormatDto::PlainText, "Window: 15min");
+}
+
+#[test]
 fn contains_string_validator_supports_case_sensitive_config() {
     let plugin = bundled_plugin_by_id("builtin.contains-string-validator").unwrap();
     let mut request =
@@ -161,6 +216,124 @@ fn contains_string_validator_supports_case_sensitive_config() {
     }
 }
 
+#[test]
+fn zip_manipulator_transforms_detail_bytes_with_expansion_limits() {
+    let plugin = bundled_plugin_by_id("builtin.zip-manipulator").unwrap();
+    let mut request = DetailByteTransformRequest::new(b"payload".to_vec());
+    request.config = json!({ "operation": "zip" });
+
+    let output = plugin
+        .dispatch(HookInvocation::DetailByteTransform(request))
+        .unwrap();
+    let (zipped, content_type) = assert_detail_bytes(output);
+
+    assert!(zipped.starts_with(&[0x1f, 0x8b]));
+    assert_eq!(content_type.as_deref(), Some("application/gzip"));
+
+    let mut request = DetailByteTransformRequest::new(zipped.clone());
+    request.content_type = content_type;
+    request.config = json!({
+        "operation": "unzip",
+        "max_output_bytes": 128
+    });
+    let output = plugin
+        .dispatch(HookInvocation::DetailByteTransform(request))
+        .unwrap();
+    let (unzipped, content_type) = assert_detail_bytes(output);
+
+    assert_eq!(unzipped, b"payload");
+    assert_eq!(content_type, None);
+
+    let mut request = DetailByteTransformRequest::new(zipped);
+    request.config = json!({
+        "operation": "unzip",
+        "max_output_bytes": 3
+    });
+    let error = plugin
+        .dispatch(HookInvocation::DetailByteTransform(request))
+        .unwrap_err();
+    assert!(error.to_string().contains("output exceeded 3 bytes"));
+}
+
+#[test]
+fn xml_xsd_validator_accepts_payload_that_matches_inline_schema() {
+    let plugin = bundled_plugin_by_id("builtin.xml-xsd-validator").unwrap();
+    let mut request = MessageValidatorRequest::new(MessageDto::new(
+        "demo/topic",
+        br#"<note><to>Tove</to><from>Jani</from><heading>Reminder</heading><body>Ok</body></note>"#
+            .to_vec(),
+    ));
+    request.config = json!({ "schema_text": note_xsd() });
+
+    let output = plugin
+        .dispatch(HookInvocation::MessageValidator(request))
+        .unwrap();
+
+    match output {
+        HookOutput::MessageValidator(response) => {
+            assert_eq!(response.result, ValidationResultDto::Valid);
+        }
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
+#[test]
+fn xml_xsd_validator_rejects_payload_that_misses_required_schema_elements() {
+    let plugin = bundled_plugin_by_id("builtin.xml-xsd-validator").unwrap();
+    let mut request = MessageValidatorRequest::new(MessageDto::new(
+        "demo/topic",
+        br#"<note><to>Tove</to><from>Jani</from></note>"#.to_vec(),
+    ));
+    request.config = json!({
+        "schema_source": {
+            "kind": "inline",
+            "text": note_xsd()
+        }
+    });
+
+    let output = plugin
+        .dispatch(HookInvocation::MessageValidator(request))
+        .unwrap();
+
+    match output {
+        HookOutput::MessageValidator(response) => {
+            assert!(matches!(
+                response.result,
+                ValidationResultDto::Invalid { message } if message.contains("Expected")
+            ));
+        }
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
+#[test]
+fn xml_xsd_validator_rejects_legacy_file_schema_config() {
+    let plugin = bundled_plugin_by_id("builtin.xml-xsd-validator").unwrap();
+    let mut request = MessageValidatorRequest::new(MessageDto::new(
+        "demo/topic",
+        br#"<note><to>Tove</to></note>"#.to_vec(),
+    ));
+    request.config = json!({ "schema": "example.xsd" });
+
+    let output = plugin
+        .dispatch(HookInvocation::MessageValidator(request))
+        .unwrap();
+
+    match output {
+        HookOutput::MessageValidator(response) => {
+            assert_eq!(
+                response.result,
+                ValidationResultDto::Invalid {
+                    message:
+                        "Legacy XSD schema file paths are not supported; provide inline schema_text."
+                            .to_owned()
+                }
+            );
+        }
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
 fn assert_transformed_payload(output: HookOutput, expected: &[u8]) {
     match output {
         HookOutput::OutgoingMessageTransform(response) => match response.outcome {
@@ -171,6 +344,30 @@ fn assert_transformed_payload(output: HookOutput, expected: &[u8]) {
         },
         other => panic!("unexpected output: {other:?}"),
     }
+}
+
+fn assert_detail_bytes(output: HookOutput) -> (Vec<u8>, Option<String>) {
+    match output {
+        HookOutput::DetailByteTransform(response) => (response.bytes, response.content_type),
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
+fn note_xsd() -> &'static str {
+    r#"
+<xs:schema elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="note">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element type="xs:string" name="to"/>
+        <xs:element type="xs:string" name="from"/>
+        <xs:element type="xs:string" name="heading"/>
+        <xs:element type="xs:string" name="body"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+"#
 }
 
 fn assert_formatted(output: HookOutput, format: DetailFormatDto, expected_text: &str) {

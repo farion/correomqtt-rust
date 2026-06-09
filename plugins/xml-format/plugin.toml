@@ -1,0 +1,25 @@
+manifest_version = 1
+id = "builtin.xml-format"
+name = "XML Formatter"
+version = "0.1.0"
+description = "Formats XML-like payloads for the message detail view."
+provider = "CorreoMQTT"
+license = "GPL-3.0-or-later"
+compatible_correomqtt = ">=0.1.0, <1.0.0"
+
+[capabilities]
+hooks = ["detail_formatter"]
+
+[capabilities.host]
+filesystem = false
+network = false
+secrets = false
+mqtt = false
+
+[[entrypoints]]
+hook = "detail_formatter"
+export = "correo_detail_formatter"
+
+[config_schema]
+schema_version = 1
+document = { type = "object", additionalProperties = false }

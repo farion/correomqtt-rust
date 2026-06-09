@@ -6,6 +6,7 @@ use egui::{RichText, ScrollArea, TextEdit, Ui, Window};
 use egui_extras::{Column, TableBuilder};
 
 use crate::theme::ThemeTokens;
+use crate::widgets::{checkbox, padded_text_edit};
 
 const COMPACT_WIDTH: f32 = 760.0;
 
@@ -232,14 +233,16 @@ fn hook_editor(
             ui.label(RichText::new(editor.draft.hook.label()).strong());
 
             let mut enabled = editor.draft.enabled;
-            if ui.checkbox(&mut enabled, "Enabled").changed() {
+            if checkbox(ui, &mut enabled, "Enabled").changed() {
                 send(commands, AppCommand::SetPluginHookDraftEnabled(enabled));
             }
 
             ui.label("Target topic/filter");
             let mut target = editor.draft.target.clone();
             if ui
-                .add(TextEdit::singleline(&mut target).desired_width(f32::INFINITY))
+                .add(padded_text_edit(
+                    TextEdit::singleline(&mut target).desired_width(f32::INFINITY),
+                ))
                 .changed()
             {
                 send(commands, AppCommand::UpdatePluginHookTarget(target));
@@ -249,7 +252,7 @@ fn hook_editor(
             let mut config_json = editor.draft.config_json.clone();
             if ui
                 .add(
-                    TextEdit::multiline(&mut config_json)
+                    padded_text_edit(TextEdit::multiline(&mut config_json))
                         .desired_rows(8)
                         .desired_width(f32::INFINITY),
                 )
@@ -286,7 +289,7 @@ fn hook_enabled(
     commands: &AppCommandSender,
 ) {
     let mut enabled = assignment.enabled;
-    if ui.checkbox(&mut enabled, "").changed() {
+    if checkbox(ui, &mut enabled, "").changed() {
         send(
             commands,
             AppCommand::SetPluginHookEnabled {

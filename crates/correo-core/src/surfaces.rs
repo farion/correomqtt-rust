@@ -16,6 +16,7 @@ pub use transfer::*;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptSurfaceSnapshot {
     pub selected_connection: String,
+    pub selected_connection_id: Option<String>,
     pub selected_script: String,
     pub script_filter: String,
     pub new_script_name: String,
@@ -24,6 +25,7 @@ pub struct ScriptSurfaceSnapshot {
     pub scripts: Vec<ScriptRow>,
     pub running: bool,
     pub active_execution_id: Option<String>,
+    pub selected_execution_id: Option<String>,
     pub executions: Vec<ScriptExecutionRow>,
     pub log_lines: Vec<ScriptLogLine>,
     pub feedback: Option<ScriptFeedback>,
@@ -63,6 +65,17 @@ impl ScriptSurfaceSnapshot {
                     || script.relative_path.to_ascii_lowercase().contains(&filter)
             })
             .collect()
+    }
+
+    pub fn selected_execution_id(&self) -> Option<&str> {
+        self.selected_execution_id
+            .as_deref()
+            .or(self.active_execution_id.as_deref())
+            .or_else(|| {
+                self.executions
+                    .first()
+                    .map(|execution| execution.execution_id.as_str())
+            })
     }
 }
 
@@ -183,6 +196,7 @@ impl ScriptExecutionErrorKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptLogLine {
+    pub execution_id: String,
     pub timestamp: String,
     pub level: ScriptLogLevel,
     pub message: String,

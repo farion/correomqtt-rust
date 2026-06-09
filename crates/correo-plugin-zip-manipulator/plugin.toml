@@ -1,0 +1,25 @@
+manifest_version = 1
+id = "builtin.zip-manipulator"
+name = "ZIP Manipulator"
+version = "0.1.0"
+description = "Compresses or decompresses message detail bytes with GZIP."
+provider = "CorreoMQTT"
+license = "GPL-3.0-or-later"
+compatible_correomqtt = ">=0.1.0, <1.0.0"
+
+[capabilities]
+hooks = ["detail_byte_transform"]
+
+[capabilities.host]
+filesystem = false
+network = false
+secrets = false
+mqtt = false
+
+[config_schema]
+schema_version = 1
+document = { type = "object", required = ["operation"], properties = { operation = { type = "string", enum = ["zip", "unzip"], default = "unzip" }, max_input_bytes = { type = "integer", minimum = 1, maximum = 1048576, default = 1048576 }, max_output_bytes = { type = "integer", minimum = 1, maximum = 4194304, default = 4194304 } }, additionalProperties = false }
+
+[[entrypoints]]
+hook = "detail_byte_transform"
+export = "correo_detail_byte_transform"

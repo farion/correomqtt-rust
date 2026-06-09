@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 correo-diagnostics = { path = "../correo-diagnostics" }
 correo-mqtt = { path = "../correo-mqtt" }
+correo-scripting = { path = "../correo-scripting" }
 correo-storage = { path = "../correo-storage" }
 flume.workspace = true
 futures.workspace = true

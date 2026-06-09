@@ -4,19 +4,35 @@ use crate::{
     MessageValidatorResponse, OutgoingMessageTransformResponse, PluginDiagnostic, PluginEntrypoint,
     PluginManifest, ValidationResultDto, ABI_VERSION,
 };
+use advanced_validator::{
+    config_schema as advanced_validator_config_schema,
+    validate_message as validate_advanced_validator_message,
+};
 use base64::Engine;
-use formatting::{format_json, format_xml};
+use correo_plugins_advanced_validator::AdvancedValidatorError;
+use correo_plugins_systopic::{LEGACY_PLUGIN_ID as SYSTOPIC_LEGACY_ID, PLUGIN_ID as SYSTOPIC_ID};
+use correo_plugins_xml_xsd_validator::{
+    config_schema_document, validate_xml_xsd, XmlXsdValidation,
+};
+use formatting::{format_json, format_system_topic, format_xml};
+use gzip::{gzip_config_schema, transform_gzip_detail, GzipTransformError};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
+mod advanced_validator;
 mod formatting;
+mod gzip;
 
 const BASE64_ID: &str = "builtin.base64";
 const JSON_FORMAT_ID: &str = "builtin.json-format";
 const XML_FORMAT_ID: &str = "builtin.xml-format";
 const CONTAINS_STRING_ID: &str = "builtin.contains-string-validator";
+const ADVANCED_VALIDATOR_ID: &str = "builtin.advanced-validator";
+const XML_XSD_VALIDATOR_ID: &str = "builtin.xml-xsd-validator";
+const ZIP_MANIPULATOR_ID: &str = "builtin.zip-manipulator";
+pub const SAVE_MANIPULATOR_ID: &str = "org.correomqtt.plugins.save-manipulator";
 
 #[derive(Debug, Clone)]
 pub struct BundledPlugin {
@@ -81,11 +97,34 @@ impl BundledPlugin {
             (BundledPluginKind::XmlFormatter, HookInvocation::DetailFormatter(request)) => {
                 format_xml(request, self.id()).map(HookOutput::DetailFormatter)
             }
+            (BundledPluginKind::SystemTopicFormatter, HookInvocation::DetailFormatter(request)) => {
+                Ok(HookOutput::DetailFormatter(format_system_topic(request)))
+            }
             (
                 BundledPluginKind::ContainsStringValidator,
                 HookInvocation::MessageValidator(request),
             ) => validate_contains_string(request.config, request.message.payload, self.id())
                 .map(HookOutput::MessageValidator),
+            (BundledPluginKind::AdvancedValidator, HookInvocation::MessageValidator(request)) => {
+                validate_advanced_validator_message(request.config, &request.message.payload)
+                    .map(HookOutput::MessageValidator)
+                    .map_err(
+                        |source| BundledPluginError::InvalidAdvancedValidatorConfig {
+                            plugin_id: self.id().to_owned(),
+                            hook: HookKind::MessageValidator,
+                            source,
+                        },
+                    )
+            }
+            (BundledPluginKind::XmlXsdValidator, HookInvocation::MessageValidator(request)) => {
+                Ok(HookOutput::MessageValidator(validate_xml_xsd_message(
+                    request.config,
+                    &request.message.payload,
+                )))
+            }
+            (BundledPluginKind::ZipManipulator, HookInvocation::DetailByteTransform(request)) => {
+                transform_gzip_detail(request, self.id()).map(HookOutput::DetailByteTransform)
+            }
             (_, invocation) => Err(BundledPluginError::HookNotDeclared {
                 plugin_id: self.id().to_owned(),
                 hook: invocation.hook(),
@@ -100,6 +139,10 @@ enum BundledPluginKind {
     JsonFormatter,
     XmlFormatter,
     ContainsStringValidator,
+    AdvancedValidator,
+    XmlXsdValidator,
+    ZipManipulator,
+    SystemTopicFormatter,
 }
 
 pub fn bundled_plugins() -> Vec<BundledPlugin> {
@@ -139,6 +182,38 @@ pub fn bundled_plugins() -> Vec<BundledPlugin> {
             contains_string_config_schema(),
             BundledPluginKind::ContainsStringValidator,
         ),
+        bundled_plugin(
+            ADVANCED_VALIDATOR_ID,
+            "Advanced Validator",
+            "Composes configured validator rules with AND and OR groups.",
+            &[HookKind::MessageValidator],
+            advanced_validator_config_schema(),
+            BundledPluginKind::AdvancedValidator,
+        ),
+        bundled_plugin(
+            SYSTOPIC_ID,
+            "System Topic Formatter",
+            "Labels known $SYS broker metrics for the message detail view.",
+            &[HookKind::DetailFormatter],
+            empty_config_schema(),
+            BundledPluginKind::SystemTopicFormatter,
+        ),
+        bundled_plugin(
+            XML_XSD_VALIDATOR_ID,
+            "XML/XSD Validator",
+            "Validates XML payloads against configured inline XSD schema text.",
+            &[HookKind::MessageValidator],
+            xml_xsd_config_schema(),
+            BundledPluginKind::XmlXsdValidator,
+        ),
+        bundled_plugin(
+            ZIP_MANIPULATOR_ID,
+            "ZIP Manipulator",
+            "Compresses or decompresses message detail bytes with GZIP.",
+            &[HookKind::DetailByteTransform],
+            gzip_config_schema(),
+            BundledPluginKind::ZipManipulator,
+        ),
     ]
 }
 
@@ -159,7 +234,7 @@ pub fn bundled_plugin_by_id(plugin_id: &str) -> Option<BundledPlugin> {
 pub struct LegacyPluginReplacementDecision {
     pub legacy_plugin_id: &'static str,
     pub status: LegacyPluginReplacementStatus,
-    pub bundled_plugin_id: Option<&'static str>,
+    pub replacement_plugin_id: Option<&'static str>,
     pub reason: &'static str,
 }
 
@@ -171,30 +246,19 @@ pub enum LegacyPluginReplacementStatus {
 
 pub fn legacy_plugin_replacement_decisions() -> Vec<LegacyPluginReplacementDecision> {
     vec![
-        supported("base64", BASE64_ID),
-        supported("json-format", JSON_FORMAT_ID),
-        supported("xml-format", XML_FORMAT_ID),
-        supported("contains-string-validator", CONTAINS_STRING_ID),
-        unsupported(
-            "xml-xsd-validator",
-            "XSD validation needs a bounded schema-source design before filesystem-like inputs are granted.",
-        ),
-        unsupported(
-            "zip-manipulator",
-            "Zip archive transformation is deferred until archive size and expansion limits are specified.",
-        ),
-        unsupported(
+        supported_builtin("base64", BASE64_ID),
+        supported_builtin("json-format", JSON_FORMAT_ID),
+        supported_builtin("xml-format", XML_FORMAT_ID),
+        supported_builtin("contains-string-validator", CONTAINS_STRING_ID),
+        supported_builtin("advanced-validator", ADVANCED_VALIDATOR_ID),
+        supported_builtin("xml-xsd-validator", XML_XSD_VALIDATOR_ID),
+        supported_builtin("zip-manipulator", ZIP_MANIPULATOR_ID),
+        supported(
             "save-manipulator",
-            "Saving payloads to arbitrary files is deferred because bundled plugins do not receive filesystem access.",
+            SAVE_MANIPULATOR_ID,
+            "Covered by a Rust/WASM plugin that requests host-mediated payload saves.",
         ),
-        unsupported(
-            "advanced-validator",
-            "Advanced validators need a separate rule/config migration design beyond the MVP contains-string validator.",
-        ),
-        unsupported(
-            "systopic",
-            "System-topic behavior depends on MQTT/UI workflow integration and is outside the non-UI MVP hooks.",
-        ),
+        supported_builtin(SYSTOPIC_LEGACY_ID, SYSTOPIC_ID),
     ]
 }
 
@@ -214,6 +278,18 @@ pub enum BundledPluginError {
         hook: HookKind,
         source: serde_json::Error,
     },
+    #[error("bundled plugin {plugin_id} received invalid advanced validator config for {hook:?}: {source}")]
+    InvalidAdvancedValidatorConfig {
+        plugin_id: String,
+        hook: HookKind,
+        source: AdvancedValidatorError,
+    },
+    #[error("bundled plugin {plugin_id} failed {hook:?}: {source}")]
+    TransformFailed {
+        plugin_id: String,
+        hook: HookKind,
+        source: GzipTransformError,
+    },
 }
 
 impl IntoPluginDiagnostic for BundledPluginError {
@@ -224,6 +300,12 @@ impl IntoPluginDiagnostic for BundledPluginError {
                 plugin_id, hook, ..
             }
             | Self::InvalidConfig {
+                plugin_id, hook, ..
+            }
+            | Self::InvalidAdvancedValidatorConfig {
+                plugin_id, hook, ..
+            }
+            | Self::TransformFailed {
                 plugin_id, hook, ..
             } => PluginDiagnostic::error(self.to_string())
                 .for_plugin(plugin_id.clone())
@@ -304,6 +386,17 @@ fn validate_contains_string(
     })
 }
 
+fn validate_xml_xsd_message(config: Value, payload: &[u8]) -> MessageValidatorResponse {
+    let result = match validate_xml_xsd(config, payload) {
+        XmlXsdValidation::Valid => ValidationResultDto::Valid,
+        XmlXsdValidation::Invalid { message } => ValidationResultDto::Invalid { message },
+    };
+    MessageValidatorResponse {
+        abi_version: ABI_VERSION,
+        result,
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 struct ContainsStringConfig {
@@ -345,6 +438,13 @@ fn contains_string_config_schema() -> ConfigSchemaMetadata {
     }
 }
 
+fn xml_xsd_config_schema() -> ConfigSchemaMetadata {
+    ConfigSchemaMetadata {
+        schema_version: 1,
+        document: config_schema_document(),
+    }
+}
+
 fn bundled_export_name(hook: HookKind) -> &'static str {
     match hook {
         HookKind::OutgoingMessageTransform => "builtin_outgoing_message_transform",
@@ -355,26 +455,26 @@ fn bundled_export_name(hook: HookKind) -> &'static str {
     }
 }
 
-fn supported(
+fn supported_builtin(
     legacy_plugin_id: &'static str,
-    bundled_plugin_id: &'static str,
+    replacement_plugin_id: &'static str,
 ) -> LegacyPluginReplacementDecision {
-    LegacyPluginReplacementDecision {
+    supported(
         legacy_plugin_id,
-        status: LegacyPluginReplacementStatus::Supported,
-        bundled_plugin_id: Some(bundled_plugin_id),
-        reason: "Covered by a bundled Rust replacement for the MVP hook surface.",
-    }
+        replacement_plugin_id,
+        "Covered by a bundled Rust replacement for the MVP hook surface.",
+    )
 }
 
-fn unsupported(
+fn supported(
     legacy_plugin_id: &'static str,
+    replacement_plugin_id: &'static str,
     reason: &'static str,
 ) -> LegacyPluginReplacementDecision {
     LegacyPluginReplacementDecision {
         legacy_plugin_id,
-        status: LegacyPluginReplacementStatus::Unsupported,
-        bundled_plugin_id: None,
+        status: LegacyPluginReplacementStatus::Supported,
+        replacement_plugin_id: Some(replacement_plugin_id),
         reason,
     }
 }
