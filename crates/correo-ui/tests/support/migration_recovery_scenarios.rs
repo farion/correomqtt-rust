@@ -30,7 +30,7 @@ impl RecoveryCapture {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum RecoveryScenario {
     Detection,
     PasswordNeeded,
@@ -141,10 +141,12 @@ fn recovery_snapshot(scenario: RecoveryScenario) -> MigrationRecoverySnapshot {
     let mut recovery =
         MigrationRecoverySnapshot::detected("/home/user/.correomqtt/synthetic-beta-profile");
     recovery.counts = counts();
-    recovery.backup_name = Some("migration-backup-1780952519".to_owned());
-    recovery.backup_path_hint =
-        Some("/home/user/.correomqtt-backups/migration-backup-1780952519".to_owned());
-    recovery.backup_status = "Backup created: migration-backup-1780952519".to_owned();
+    if scenario != RecoveryScenario::Detection {
+        recovery.backup_name = Some("migration-backup-1780952519".to_owned());
+        recovery.backup_path_hint =
+            Some("/home/user/.correomqtt-backups/migration-backup-1780952519".to_owned());
+        recovery.backup_status = "Backup created: migration-backup-1780952519".to_owned();
+    }
     match scenario {
         RecoveryScenario::Detection => {}
         RecoveryScenario::PasswordNeeded => {
