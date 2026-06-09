@@ -2,7 +2,10 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, PluginDisableConfirmation, PluginFeedbackSeverity,
     PluginLoadState, PluginRow, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
 };
-use egui::{Button, Frame, RichText, Stroke, TextEdit, Ui, Window};
+use egui::{
+    Button, CornerRadius, CursorIcon, Frame, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui,
+    UiBuilder, Window,
+};
 
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::padded_text_edit;
@@ -14,42 +17,8 @@ mod keyboard;
 #[path = "plugins/marketplace.rs"]
 mod marketplace;
 
-pub fn sidebar(
-    ui: &mut Ui,
-    plugins: &PluginSurfaceSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    let mut filter = plugins.plugin_filter.clone();
-    if ui
-        .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
-            padded_text_edit(
-                TextEdit::singleline(&mut filter)
-                    .id(keyboard::plugin_search_id())
-                    .hint_text("Search plugins..."),
-            ),
-        )
-        .changed()
-    {
-        send(commands, AppCommand::SearchPlugins(filter));
-    }
-    ui.add_space(8.0);
-    if plugins.load_state != PluginLoadState::Ready {
-        ui.label(RichText::new(plugins.load_state.message()).color(tokens.text_secondary));
-        return;
-    }
-    ui.label(RichText::new(plugin_counts(plugins)).color(tokens.text_secondary));
-    ui.separator();
-    ui.label(
-        RichText::new(format!(
-            "{} marketplace entries",
-            plugins.marketplace_plugins.len()
-        ))
-        .color(tokens.text_secondary),
-    );
-    ui.label(RichText::new(repository_count(plugins)).color(tokens.text_secondary));
-}
+const TILE_HEIGHT: f32 = 118.0;
+const TILE_GAP: f32 = 6.0;
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     keyboard::handle(ui.ctx(), &snapshot.plugins, commands);
@@ -144,6 +113,10 @@ pub(super) fn plugin_detail(
     ui.label(format!("{} by {}", plugin.version, plugin.provider));
     ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
     ui.label(RichText::new(plugin.status.label()).color(status_color(plugin.status, tokens)));
+    ui.add_space(8.0);
+    ui.label(&plugin.description);
+    metadata_row(ui, "License", &plugin.license, tokens);
+    metadata_row(ui, "Location", &plugin.location, tokens);
     if let Some(note) = &plugin.legacy_note {
         ui.label(RichText::new(note).color(tokens.warning));
     }
@@ -222,14 +195,75 @@ pub(super) fn install_button(
     }
 }
 
+pub(super) fn search_field(
+    ui: &mut Ui,
+    plugins: &PluginSurfaceSnapshot,
+    commands: &AppCommandSender,
+) {
+    let mut filter = plugins.plugin_filter.clone();
+    if ui
+        .add_sized(
+            [ui.available_width(), CONTROL_HEIGHT],
+            padded_text_edit(
+                TextEdit::singleline(&mut filter)
+                    .id(keyboard::plugin_search_id())
+                    .hint_text("Search plugins..."),
+            ),
+        )
+        .changed()
+    {
+        send(commands, AppCommand::SearchPlugins(filter));
+    }
+}
+
+pub(super) fn plugin_tile(
+    ui: &mut Ui,
+    selected: bool,
+    tokens: ThemeTokens,
+    add_contents: impl FnOnce(&mut Ui),
+) -> egui::Response {
+    let width = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, TILE_HEIGHT), Sense::click());
+    let response = response.on_hover_cursor(CursorIcon::PointingHand);
+    let fill = if selected {
+        tokens.accent_selected_bg
+    } else if response.hovered() || response.contains_pointer() {
+        tokens.panel_raised
+    } else {
+        tokens.panel_bg
+    };
+    let stroke = if selected {
+        tokens.accent
+    } else {
+        tokens.border
+    };
+    ui.painter().rect_filled(rect, CornerRadius::same(4), fill);
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(4),
+        Stroke::new(1.0, stroke),
+        StrokeKind::Inside,
+    );
+
+    let content_rect = rect.shrink(8.0);
+    let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+    content_ui.set_clip_rect(content_rect);
+    add_contents(&mut content_ui);
+    ui.add_space(TILE_GAP);
+    response
+}
+
+pub(super) fn metadata_row(ui: &mut Ui, label: &str, value: &str, tokens: ThemeTokens) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(format!("{label}:")).strong());
+        ui.label(RichText::new(metadata_value(value)).color(tokens.text_secondary));
+    });
+}
+
 fn plugin_operational_summary(ui: &mut Ui, plugin: &PluginRow, tokens: ThemeTokens) {
     ui.add_space(8.0);
     ui.label(
         RichText::new(format!("{} hook assignments", plugin.hooks.len()))
-            .color(tokens.text_secondary),
-    );
-    ui.label(
-        RichText::new(format!("{} diagnostics", plugin.diagnostic_count()))
             .color(tokens.text_secondary),
     );
     if !plugin.config_fields.is_empty() {
@@ -246,22 +280,7 @@ fn plugin_counts(plugins: &PluginSurfaceSnapshot) -> String {
         .iter()
         .filter(|plugin| plugin.enabled)
         .count();
-    format!(
-        "{} installed, {enabled} enabled, {} diagnostics",
-        plugins.plugins.len(),
-        plugins.diagnostics().len()
-    )
-}
-
-fn repository_count(plugins: &PluginSurfaceSnapshot) -> String {
-    let mut repositories = plugins
-        .marketplace_plugins
-        .iter()
-        .map(|plugin| plugin.repository.as_str())
-        .collect::<Vec<_>>();
-    repositories.sort_unstable();
-    repositories.dedup();
-    format!("{} repositories", repositories.len())
+    format!("{} installed, {enabled} enabled", plugins.plugins.len())
 }
 
 fn panel(tokens: ThemeTokens) -> Frame {
@@ -287,6 +306,15 @@ fn feedback_color(severity: PluginFeedbackSeverity, tokens: ThemeTokens) -> egui
         PluginFeedbackSeverity::Info => tokens.success,
         PluginFeedbackSeverity::Warning => tokens.warning,
         PluginFeedbackSeverity::Error => tokens.danger,
+    }
+}
+
+fn metadata_value(value: &str) -> &str {
+    let value = value.trim();
+    if value.is_empty() {
+        "Not recorded"
+    } else {
+        value
     }
 }
 

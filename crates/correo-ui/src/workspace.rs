@@ -22,7 +22,7 @@ pub fn sidebar(
     match workspace {
         Workspace::ImportExport => transfer_sidebar(ui, snapshot, tokens, commands, i18n),
         Workspace::Scripts => scripts::sidebar(ui, &snapshot.scripts, tokens, commands),
-        Workspace::Plugins => plugins::sidebar(ui, &snapshot.plugins, tokens, commands),
+        Workspace::Plugins => {}
         Workspace::Diagnostics => {}
         Workspace::Settings => {}
         Workspace::About => {}

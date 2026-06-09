@@ -18,16 +18,21 @@ pub fn marketplace_rows_from_repository_json(
     Ok(repository
         .plugins
         .into_iter()
-        .map(|entry| PluginMarketplaceRow {
-            id: entry.manifest.id,
-            name: entry.manifest.name,
-            version: entry.manifest.version,
-            provider: entry.manifest.provider,
-            repository: repository.name.clone(),
-            description: entry.manifest.description,
-            capabilities: capability_rows(entry.manifest.capabilities),
-            install_source: entry.install_source,
-            installed_plugin_id: None,
+        .map(|entry| {
+            let location = entry.install_source.location_label();
+            PluginMarketplaceRow {
+                id: entry.manifest.id,
+                name: entry.manifest.name,
+                version: entry.manifest.version,
+                provider: entry.manifest.provider,
+                repository: repository.name.clone(),
+                description: entry.manifest.description,
+                license: entry.manifest.license,
+                location,
+                capabilities: capability_rows(entry.manifest.capabilities),
+                install_source: entry.install_source,
+                installed_plugin_id: None,
+            }
         })
         .collect())
 }
@@ -67,6 +72,8 @@ struct RepositoryManifestDto {
     version: String,
     description: String,
     provider: String,
+    #[serde(default)]
+    license: String,
     capabilities: RepositoryCapabilitiesDto,
 }
 

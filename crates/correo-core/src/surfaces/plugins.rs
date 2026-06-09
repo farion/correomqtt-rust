@@ -57,6 +57,9 @@ impl PluginSurfaceSnapshot {
                 filter.is_empty()
                     || plugin.name.to_ascii_lowercase().contains(&filter)
                     || plugin.id.to_ascii_lowercase().contains(&filter)
+                    || plugin.description.to_ascii_lowercase().contains(&filter)
+                    || plugin.provider.to_ascii_lowercase().contains(&filter)
+                    || plugin.license.to_ascii_lowercase().contains(&filter)
                     || plugin
                         .capabilities
                         .iter()
@@ -77,6 +80,9 @@ impl PluginSurfaceSnapshot {
                 filter.is_empty()
                     || plugin.name.to_ascii_lowercase().contains(&filter)
                     || plugin.id.to_ascii_lowercase().contains(&filter)
+                    || plugin.description.to_ascii_lowercase().contains(&filter)
+                    || plugin.provider.to_ascii_lowercase().contains(&filter)
+                    || plugin.license.to_ascii_lowercase().contains(&filter)
                     || plugin.repository.to_ascii_lowercase().contains(&filter)
                     || plugin
                         .capabilities
@@ -144,7 +150,13 @@ pub struct PluginRow {
     pub id: String,
     pub name: String,
     pub version: String,
+    #[serde(default)]
+    pub description: String,
     pub provider: String,
+    #[serde(default)]
+    pub license: String,
+    #[serde(default)]
+    pub location: String,
     pub source: PluginSource,
     pub enabled: bool,
     pub status: PluginStatus,
@@ -155,12 +167,6 @@ pub struct PluginRow {
     pub legacy_note: Option<String>,
 }
 
-impl PluginRow {
-    pub fn diagnostic_count(&self) -> usize {
-        self.diagnostics.len()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginMarketplaceRow {
     pub id: String,
@@ -169,6 +175,10 @@ pub struct PluginMarketplaceRow {
     pub provider: String,
     pub repository: String,
     pub description: String,
+    #[serde(default)]
+    pub license: String,
+    #[serde(default)]
+    pub location: String,
     pub capabilities: Vec<PluginCapabilityRow>,
     #[serde(default)]
     pub install_source: PluginMarketplaceSource,
@@ -241,6 +251,14 @@ impl PluginMarketplaceSource {
             Self::LocalPackage { .. } | Self::Unknown => PluginSource::UserManifest,
         }
     }
+
+    pub fn location_label(&self) -> String {
+        match self {
+            Self::Bundled { plugin_id } => format!("bundled://{plugin_id}/plugin.toml"),
+            Self::LocalPackage { path } => path.clone(),
+            Self::Unknown => "Repository catalog".to_owned(),
+        }
+    }
 }
 
 impl PluginMarketplaceRow {
@@ -249,7 +267,10 @@ impl PluginMarketplaceRow {
             id: self.id.clone(),
             name: self.name.clone(),
             version: self.version.clone(),
+            description: self.description.clone(),
             provider: self.provider.clone(),
+            license: self.license.clone(),
+            location: self.location.clone(),
             source: self.install_source.plugin_source(),
             enabled: true,
             status: PluginStatus::Active,

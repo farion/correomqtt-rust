@@ -4,14 +4,9 @@ use correo_core::{
 use egui::{Context, Id, Key, Modifiers};
 
 const PLUGIN_SEARCH_ID: &str = "plugin-manager-search";
-const DIAGNOSTIC_SEARCH_ID: &str = "plugin-diagnostics-search";
 
 pub(super) fn plugin_search_id() -> Id {
     Id::new(PLUGIN_SEARCH_ID)
-}
-
-pub(super) fn diagnostic_search_id() -> Id {
-    Id::new(DIAGNOSTIC_SEARCH_ID)
 }
 
 pub(super) fn handle(
@@ -24,12 +19,7 @@ pub(super) fn handle(
     }
 
     if consume_command_key(context, Key::F) {
-        let search_id = if plugins.active_tab == PluginSurfaceTab::Diagnostics {
-            diagnostic_search_id()
-        } else {
-            plugin_search_id()
-        };
-        context.memory_mut(|memory| memory.request_focus(search_id));
+        context.memory_mut(|memory| memory.request_focus(plugin_search_id()));
         return;
     }
 
