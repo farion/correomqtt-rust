@@ -339,8 +339,7 @@ fn lwt_tab(
     i18n: &I18n,
 ) {
     let mut enabled = settings.lwt_enabled;
-    if ui
-        .checkbox(&mut enabled, i18n.text("connection-enable-last-will"))
+    if crate::widgets::checkbox(ui, &mut enabled, i18n.text("connection-enable-last-will"))
         .changed()
     {
         send(commands, AppCommand::SetLwtEnabled(enabled));
@@ -363,7 +362,7 @@ fn lwt_tab(
         let mut payload = settings.lwt_payload.clone();
         if ui
             .add(
-                TextEdit::multiline(&mut payload)
+                crate::widgets::padded_text_edit(TextEdit::multiline(&mut payload))
                     .font(egui::TextStyle::Monospace)
                     .desired_rows(5)
                     .desired_width(f32::INFINITY),

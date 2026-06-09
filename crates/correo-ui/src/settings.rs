@@ -6,7 +6,8 @@ use correo_core::{
 use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
 
 use crate::i18n::I18n;
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::widgets::{checkbox, padded_text_edit};
 
 pub fn show(
     ui: &mut Ui,
@@ -248,7 +249,10 @@ fn plugins(
     );
     row(ui, &i18n.text("settings-bundled-url"), |ui| {
         let mut url = settings.bundled_plugins_url.clone();
-        let response = ui.add_sized([420.0, 24.0], TextEdit::singleline(&mut url));
+        let response = ui.add_sized(
+            [420.0, CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut url)),
+        );
         if response.changed() {
             send(
                 commands,
@@ -370,8 +374,8 @@ fn legacy_migration(
 
 fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
-        ui.set_min_height(30.0);
-        ui.add_sized([160.0, 24.0], egui::Label::new(label));
+        ui.set_min_height(CONTROL_HEIGHT);
+        ui.add_sized([160.0, CONTROL_HEIGHT], egui::Label::new(label));
         add(ui);
     });
 }
@@ -390,7 +394,7 @@ fn checkbox_flag(
     commands: &AppCommandSender,
 ) {
     let mut enabled = current;
-    if ui.checkbox(&mut enabled, label).changed() {
+    if checkbox(ui, &mut enabled, label).changed() {
         send(commands, AppCommand::SetGlobalSettingFlag { flag, enabled });
     }
 }

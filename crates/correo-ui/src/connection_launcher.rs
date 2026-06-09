@@ -54,7 +54,7 @@ pub fn panel(
 
     let mut filter = snapshot.connection_filter.clone();
     let response = ui.add(
-        TextEdit::singleline(&mut filter)
+        crate::widgets::padded_text_edit(TextEdit::singleline(&mut filter))
             .hint_text(i18n.text("common-search"))
             .desired_width(f32::INFINITY),
     );
@@ -232,8 +232,13 @@ fn connection_info(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTok
 }
 
 fn edit_button(ui: &mut Ui, i18n: &I18n) -> egui::Response {
-    ui.add(Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(28.0, 24.0)))
-        .on_hover_text(i18n.text("connection-edit-tooltip"))
+    ui.add(
+        Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(
+            crate::theme::CONTROL_HEIGHT,
+            crate::theme::CONTROL_HEIGHT,
+        )),
+    )
+    .on_hover_text(i18n.text("connection-edit-tooltip"))
 }
 
 fn badge_label(badge: ConnectionBadge) -> &'static str {

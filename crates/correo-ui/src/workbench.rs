@@ -6,7 +6,8 @@ use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
 use egui_extras::{Column, TableBuilder};
 
 use crate::{
-    theme::ThemeTokens,
+    theme::{ThemeTokens, CONTROL_HEIGHT},
+    widgets::{checkbox, padded_text_edit},
     workbench_detail, workbench_dialogs, workbench_header,
     workbench_helpers::{panel, send},
 };
@@ -103,8 +104,8 @@ fn publish_pane(
         let mut topic = snapshot.workbench.publish.topic.clone();
         ui.horizontal(|ui| {
             let topic_response = ui.add_sized(
-                [(ui.available_width() - 176.0).max(120.0), 28.0],
-                TextEdit::singleline(&mut topic).hint_text("Topic"),
+                [(ui.available_width() - 176.0).max(120.0), CONTROL_HEIGHT],
+                padded_text_edit(TextEdit::singleline(&mut topic).hint_text("Topic")),
             );
             if topic_response.changed() {
                 send(commands, AppCommand::UpdatePublishTopic(topic));
@@ -113,7 +114,7 @@ fn publish_pane(
                 send(commands, AppCommand::UpdatePublishQos(qos));
             });
             let mut retained = snapshot.workbench.publish.retained;
-            if ui.checkbox(&mut retained, "Retained").changed() {
+            if checkbox(ui, &mut retained, "Retained").changed() {
                 send(commands, AppCommand::SetPublishRetained(retained));
             }
         });
@@ -133,7 +134,7 @@ fn publish_pane(
 
         let mut payload = snapshot.workbench.publish.payload.clone();
         let payload_response = ui.add(
-            TextEdit::multiline(&mut payload)
+            padded_text_edit(TextEdit::multiline(&mut payload))
                 .font(egui::TextStyle::Monospace)
                 .desired_rows(8)
                 .desired_width(f32::INFINITY),
@@ -156,7 +157,9 @@ fn publish_pane(
         ui.separator();
         let mut filter = snapshot.workbench.publish.history_filter.clone();
         if ui
-            .add(TextEdit::singleline(&mut filter).hint_text("Search publish history"))
+            .add(padded_text_edit(
+                TextEdit::singleline(&mut filter).hint_text("Search publish history"),
+            ))
             .changed()
         {
             send(commands, AppCommand::SearchPublishHistory(filter));
@@ -177,8 +180,8 @@ fn subscribe_pane(
         let mut topic = snapshot.workbench.subscribe.topic.clone();
         ui.horizontal(|ui| {
             let topic_response = ui.add_sized(
-                [(ui.available_width() - 154.0).max(120.0), 28.0],
-                TextEdit::singleline(&mut topic).hint_text("Topic filter"),
+                [(ui.available_width() - 154.0).max(120.0), CONTROL_HEIGHT],
+                padded_text_edit(TextEdit::singleline(&mut topic).hint_text("Topic filter")),
             );
             if topic_response.changed() {
                 send(commands, AppCommand::UpdateSubscribeTopic(topic));
@@ -243,7 +246,9 @@ fn subscribe_pane(
         ui.separator();
         let mut filter = snapshot.workbench.subscribe.message_filter.clone();
         if ui
-            .add(TextEdit::singleline(&mut filter).hint_text("Search messages"))
+            .add(padded_text_edit(
+                TextEdit::singleline(&mut filter).hint_text("Search messages"),
+            ))
             .changed()
         {
             send(commands, AppCommand::SearchMessages(filter));

@@ -14,13 +14,16 @@ pub(super) fn field(
     commands: &AppCommandSender,
 ) {
     ui.horizontal(|ui| {
-        ui.set_min_height(30.0);
+        ui.set_min_height(crate::theme::CONTROL_HEIGHT);
         ui.label(label);
         let mut edited = value.to_owned();
         if ui
             .add_sized(
-                [(ui.available_width() - 8.0).max(160.0), 26.0],
-                TextEdit::singleline(&mut edited),
+                [
+                    (ui.available_width() - 8.0).max(160.0),
+                    crate::theme::CONTROL_HEIGHT,
+                ],
+                crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited)),
             )
             .changed()
         {
@@ -45,13 +48,16 @@ pub(super) fn field_with_button(
     commands: &AppCommandSender,
 ) {
     ui.horizontal(|ui| {
-        ui.set_min_height(30.0);
+        ui.set_min_height(crate::theme::CONTROL_HEIGHT);
         ui.label(label);
         let mut edited = value.to_owned();
         if ui
             .add_sized(
-                [(ui.available_width() - 96.0).max(160.0), 26.0],
-                TextEdit::singleline(&mut edited),
+                [
+                    (ui.available_width() - 96.0).max(160.0),
+                    crate::theme::CONTROL_HEIGHT,
+                ],
+                crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited)),
             )
             .changed()
         {
@@ -78,7 +84,7 @@ pub(super) fn combo(
     commands: &AppCommandSender,
 ) {
     ui.horizontal(|ui| {
-        ui.set_min_height(30.0);
+        ui.set_min_height(crate::theme::CONTROL_HEIGHT);
         ui.label(label);
         let mut selected = value.to_owned();
         ComboBox::from_id_salt(label)
@@ -109,7 +115,7 @@ pub(super) fn flag(
     commands: &AppCommandSender,
 ) {
     let mut enabled = value;
-    if ui.checkbox(&mut enabled, label).changed() {
+    if crate::widgets::checkbox(ui, &mut enabled, label).changed() {
         send(
             commands,
             AppCommand::SetConnectionSettingFlag { flag, enabled },
@@ -141,13 +147,17 @@ pub(super) fn secret_field_enabled(
 ) {
     ui.add_enabled_ui(enabled, |ui| {
         ui.horizontal(|ui| {
-            ui.set_min_height(30.0);
+            ui.set_min_height(crate::theme::CONTROL_HEIGHT);
             ui.label(label);
             let mut edited = value.expose_for_ui().to_owned();
             if ui
                 .add_sized(
-                    [(ui.available_width() - 8.0).max(160.0), 26.0],
-                    TextEdit::singleline(&mut edited).password(true),
+                    [
+                        (ui.available_width() - 8.0).max(160.0),
+                        crate::theme::CONTROL_HEIGHT,
+                    ],
+                    crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited))
+                        .password(true),
                 )
                 .changed()
             {
@@ -176,13 +186,16 @@ pub(super) fn file_field(
 ) {
     ui.add_enabled_ui(enabled, |ui| {
         ui.horizontal(|ui| {
-            ui.set_min_height(30.0);
+            ui.set_min_height(crate::theme::CONTROL_HEIGHT);
             ui.label(label);
             let mut edited = value.to_owned();
             if ui
                 .add_sized(
-                    [(ui.available_width() - 96.0).max(160.0), 26.0],
-                    TextEdit::singleline(&mut edited),
+                    [
+                        (ui.available_width() - 96.0).max(160.0),
+                        crate::theme::CONTROL_HEIGHT,
+                    ],
+                    crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited)),
                 )
                 .changed()
             {

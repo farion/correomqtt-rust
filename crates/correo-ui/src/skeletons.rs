@@ -6,7 +6,8 @@ use correo_core::{
 };
 use egui::{Frame, Grid, RichText, ScrollArea, Stroke, TextEdit, Ui};
 
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::widgets::{checkbox, padded_text_edit};
 
 pub fn import_export(
     ui: &mut Ui,
@@ -125,8 +126,8 @@ fn import_password(
         let mut password = String::new();
         ui.horizontal(|ui| {
             ui.add_sized(
-                [220.0, 24.0],
-                TextEdit::singleline(&mut password)
+                [220.0, CONTROL_HEIGHT],
+                padded_text_edit(TextEdit::singleline(&mut password))
                     .password(true)
                     .hint_text("Import password"),
             );
@@ -242,7 +243,10 @@ fn export_options(
     ui.horizontal(|ui| {
         ui.label("Target");
         let mut path = export.output_path.clone();
-        let response = ui.add_sized([360.0, 24.0], TextEdit::singleline(&mut path));
+        let response = ui.add_sized(
+            [360.0, CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut path)),
+        );
         if response.changed() {
             send(commands, AppCommand::UpdateConnectionExportPath(path));
         }
@@ -255,14 +259,14 @@ fn export_password_fields(ui: &mut Ui) {
     let mut confirm = String::new();
     ui.horizontal(|ui| {
         ui.add_sized(
-            [180.0, 24.0],
-            TextEdit::singleline(&mut password)
+            [180.0, CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut password))
                 .password(true)
                 .hint_text("Export password"),
         );
         ui.add_sized(
-            [180.0, 24.0],
-            TextEdit::singleline(&mut confirm)
+            [180.0, CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut confirm))
                 .password(true)
                 .hint_text("Confirm password"),
         );
@@ -310,7 +314,7 @@ fn connection_rows(
             ui.end_row();
             for row in rows {
                 let mut selected = row.selected;
-                if ui.checkbox(&mut selected, "").changed() {
+                if checkbox(ui, &mut selected, "").changed() {
                     send(commands, command(row.id.clone(), selected));
                 }
                 ui.label(&row.name);

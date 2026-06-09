@@ -148,8 +148,8 @@ fn unlock(
     let mut password = String::new();
     ui.horizontal(|ui| {
         ui.add_sized(
-            [260.0, 28.0],
-            TextEdit::singleline(&mut password)
+            [260.0, crate::theme::CONTROL_HEIGHT],
+            crate::widgets::padded_text_edit(TextEdit::singleline(&mut password))
                 .password(true)
                 .hint_text("Legacy master password"),
         );
@@ -185,7 +185,7 @@ fn review(
     for row in &snapshot.rows {
         ui.horizontal_wrapped(|ui| {
             let mut selected = row.selected;
-            if ui.checkbox(&mut selected, row.task.label()).changed() {
+            if crate::widgets::checkbox(ui, &mut selected, row.task.label()).changed() {
                 send(
                     commands,
                     MigrationRecoveryCommand::SelectMigrationItem {

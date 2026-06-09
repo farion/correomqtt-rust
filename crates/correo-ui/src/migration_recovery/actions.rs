@@ -5,7 +5,7 @@ use correo_core::{
 use egui::{Button, Ui};
 
 const BUTTON_WIDTH: f32 = 190.0;
-const BUTTON_HEIGHT: f32 = 28.0;
+const BUTTON_HEIGHT: f32 = crate::theme::CONTROL_HEIGHT;
 
 pub(super) fn action_bar(
     ui: &mut Ui,

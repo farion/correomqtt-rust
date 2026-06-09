@@ -4,7 +4,8 @@ use correo_core::{
 };
 use egui::{Button, Frame, RichText, Stroke, TextEdit, Ui, Window};
 
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::widgets::padded_text_edit;
 
 #[path = "plugins/installed.rs"]
 mod installed;
@@ -22,10 +23,12 @@ pub fn sidebar(
     let mut filter = plugins.plugin_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), 28.0],
-            TextEdit::singleline(&mut filter)
-                .id(keyboard::plugin_search_id())
-                .hint_text("Search plugins..."),
+            [ui.available_width(), CONTROL_HEIGHT],
+            padded_text_edit(
+                TextEdit::singleline(&mut filter)
+                    .id(keyboard::plugin_search_id())
+                    .hint_text("Search plugins..."),
+            ),
         )
         .changed()
     {

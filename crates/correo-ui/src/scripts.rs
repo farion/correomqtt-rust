@@ -5,7 +5,8 @@ use correo_core::{
 use egui::{Button, ComboBox, Frame, Id, Modal, RichText, ScrollArea, Stroke, TextEdit, Ui};
 use egui_extras::{Column, TableBuilder};
 
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::widgets::padded_text_edit;
 
 const SCRIPT_LIST_WIDTH: f32 = 300.0;
 const EXECUTION_LIST_WIDTH: f32 = 560.0;
@@ -20,8 +21,8 @@ pub fn sidebar(
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), 28.0],
-            TextEdit::singleline(&mut filter).hint_text("Search scripts..."),
+            [ui.available_width(), CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
         )
         .changed()
     {
@@ -29,7 +30,10 @@ pub fn sidebar(
     }
     ui.add_space(8.0);
     if ui
-        .add_sized([ui.available_width(), 28.0], Button::new("+ New Script"))
+        .add_sized(
+            [ui.available_width(), CONTROL_HEIGHT],
+            Button::new("+ New Script"),
+        )
         .clicked()
     {
         send(commands, AppCommand::CreateScript);
@@ -113,8 +117,8 @@ fn script_browser(
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), 28.0],
-            TextEdit::singleline(&mut filter).hint_text("Search scripts..."),
+            [ui.available_width(), CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
         )
         .changed()
     {
@@ -122,7 +126,10 @@ fn script_browser(
     }
     ui.add_space(8.0);
     if ui
-        .add_sized([ui.available_width(), 28.0], Button::new("+ New Script"))
+        .add_sized(
+            [ui.available_width(), CONTROL_HEIGHT],
+            Button::new("+ New Script"),
+        )
         .clicked()
     {
         send(commands, AppCommand::CreateScript);
@@ -270,7 +277,7 @@ fn editor(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSen
         if ui
             .add_sized(
                 [ui.available_width(), editor_height],
-                TextEdit::multiline(&mut source)
+                padded_text_edit(TextEdit::multiline(&mut source))
                     .font(egui::TextStyle::Monospace)
                     .desired_width(f32::INFINITY),
             )
@@ -400,7 +407,10 @@ fn rename_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCom
         ui.heading("Rename Script");
         let mut name = scripts.rename_script_name.clone();
         if ui
-            .add_sized([320.0, 28.0], TextEdit::singleline(&mut name))
+            .add_sized(
+                [320.0, CONTROL_HEIGHT],
+                padded_text_edit(TextEdit::singleline(&mut name)),
+            )
             .changed()
         {
             send(commands, AppCommand::UpdateRenameScriptName(name));

@@ -13,6 +13,7 @@ mod settings;
 mod shell;
 mod skeletons;
 pub mod theme;
+mod widgets;
 mod workbench;
 mod workbench_detail;
 mod workbench_dialogs;
