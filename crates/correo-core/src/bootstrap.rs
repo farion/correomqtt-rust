@@ -147,15 +147,18 @@ fn summary(
     connection: &ConnectionConfig,
     history: Option<&ConnectionHistorySnapshot>,
 ) -> ConnectionSummary {
-    let needs_secret = needs_secret_restore(connection);
     ConnectionSummary {
         id,
         name: connection.name.clone(),
         endpoint: format!("{}:{}", connection.url, connection.port),
         mqtt_version: mqtt_label(connection.mqtt_version).to_owned(),
-        badges: badges(connection, needs_secret),
+        badges: badges(connection),
         state: ConnectionState::Disconnected,
-        disabled_reason: needs_secret.then_some(ConnectDisabledReason::MissingSecret),
+        disabled_reason: connection
+            .url
+            .trim()
+            .is_empty()
+            .then_some(ConnectDisabledReason::MissingHost),
         recent_subscriptions: history
             .map(|history| history.subscriptions.topics.len())
             .unwrap_or_default(),
@@ -205,11 +208,7 @@ fn settings_snapshot(
         dirty: false,
         valid,
         save_disabled_reason: "No changes to save".to_owned(),
-        keyring_state: if needs_secret_restore(connection) {
-            KeyringState::MigrationRequired
-        } else {
-            KeyringState::Available
-        },
+        keyring_state: KeyringState::Available,
         validation_errors: warnings.to_vec(),
         ..ConnectionSettingsSnapshot::default()
     }
@@ -297,7 +296,7 @@ fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
     snapshot
 }
 
-fn badges(connection: &ConnectionConfig, needs_secret: bool) -> Vec<ConnectionBadge> {
+fn badges(connection: &ConnectionConfig) -> Vec<ConnectionBadge> {
     let mut badges = Vec::new();
     if connection.ssl != TlsSsl::Off {
         badges.push(ConnectionBadge::Tls);
@@ -308,16 +307,7 @@ fn badges(connection: &ConnectionConfig, needs_secret: bool) -> Vec<ConnectionBa
     if connection.lwt == Lwt::On {
         badges.push(ConnectionBadge::Lwt);
     }
-    if needs_secret {
-        badges.push(ConnectionBadge::KeyringWarning);
-    }
     badges
-}
-
-fn needs_secret_restore(connection: &ConnectionConfig) -> bool {
-    connection.username.is_some()
-        || connection.auth == Auth::Password
-        || connection.ssl_keystore.is_some()
 }
 
 fn theme_mode(settings: Option<&ThemeSettings>) -> Option<ThemeMode> {

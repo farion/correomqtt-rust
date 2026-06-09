@@ -1,6 +1,5 @@
 use correo_core::{
-    AppCommand, AppCommandSender, AppSnapshot, ConnectDisabledReason, ConnectionBadge,
-    ConnectionState, ConnectionSummary,
+    AppCommand, AppCommandSender, AppSnapshot, ConnectionBadge, ConnectionState, ConnectionSummary,
 };
 use egui::{
     Button, CornerRadius, CursorIcon, Layout, RichText, ScrollArea, Sense, Stroke, StrokeKind,
@@ -90,15 +89,20 @@ fn connection_row(
         ui.allocate_exact_size(egui::vec2(row_width, ROW_HEIGHT), Sense::click_and_drag());
     let response = response.on_hover_cursor(CursorIcon::PointingHand);
     response.dnd_set_drag_payload(connection.id);
+    let dragged = response.dragged();
+    let drop_target =
+        response.contains_pointer() && egui::DragAndDrop::has_any_payload(ui.ctx()) && !dragged;
 
     let fill = if selected {
         tokens.accent_selected_bg
+    } else if dragged {
+        tokens.panel_raised
     } else if response.hovered() || response.contains_pointer() {
         tokens.panel_raised
     } else {
         tokens.panel_bg
     };
-    let stroke = if selected {
+    let stroke = if selected || dragged || drop_target {
         tokens.accent
     } else {
         tokens.border
@@ -110,6 +114,32 @@ fn connection_row(
         Stroke::new(1.0, stroke),
         StrokeKind::Inside,
     );
+    if dragged {
+        ui.painter().rect_stroke(
+            rect.shrink(2.0),
+            CornerRadius::same(4),
+            Stroke::new(2.0, tokens.accent),
+            StrokeKind::Inside,
+        );
+    }
+    if drop_target {
+        let after = ui
+            .ctx()
+            .pointer_interact_pos()
+            .is_some_and(|pointer| pointer.y > rect.center().y);
+        let y = if after {
+            rect.bottom() - 2.0
+        } else {
+            rect.top() + 2.0
+        };
+        ui.painter().line_segment(
+            [
+                egui::pos2(rect.left() + 6.0, y),
+                egui::pos2(rect.right() - 6.0, y),
+            ],
+            Stroke::new(3.0, tokens.accent),
+        );
+    }
 
     let content_rect = rect.shrink(8.0);
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
@@ -178,10 +208,6 @@ fn row_contents(
                         send(commands, AppCommand::Connect(connection.id));
                         button_clicked = true;
                     }
-                    if !connection.can_connect() {
-                        connect
-                            .on_hover_text(i18n.disabled_reason_label(disabled_reason(connection)));
-                    }
                 }
             },
         );
@@ -202,27 +228,12 @@ fn connection_info(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTok
             }
         });
         ui.label(RichText::new(&connection.endpoint).color(tokens.text_secondary));
-        if let Some(reason) = visible_disabled_reason(connection) {
-            ui.label(RichText::new(i18n.disabled_reason_label(reason)).color(tokens.warning));
-        }
     });
 }
 
 fn edit_button(ui: &mut Ui, i18n: &I18n) -> egui::Response {
     ui.add(Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(28.0, 24.0)))
         .on_hover_text(i18n.text("connection-edit-tooltip"))
-}
-
-fn disabled_reason(connection: &ConnectionSummary) -> ConnectDisabledReason {
-    connection
-        .disabled_reason
-        .unwrap_or(ConnectDisabledReason::Busy)
-}
-
-fn visible_disabled_reason(connection: &ConnectionSummary) -> Option<ConnectDisabledReason> {
-    connection
-        .disabled_reason
-        .filter(|reason| *reason != ConnectDisabledReason::AlreadyConnected)
 }
 
 fn badge_label(badge: ConnectionBadge) -> &'static str {

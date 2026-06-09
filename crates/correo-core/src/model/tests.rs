@@ -353,7 +353,7 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
     assert_eq!(settings.proxy_mode, "SSH");
     assert!(settings.lwt_enabled);
     assert_eq!(settings.lwt_topic, "status/local-broker-01");
-    assert_eq!(settings.keyring_state, KeyringState::MigrationRequired);
+    assert_eq!(settings.keyring_state, KeyringState::Available);
 
     let exposed = format!("{:?}", model.snapshot());
     assert!(!exposed.contains("synthetic-mqtt-password"));
@@ -407,31 +407,6 @@ fn legacy_detection_blocks_launcher_until_user_choice() {
     assert_eq!(
         model.snapshot().global_settings.legacy_migration.status,
         LegacyMigrationStatus::Skipped
-    );
-}
-
-#[test]
-fn skipped_secret_review_preserves_missing_secret_disabled_copy() {
-    let mut model = AppModel::empty();
-    model.apply_event(AppEvent::MigrationRecovery(
-        MigrationRecoveryEvent::LegacyDetected {
-            legacy_path: "/home/user/.correomqtt".to_owned(),
-            counts: Default::default(),
-            warnings: Vec::new(),
-        },
-    ));
-    model.apply_command(AppCommand::MigrationRecovery(
-        MigrationRecoveryCommand::SkipSecrets,
-    ));
-
-    assert_eq!(
-        model.snapshot().migration_recovery.state,
-        MigrationRecoveryState::Reviewing
-    );
-    assert!(model.snapshot().migration_recovery.secrets_skipped);
-    assert_eq!(
-        crate::ConnectDisabledReason::MissingSecret.label(),
-        "Secret must be restored before connecting."
     );
 }
 

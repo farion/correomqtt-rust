@@ -313,7 +313,7 @@ fn default_review_rows() -> Vec<MigrationRecoveryRow> {
             MigrationRecoveryTask::Secrets,
             "Saved secrets",
             "Secrets import into the OS keyring after unlock.",
-            Some("Secret must be restored before connecting."),
+            None,
         ),
         (
             "histories",

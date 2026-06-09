@@ -115,11 +115,9 @@ connection-enable-last-will = Last Will aktivieren
 connection-lwt-topic = LWT-Topic
 connection-lwt-retained = LWT retained
 connection-last-will-inactive = Last-Will-Payload ist inaktiv.
-connection-no-validation-errors = Keine Validierungsfehler
 keyring-available = Schlüsselbund verfügbar
 keyring-locked = Schlüsselbund gesperrt
 keyring-unavailable = Schlüsselbund nicht verfügbar
-keyring-migration-required = Schlüsselbund-Migration erforderlich
 
 state-disconnected = Getrennt.
 state-connecting = Verbinden ...
@@ -129,7 +127,6 @@ state-error = Fehler
 
 disabled-already-connected = Bereits verbunden
 disabled-missing-host = Host ist erforderlich
-disabled-missing-secret = Secret muss vor dem Verbinden wiederhergestellt werden.
 disabled-busy = Verbindung ist beschäftigt
 
 about-title = Über CorreoMQTT

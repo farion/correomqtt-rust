@@ -176,7 +176,7 @@ fn review(
         let count = snapshot.counts.skipped_secrets.max(1);
         ui.label(
             RichText::new(format!(
-                "{count} connection secret(s) will need manual restore before Connect is enabled."
+                "{count} connection secret(s) were skipped during migration."
             ))
             .color(tokens.warning),
         );

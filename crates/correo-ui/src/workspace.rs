@@ -55,6 +55,7 @@ fn connections(
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
+    let connection_view_rect = ui.max_rect();
     match snapshot.connection_surface {
         ConnectionSurface::Launcher => launcher_detail(ui, snapshot, tokens, commands, i18n),
         ConnectionSurface::Workbench => workbench::show(ui, snapshot, tokens, commands),
@@ -66,7 +67,7 @@ fn connections(
         }
     }
     if snapshot.connection_surface == ConnectionSurface::Workbench {
-        connection_settings::overlay(ui, snapshot, tokens, commands, i18n);
+        connection_settings::overlay(ui, connection_view_rect, snapshot, tokens, commands, i18n);
     }
 }
 

@@ -30,7 +30,6 @@ pub enum KeyringState {
     Available,
     Locked,
     Unavailable,
-    MigrationRequired,
 }
 
 impl KeyringState {
@@ -39,7 +38,6 @@ impl KeyringState {
             Self::Available => "Keyring available",
             Self::Locked => "Keyring locked",
             Self::Unavailable => "Keyring unavailable",
-            Self::MigrationRequired => "Keyring migration required",
         }
     }
 }

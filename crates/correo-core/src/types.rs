@@ -205,7 +205,6 @@ pub enum ConnectionBadge {
     Tls,
     Proxy,
     Lwt,
-    KeyringWarning,
 }
 
 impl ConnectionBadge {
@@ -214,7 +213,6 @@ impl ConnectionBadge {
             Self::Tls => "TLS",
             Self::Proxy => "Proxy",
             Self::Lwt => "LWT",
-            Self::KeyringWarning => "Keyring",
         }
     }
 }
@@ -223,7 +221,6 @@ impl ConnectionBadge {
 pub enum ConnectDisabledReason {
     AlreadyConnected,
     MissingHost,
-    MissingSecret,
     Busy,
 }
 
@@ -232,7 +229,6 @@ impl ConnectDisabledReason {
         match self {
             Self::AlreadyConnected => "Already connected",
             Self::MissingHost => "Host is required",
-            Self::MissingSecret => "Secret must be restored before connecting.",
             Self::Busy => "Connection is busy",
         }
     }

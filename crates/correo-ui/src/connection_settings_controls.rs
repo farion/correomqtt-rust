@@ -209,14 +209,6 @@ pub(super) fn file_field(
     });
 }
 
-pub(super) fn readonly(ui: &mut Ui, label: &str, value: &str) {
-    ui.horizontal(|ui| {
-        ui.set_min_height(30.0);
-        ui.label(label);
-        ui.monospace(value);
-    });
-}
-
 pub(super) fn panel(tokens: ThemeTokens) -> Frame {
     Frame::NONE
         .fill(tokens.panel_bg)

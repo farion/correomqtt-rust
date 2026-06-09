@@ -393,6 +393,9 @@ mod connection_list_tests;
 #[path = "model/connection_settings_tests.rs"]
 mod connection_settings_tests;
 #[cfg(test)]
+#[path = "model/migration_secret_tests.rs"]
+mod migration_secret_tests;
+#[cfg(test)]
 #[path = "model/plugin_tests.rs"]
 mod plugin_tests;
 #[cfg(test)]

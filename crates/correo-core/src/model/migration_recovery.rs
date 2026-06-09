@@ -179,12 +179,6 @@ impl AppModel {
         recovery.state = MigrationRecoveryState::Reviewing;
         recovery.secrets_skipped = true;
         recovery.password_error = None;
-        recovery
-            .diagnostics
-            .push(MigrationRecoveryDiagnostic::warning(
-                MigrationDiagnosticCategory::Secret,
-                "Secret must be restored before connecting.",
-            ));
     }
 
     fn select_migration_item(&mut self, item_id: &str, selected: bool) {

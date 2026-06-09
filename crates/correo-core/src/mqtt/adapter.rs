@@ -76,7 +76,7 @@ fn connect_command(
     if reconnect
         && matches!(
             connection.disabled_reason,
-            Some(ConnectDisabledReason::MissingHost | ConnectDisabledReason::MissingSecret)
+            Some(ConnectDisabledReason::MissingHost)
         )
     {
         return Ok(Vec::new());

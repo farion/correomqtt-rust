@@ -2,16 +2,23 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionSecretField, ConnectionSettingField,
     ConnectionSettingFlag, ConnectionSettingsSnapshot, ConnectionSettingsTab, KeyringState,
 };
-use egui::{Button, RichText, ScrollArea, TextEdit, Ui, Window};
+use egui::{
+    Button, Color32, CornerRadius, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, TextEdit,
+    Ui, UiBuilder, Window,
+};
 
 use crate::{i18n::I18n, theme::ThemeTokens};
 
 #[path = "connection_settings_controls.rs"]
 mod controls;
 use controls::{
-    combo, field, field_with_button, file_field, flag, panel, readonly, secret_field,
-    secret_field_enabled, send,
+    combo, field, field_with_button, file_field, flag, panel, secret_field, secret_field_enabled,
+    send,
 };
+
+const MODAL_SCALE: f32 = 0.95;
+const SCRIM_ALPHA: u8 = 112;
+const MODAL_RADIUS: u8 = 4;
 
 pub fn show(
     ui: &mut Ui,
@@ -19,6 +26,17 @@ pub fn show(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
+) {
+    show_body(ui, snapshot, tokens, commands, i18n, false);
+}
+
+fn show_body(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+    modal: bool,
 ) {
     let settings = &snapshot.connection_settings;
     header(ui, snapshot, tokens, i18n);
@@ -34,10 +52,12 @@ pub fn show(
     });
 
     ui.add_space(8.0);
-    validation(ui, settings, tokens, i18n);
+    validation(ui, settings, tokens);
     keyring_status(ui, settings.keyring_state, tokens, i18n);
     ui.add_space(8.0);
-    action_bar(ui, settings, commands, i18n);
+    action_bar(ui, settings, commands, i18n, modal);
+    ui.add_space(8.0);
+    internal_id_hint(ui, settings, tokens, i18n);
 
     if settings.delete_confirmation_open {
         delete_confirmation(ui, settings, commands, i18n);
@@ -46,6 +66,7 @@ pub fn show(
 
 pub fn overlay(
     ui: &mut Ui,
+    view_rect: Rect,
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
@@ -58,32 +79,49 @@ pub fn overlay(
         return;
     }
 
-    let title = snapshot
-        .selected_connection()
-        .map(|connection| format!("{} {}", i18n.text("connection-edit-title"), connection.name))
-        .unwrap_or_else(|| i18n.text("connection-edit-tooltip"));
-    let mut open = true;
-    Window::new(title)
-        .id(egui::Id::new((
-            "connection-settings-overlay",
-            editor_id.to_string(),
-        )))
-        .collapsible(false)
-        .resizable(true)
-        .default_size(egui::vec2(680.0, 580.0))
-        .open(&mut open)
-        .show(ui.ctx(), |ui| {
+    let modal_size = view_rect.size() * MODAL_SCALE;
+    egui::Area::new(egui::Id::new((
+        "connection-settings-overlay",
+        editor_id.to_string(),
+    )))
+    .order(egui::Order::Foreground)
+    .fixed_pos(view_rect.min)
+    .movable(false)
+    .show(ui.ctx(), |ui| {
+        let (scrim_rect, _) = ui.allocate_exact_size(view_rect.size(), Sense::click());
+        ui.painter().rect_filled(
+            scrim_rect,
+            CornerRadius::ZERO,
+            Color32::from_black_alpha(SCRIM_ALPHA),
+        );
+
+        let modal_rect = Rect::from_center_size(scrim_rect.center(), modal_size);
+        ui.painter().rect_filled(
+            modal_rect,
+            CornerRadius::same(MODAL_RADIUS),
+            tokens.panel_bg,
+        );
+        ui.painter().rect_stroke(
+            modal_rect,
+            CornerRadius::same(MODAL_RADIUS),
+            Stroke::new(1.0, tokens.border),
+            StrokeKind::Inside,
+        );
+
+        let content_rect = modal_rect.shrink(12.0);
+        let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+        content_ui.set_min_size(content_rect.size());
+        content_ui.set_max_size(content_rect.size());
+        let body_id = egui::Id::new(("connection-settings-overlay-body", editor_id.to_string()));
+        content_ui.vertical(|ui| {
             ScrollArea::vertical()
-                .id_salt("connection-settings-overlay-body")
+                .id_salt(body_id)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    show(ui, snapshot, tokens, commands, i18n);
+                    show_body(ui, snapshot, tokens, commands, i18n, true);
                 });
         });
-
-    if !open {
-        send(commands, AppCommand::DiscardConnectionSettings);
-    }
+    });
 }
 
 fn header(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, i18n: &I18n) {
@@ -116,11 +154,6 @@ fn mqtt_tab(
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
-    readonly(
-        ui,
-        &i18n.text("connection-internal-id"),
-        &settings.internal_id,
-    );
     field(
         ui,
         &i18n.text("connection-name"),
@@ -353,28 +386,36 @@ fn lwt_tab(
     }
 }
 
-fn validation(
-    ui: &mut Ui,
-    settings: &ConnectionSettingsSnapshot,
-    tokens: ThemeTokens,
-    i18n: &I18n,
-) {
-    if settings.validation_errors.is_empty() {
-        ui.label(RichText::new(i18n.text("connection-no-validation-errors")).color(tokens.success));
-    } else {
-        for error in &settings.validation_errors {
-            ui.label(RichText::new(error).color(tokens.warning));
-        }
+fn validation(ui: &mut Ui, settings: &ConnectionSettingsSnapshot, tokens: ThemeTokens) {
+    for error in &settings.validation_errors {
+        ui.label(RichText::new(error).color(tokens.warning));
     }
 }
 
 fn keyring_status(ui: &mut Ui, state: KeyringState, tokens: ThemeTokens, i18n: &I18n) {
     let color = match state {
-        KeyringState::Available => tokens.success,
-        KeyringState::Locked | KeyringState::MigrationRequired => tokens.warning,
+        KeyringState::Available => return,
+        KeyringState::Locked => tokens.warning,
         KeyringState::Unavailable => tokens.danger,
     };
     ui.label(RichText::new(i18n.keyring_state_label(state)).color(color));
+}
+
+fn internal_id_hint(
+    ui: &mut Ui,
+    settings: &ConnectionSettingsSnapshot,
+    tokens: ThemeTokens,
+    i18n: &I18n,
+) {
+    ui.label(
+        RichText::new(format!(
+            "{}: {}",
+            i18n.text("connection-internal-id"),
+            settings.internal_id
+        ))
+        .monospace()
+        .color(tokens.text_secondary),
+    );
 }
 
 fn action_bar(
@@ -382,10 +423,16 @@ fn action_bar(
     settings: &ConnectionSettingsSnapshot,
     commands: &AppCommandSender,
     i18n: &I18n,
+    modal: bool,
 ) {
     ui.horizontal(|ui| {
+        let cancel_label = if modal {
+            i18n.text("common-cancel")
+        } else {
+            i18n.text("common-discard")
+        };
         if ui
-            .add_enabled(settings.dirty, Button::new(i18n.text("common-discard")))
+            .add_enabled(settings.dirty || modal, Button::new(cancel_label))
             .clicked()
         {
             send(commands, AppCommand::DiscardConnectionSettings);

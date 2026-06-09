@@ -49,6 +49,7 @@ const SETTINGS_STATE_SCENARIOS: [Scenario; 3] = [
     Scenario::GlobalSettingsSearch,
     Scenario::GlobalSettingsKeyring,
 ];
+const CONNECTION_STATE_SCENARIOS: [Scenario; 1] = [Scenario::SettingsOverlay];
 
 #[derive(Clone)]
 pub(super) struct Capture {
@@ -80,6 +81,7 @@ pub(super) enum Scenario {
     Launcher,
     Workbench,
     Settings,
+    SettingsOverlay,
     Scripts,
     ImportExport,
     Plugins,
@@ -115,6 +117,7 @@ impl Scenario {
             Self::Launcher => "launcher",
             Self::Workbench => "workbench",
             Self::Settings => "connection-settings",
+            Self::SettingsOverlay => "connection-settings-overlay",
             Self::Scripts => "scripts",
             Self::ImportExport => "import-export",
             Self::Plugins => "plugins",
@@ -150,6 +153,7 @@ impl Scenario {
             Self::Launcher => "launcher",
             Self::Workbench => "active workbench",
             Self::Settings => "connection settings",
+            Self::SettingsOverlay => "connection settings modal overlay",
             Self::Scripts => "scripts",
             Self::ImportExport => "import/export",
             Self::Plugins => "plugins",
@@ -253,6 +257,13 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
             scenario.representative_size(),
         ));
     }
+    for scenario in CONNECTION_STATE_SCENARIOS {
+        captures.push(Capture::new(
+            scenario,
+            ThemeMode::Light,
+            scenario.representative_size(),
+        ));
+    }
     captures
 }
 
@@ -264,9 +275,13 @@ pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
     snapshot.connection_surface = match capture.scenario {
         Scenario::Launcher => ConnectionSurface::Launcher,
         Scenario::Settings => ConnectionSurface::Settings,
+        Scenario::SettingsOverlay => ConnectionSurface::Workbench,
         _ if connection_transfer => ConnectionSurface::Transfer,
         _ => ConnectionSurface::Workbench,
     };
+    if matches!(capture.scenario, Scenario::SettingsOverlay) {
+        snapshot.connection_settings_overlay = snapshot.selected_connection;
+    }
     if matches!(capture.scenario, Scenario::Workbench) && capture.size.0 <= 1024 {
         snapshot.workbench.narrow_tab = WorkbenchTab::Subscribe;
     }
@@ -289,6 +304,7 @@ fn workspace_for(scenario: Scenario) -> Workspace {
         Scenario::Launcher
         | Scenario::Workbench
         | Scenario::Settings
+        | Scenario::SettingsOverlay
         | Scenario::MessageTransfer => Workspace::Connections,
         Scenario::Scripts => Workspace::Scripts,
         Scenario::Plugins

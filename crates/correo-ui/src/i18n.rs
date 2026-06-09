@@ -136,7 +136,6 @@ impl I18n {
         self.text(match reason {
             ConnectDisabledReason::AlreadyConnected => "disabled-already-connected",
             ConnectDisabledReason::MissingHost => "disabled-missing-host",
-            ConnectDisabledReason::MissingSecret => "disabled-missing-secret",
             ConnectDisabledReason::Busy => "disabled-busy",
         })
     }
@@ -158,7 +157,6 @@ impl I18n {
             KeyringState::Available => "keyring-available",
             KeyringState::Locked => "keyring-locked",
             KeyringState::Unavailable => "keyring-unavailable",
-            KeyringState::MigrationRequired => "keyring-migration-required",
         })
     }
 

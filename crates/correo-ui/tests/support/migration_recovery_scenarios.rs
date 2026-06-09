@@ -190,7 +190,7 @@ fn review_warnings(recovery: &mut MigrationRecoverySnapshot) {
     recovery.warnings = vec![
         MigrationRecoveryWarning::new(
             MigrationRecoveryWarningKind::SecretSkipped,
-            "2 connection secret(s) will need manual restore before Connect is enabled.",
+            "2 connection secret(s) were skipped during migration.",
         ),
         MigrationRecoveryWarning::new(
             MigrationRecoveryWarningKind::UnsupportedLegacyField,

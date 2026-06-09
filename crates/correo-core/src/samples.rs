@@ -30,7 +30,6 @@ pub fn sample_snapshot(theme_mode: ThemeMode) -> AppSnapshot {
     snapshot.diagnostics = vec![
         Diagnostic::warning("Old plugin state was reinitialized from bundled manifests."),
         Diagnostic::info("Local Broker accepted a synthetic connection snapshot."),
-        Diagnostic::warning("QA TLS needs a restored secret before connecting."),
     ];
     snapshot.global_settings = sample_global_settings();
     snapshot.plugins = sample_plugins();
@@ -45,7 +44,7 @@ pub fn sample_snapshot(theme_mode: ThemeMode) -> AppSnapshot {
 
 fn sample_connection(name: &str, endpoint: &str, state: ConnectionState) -> ConnectionSummary {
     let badges = match name {
-        "QA TLS" => vec![ConnectionBadge::Tls, ConnectionBadge::KeyringWarning],
+        "QA TLS" => vec![ConnectionBadge::Tls],
         "Staging MQTT5" => vec![ConnectionBadge::Tls, ConnectionBadge::Lwt],
         "Edge Lab" => vec![ConnectionBadge::Proxy],
         _ => vec![],
@@ -53,7 +52,6 @@ fn sample_connection(name: &str, endpoint: &str, state: ConnectionState) -> Conn
     let disabled_reason = match state {
         ConnectionState::Connected => Some(ConnectDisabledReason::AlreadyConnected),
         ConnectionState::Reconnecting => Some(ConnectDisabledReason::Busy),
-        _ if name == "QA TLS" => Some(ConnectDisabledReason::MissingSecret),
         _ => None,
     };
 
@@ -76,7 +74,7 @@ fn sample_connection(name: &str, endpoint: &str, state: ConnectionState) -> Conn
             "Local Broker" => "Connected, 2 min uptime",
             "Staging MQTT5" => "Last error: TLS handshake failed",
             "Edge Lab" => "Reconnect scheduled in 14 s",
-            _ => "Ready when keyring unlocks",
+            _ => "Ready",
         }
         .to_owned(),
     }
@@ -368,7 +366,7 @@ fn sample_transfer() -> TransferSurfaceSnapshot {
             )),
         },
         warnings: vec![
-            "One imported connection needs keyring migration".to_owned(),
+            "Imported connection auth metadata excludes secret values".to_owned(),
             "Plain export excludes sensitive authentication values".to_owned(),
         ],
     }
