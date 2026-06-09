@@ -9,6 +9,7 @@ members = [
     "crates/correo-storage",
     "crates/correo-ui",
     "plugins/xml-format",
+    "plugins/correo-plugins-contains-string-validator",
     "xtask",
 ]
 resolver = "2"

@@ -1303,6 +1303,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "correo-plugins-contains-string-validator"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "correo-scripting"
 version = "0.1.0"
 dependencies = [
