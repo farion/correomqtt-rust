@@ -1,4 +1,6 @@
-use correo_core::{AppCommand, AppCommandSender, AppSnapshot, ConnectionState, ThemeMode};
+use correo_core::{
+    AppCommand, AppCommandSender, AppSnapshot, GlobalSettingField, SettingsOption, ThemeMode,
+};
 use egui::{Align, ComboBox, Layout, RichText, Ui};
 
 use crate::i18n::I18n;
@@ -7,31 +9,22 @@ use crate::theme::ThemeTokens;
 pub fn command_bar(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
-    tokens: ThemeTokens,
+    _tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
     ui.horizontal_centered(|ui| {
-        ui.label(
-            RichText::new(i18n.workspace_label(snapshot.active_workspace))
-                .strong()
-                .size(16.0),
-        );
-        ui.separator();
-        if let Some(connection) = snapshot.selected_connection() {
-            ui.label(RichText::new(&connection.name).color(tokens.text_primary));
-            ui.label(
-                RichText::new(i18n.connection_state_label(connection.state))
-                    .color(state_color(connection.state, tokens)),
-            );
-        } else {
-            ui.label(
-                RichText::new(i18n.text("connection-no-selected")).color(tokens.text_secondary),
-            );
-        }
+        ui.label(RichText::new("CorreoMQTT").strong().size(16.0));
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             theme_selector(ui, snapshot.theme_mode, commands, i18n);
+            language_selector(
+                ui,
+                &snapshot.global_settings.language,
+                &snapshot.global_settings.language_options,
+                commands,
+                i18n,
+            );
         });
     });
 }
@@ -48,14 +41,64 @@ fn theme_selector(ui: &mut Ui, current: ThemeMode, commands: &AppCommandSender, 
         });
     if selected != current {
         let _ = commands.send(AppCommand::SetThemeMode(selected));
+        let _ = commands.send(AppCommand::SaveGlobalSettings);
     }
 }
 
-fn state_color(state: ConnectionState, tokens: ThemeTokens) -> egui::Color32 {
-    match state {
-        ConnectionState::Connected => tokens.success,
-        ConnectionState::Connecting | ConnectionState::Reconnecting => tokens.warning,
-        ConnectionState::Error => tokens.danger,
-        ConnectionState::Disconnected => tokens.text_secondary,
+fn language_selector(
+    ui: &mut Ui,
+    current: &str,
+    options: &[SettingsOption],
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    let mut selected = current.to_owned();
+    ComboBox::from_id_salt("header-language")
+        .selected_text(language_label(current, options, i18n))
+        .width(124.0)
+        .show_ui(ui, |ui| {
+            for option in options {
+                let label = i18n.language_option_label(&option.id, &option.label);
+                ui.selectable_value(&mut selected, option.id.clone(), label);
+            }
+        });
+    if selected != current {
+        let _ = commands.send(AppCommand::UpdateGlobalSetting {
+            field: GlobalSettingField::Language,
+            value: selected,
+        });
+        let _ = commands.send(AppCommand::SaveGlobalSettings);
+    }
+}
+
+fn language_label(current: &str, options: &[SettingsOption], i18n: &I18n) -> String {
+    options
+        .iter()
+        .find(|option| option.id == current)
+        .map(|option| i18n.language_option_label(&option.id, &option.label))
+        .unwrap_or_else(|| current.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn language_label_uses_available_option_labels() {
+        let options = vec![
+            SettingsOption {
+                id: "system".to_owned(),
+                label: "System".to_owned(),
+            },
+            SettingsOption {
+                id: "de_DE".to_owned(),
+                label: "Deutsch".to_owned(),
+            },
+        ];
+        let i18n = I18n::new("en_US");
+
+        assert_eq!(language_label("system", &options, &i18n), "System");
+        assert_eq!(language_label("de_DE", &options, &i18n), "Deutsch");
+        assert_eq!(language_label("custom", &options, &i18n), "custom");
     }
 }
