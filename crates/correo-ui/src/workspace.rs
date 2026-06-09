@@ -65,6 +65,9 @@ fn connections(
             skeletons::connection_transfer(ui, snapshot, tokens, commands)
         }
     }
+    if snapshot.connection_surface == ConnectionSurface::Workbench {
+        connection_settings::overlay(ui, snapshot, tokens, commands, i18n);
+    }
 }
 
 fn launcher_detail(

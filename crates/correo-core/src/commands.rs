@@ -19,6 +19,11 @@ pub enum AppCommand {
     SetThemeMode(ThemeMode),
     SearchConnections(String),
     SelectConnection(ConnectionId),
+    MoveConnection {
+        connection_id: ConnectionId,
+        target_connection_id: ConnectionId,
+        after: bool,
+    },
     OpenConnectionLauncher,
     OpenConnectionWorkbench(ConnectionId),
     OpenConnectionSettings(ConnectionId),

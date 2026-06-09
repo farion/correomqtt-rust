@@ -2,7 +2,7 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionSecretField, ConnectionSettingField,
     ConnectionSettingFlag, ConnectionSettingsSnapshot, ConnectionSettingsTab, KeyringState,
 };
-use egui::{Button, RichText, TextEdit, Ui, Window};
+use egui::{Button, RichText, ScrollArea, TextEdit, Ui, Window};
 
 use crate::{i18n::I18n, theme::ThemeTokens};
 
@@ -41,6 +41,48 @@ pub fn show(
 
     if settings.delete_confirmation_open {
         delete_confirmation(ui, settings, commands, i18n);
+    }
+}
+
+pub fn overlay(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    let Some(editor_id) = snapshot.connection_settings_overlay else {
+        return;
+    };
+    if snapshot.selected_connection != Some(editor_id) {
+        return;
+    }
+
+    let title = snapshot
+        .selected_connection()
+        .map(|connection| format!("{} {}", i18n.text("connection-edit-title"), connection.name))
+        .unwrap_or_else(|| i18n.text("connection-edit-tooltip"));
+    let mut open = true;
+    Window::new(title)
+        .id(egui::Id::new((
+            "connection-settings-overlay",
+            editor_id.to_string(),
+        )))
+        .collapsible(false)
+        .resizable(true)
+        .default_size(egui::vec2(680.0, 580.0))
+        .open(&mut open)
+        .show(ui.ctx(), |ui| {
+            ScrollArea::vertical()
+                .id_salt("connection-settings-overlay-body")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    show(ui, snapshot, tokens, commands, i18n);
+                });
+        });
+
+    if !open {
+        send(commands, AppCommand::DiscardConnectionSettings);
     }
 }
 

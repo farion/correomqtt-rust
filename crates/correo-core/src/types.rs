@@ -23,6 +23,8 @@ pub struct AppSnapshot {
     pub connection_count: usize,
     pub connection_filter: String,
     pub connection_settings: ConnectionSettingsSnapshot,
+    #[serde(default)]
+    pub connection_settings_overlay: Option<ConnectionId>,
     pub connection_surface: ConnectionSurface,
     pub connections: Vec<ConnectionSummary>,
     pub diagnostics: Vec<Diagnostic>,
@@ -44,6 +46,7 @@ impl AppSnapshot {
             connection_count: 0,
             connection_filter: String::new(),
             connection_settings: ConnectionSettingsSnapshot::default(),
+            connection_settings_overlay: None,
             connection_surface: ConnectionSurface::Launcher,
             connections: Vec::new(),
             diagnostics: Vec::new(),

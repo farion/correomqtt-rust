@@ -90,7 +90,15 @@ impl AppModel {
             AppCommand::SelectWorkspace(workspace) => self.snapshot.active_workspace = workspace,
             AppCommand::SetThemeMode(mode) => self.set_theme_mode(mode),
             AppCommand::SearchConnections(filter) => self.snapshot.connection_filter = filter,
-            AppCommand::SelectConnection(id) => self.snapshot.selected_connection = Some(id),
+            AppCommand::SelectConnection(id) => {
+                self.snapshot.selected_connection = Some(id);
+                self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
+            }
+            AppCommand::MoveConnection {
+                connection_id,
+                target_connection_id,
+                after,
+            } => self.move_connection(connection_id, target_connection_id, after),
             AppCommand::OpenConnectionLauncher => {
                 self.snapshot.connection_surface = crate::ConnectionSurface::Launcher;
             }
@@ -102,7 +110,8 @@ impl AppModel {
             AppCommand::OpenConnectionSettings(id) | AppCommand::EditConnection(id) => {
                 self.snapshot.selected_connection = Some(id);
                 self.load_connection_settings(id);
-                self.snapshot.connection_surface = crate::ConnectionSurface::Settings;
+                self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
+                self.snapshot.connection_settings_overlay = Some(id);
             }
             AppCommand::Reconnect(id) => self.record_action(id, "Reconnect requested"),
             AppCommand::Disconnect(id) => self.disconnect(id),
@@ -377,6 +386,9 @@ impl Default for AppModel {
     }
 }
 
+#[cfg(test)]
+#[path = "model/connection_list_tests.rs"]
+mod connection_list_tests;
 #[cfg(test)]
 #[path = "model/connection_settings_tests.rs"]
 mod connection_settings_tests;

@@ -2,33 +2,48 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectDisabledReason, ConnectionBadge,
     ConnectionState, ConnectionSummary,
 };
-use egui::{Button, RichText, TextEdit, Ui};
+use egui::{
+    Button, CornerRadius, CursorIcon, Layout, RichText, ScrollArea, Sense, Stroke, StrokeKind,
+    TextEdit, Ui, UiBuilder,
+};
+use egui_phosphor::regular;
 
+use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
+
+const ROW_HEIGHT: f32 = 96.0;
+const ROW_GAP: f32 = 6.0;
+const HANDLE_WIDTH: f32 = 18.0;
+const ACTION_WIDTH: f32 = 104.0;
 
 pub fn panel(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     ui.horizontal(|ui| {
-        ui.heading("Connections");
+        ui.heading(i18n.text("connections-heading"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.vertical(|ui| {
-                if ui.button("Add").on_hover_text("Add connection").clicked() {
+                if ui
+                    .button(i18n.text("common-add-connection"))
+                    .on_hover_text(i18n.text("common-add-connection"))
+                    .clicked()
+                {
                     send(commands, AppCommand::AddConnection);
                 }
                 if ui
-                    .button("Import .cqc")
-                    .on_hover_text("Import connection profiles")
+                    .button(i18n.text("common-import-cqc"))
+                    .on_hover_text(i18n.text("connection-import-tooltip"))
                     .clicked()
                 {
                     send(commands, AppCommand::ImportConnections);
                 }
                 if ui
-                    .button("Export .cqc")
-                    .on_hover_text("Export connection profiles")
+                    .button(i18n.text("common-export-cqc"))
+                    .on_hover_text(i18n.text("connection-export-tooltip"))
                     .clicked()
                 {
                     send(commands, AppCommand::ExportConnections);
@@ -41,7 +56,7 @@ pub fn panel(
     let mut filter = snapshot.connection_filter.clone();
     let response = ui.add(
         TextEdit::singleline(&mut filter)
-            .hint_text("Search")
+            .hint_text(i18n.text("common-search"))
             .desired_width(f32::INFINITY),
     );
     if response.changed() {
@@ -49,9 +64,16 @@ pub fn panel(
     }
 
     ui.add_space(8.0);
-    for connection in snapshot.filtered_connections() {
-        connection_row(ui, connection, snapshot, tokens, commands);
-    }
+    let connections = snapshot.filtered_connections();
+    ScrollArea::vertical()
+        .id_salt("connection-list")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            for connection in connections {
+                connection_row(ui, connection, snapshot, tokens, commands, i18n);
+            }
+        });
 }
 
 fn connection_row(
@@ -60,53 +82,147 @@ fn connection_row(
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     let selected = snapshot.selected_connection == Some(connection.id);
-    let response = ui.selectable_label(selected, RichText::new(&connection.name).strong());
-    if response.clicked() {
+    let row_width = ui.available_width();
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(row_width, ROW_HEIGHT), Sense::click_and_drag());
+    let response = response.on_hover_cursor(CursorIcon::PointingHand);
+    response.dnd_set_drag_payload(connection.id);
+
+    let fill = if selected {
+        tokens.accent_selected_bg
+    } else if response.hovered() || response.contains_pointer() {
+        tokens.panel_raised
+    } else {
+        tokens.panel_bg
+    };
+    let stroke = if selected {
+        tokens.accent
+    } else {
+        tokens.border
+    };
+    ui.painter().rect_filled(rect, CornerRadius::same(4), fill);
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(4),
+        Stroke::new(1.0, stroke),
+        StrokeKind::Inside,
+    );
+
+    let content_rect = rect.shrink(8.0);
+    let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+    let button_clicked = row_contents(&mut content_ui, connection, tokens, commands, i18n);
+
+    if let Some(dropped) = response.dnd_release_payload() {
+        let connection_id = *dropped;
+        if connection_id != connection.id {
+            let after = response
+                .interact_pointer_pos()
+                .or_else(|| ui.ctx().pointer_interact_pos())
+                .is_some_and(|pointer| pointer.y > response.rect.center().y);
+            send(
+                commands,
+                AppCommand::MoveConnection {
+                    connection_id,
+                    target_connection_id: connection.id,
+                    after,
+                },
+            );
+        }
+    }
+
+    if response.clicked() && !button_clicked {
         send(commands, AppCommand::SelectConnection(connection.id));
     }
 
+    ui.add_space(ROW_GAP);
+}
+
+fn row_contents(
+    ui: &mut Ui,
+    connection: &ConnectionSummary,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) -> bool {
+    let mut button_clicked = false;
     ui.horizontal(|ui| {
-        ui.label(RichText::new(&connection.endpoint).color(tokens.text_secondary));
-        ui.label(
-            RichText::new(connection.state.label()).color(state_color(connection.state, tokens)),
+        ui.set_height(ROW_HEIGHT - 16.0);
+        ui.add_sized(
+            [HANDLE_WIDTH, ROW_HEIGHT - 16.0],
+            egui::Label::new(RichText::new(regular::DOTS_SIX_VERTICAL).color(tokens.text_disabled)),
+        )
+        .on_hover_text(i18n.text("connection-drag-reorder"));
+
+        let info_width = (ui.available_width() - ACTION_WIDTH - 8.0).max(96.0);
+        ui.allocate_ui(egui::vec2(info_width, ROW_HEIGHT - 16.0), |ui| {
+            connection_info(ui, connection, tokens, i18n);
+        });
+
+        ui.allocate_ui_with_layout(
+            egui::vec2(ACTION_WIDTH, ROW_HEIGHT - 16.0),
+            Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                if edit_button(ui, i18n).clicked() {
+                    send(commands, AppCommand::OpenConnectionSettings(connection.id));
+                    button_clicked = true;
+                }
+                if connection.state != ConnectionState::Connected {
+                    let connect = ui.add_enabled(
+                        connection.can_connect(),
+                        Button::new(i18n.text("common-connect")),
+                    );
+                    if connect.clicked() {
+                        send(commands, AppCommand::Connect(connection.id));
+                        button_clicked = true;
+                    }
+                    if !connection.can_connect() {
+                        connect
+                            .on_hover_text(i18n.disabled_reason_label(disabled_reason(connection)));
+                    }
+                }
+            },
         );
-        for badge in &connection.badges {
-            ui.label(RichText::new(badge_label(*badge)).color(tokens.accent));
+    });
+    button_clicked
+}
+
+fn connection_info(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTokens, i18n: &I18n) {
+    ui.vertical(|ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(&connection.name).strong());
+            ui.label(
+                RichText::new(i18n.connection_state_label(connection.state))
+                    .color(state_color(connection.state, tokens)),
+            );
+            for badge in &connection.badges {
+                ui.label(RichText::new(badge_label(*badge)).color(tokens.accent));
+            }
+        });
+        ui.label(RichText::new(&connection.endpoint).color(tokens.text_secondary));
+        if let Some(reason) = visible_disabled_reason(connection) {
+            ui.label(RichText::new(i18n.disabled_reason_label(reason)).color(tokens.warning));
         }
     });
-    ui.horizontal(|ui| {
-        if connection.state == ConnectionState::Connected {
-            if ui.button("Open").clicked() {
-                send(commands, AppCommand::OpenConnectionWorkbench(connection.id));
-            }
-        } else {
-            let connect = ui.add_enabled(connection.can_connect(), Button::new("Connect"));
-            if connect.clicked() {
-                send(commands, AppCommand::Connect(connection.id));
-            }
-            if !connection.can_connect() {
-                connect.on_hover_text(disabled_reason(connection).label());
-            }
-        }
-        if ui.button("Edit").clicked() {
-            send(commands, AppCommand::OpenConnectionSettings(connection.id));
-        }
-        if ui.button("Duplicate").clicked() {
-            send(commands, AppCommand::DuplicateConnection(connection.id));
-        }
-    });
-    if let Some(reason) = connection.disabled_reason {
-        ui.label(RichText::new(reason.label()).color(tokens.warning));
-    }
-    ui.add_space(8.0);
+}
+
+fn edit_button(ui: &mut Ui, i18n: &I18n) -> egui::Response {
+    ui.add(Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(28.0, 24.0)))
+        .on_hover_text(i18n.text("connection-edit-tooltip"))
 }
 
 fn disabled_reason(connection: &ConnectionSummary) -> ConnectDisabledReason {
     connection
         .disabled_reason
         .unwrap_or(ConnectDisabledReason::Busy)
+}
+
+fn visible_disabled_reason(connection: &ConnectionSummary) -> Option<ConnectDisabledReason> {
+    connection
+        .disabled_reason
+        .filter(|reason| *reason != ConnectDisabledReason::AlreadyConnected)
 }
 
 fn badge_label(badge: ConnectionBadge) -> &'static str {

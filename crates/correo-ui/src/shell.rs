@@ -135,7 +135,7 @@ impl CorreoUi {
                 .frame(sidebar_frame(tokens))
                 .show(context, |ui| match snapshot.active_workspace {
                     Workspace::Connections => {
-                        connection_launcher::panel(ui, &snapshot, tokens, commands);
+                        connection_launcher::panel(ui, &snapshot, tokens, commands, i18n);
                     }
                     active_workspace => {
                         workspace::sidebar(ui, &snapshot, active_workspace, tokens, commands, i18n);

@@ -12,6 +12,7 @@ impl AppModel {
         self.snapshot.active_workspace = crate::Workspace::Connections;
         self.snapshot.selected_connection = None;
         self.snapshot.connection_surface = crate::ConnectionSurface::Settings;
+        self.snapshot.connection_settings_overlay = None;
         self.snapshot.connection_settings = new_connection_settings();
         self.push_diagnostic(Diagnostic::info("New connection draft opened."));
     }
@@ -82,6 +83,7 @@ impl AppModel {
             self.connection_settings.insert(id, settings.clone());
             self.snapshot.connection_settings = settings.clone();
             self.update_connection_summary(id, &settings);
+            self.snapshot.connection_settings_overlay = None;
             self.push_diagnostic(Diagnostic::info("Connection settings save command queued."));
             return;
         }
@@ -108,13 +110,45 @@ impl AppModel {
             } else {
                 self.snapshot.connection_settings.dirty = false;
             }
+            self.snapshot.connection_settings_overlay = None;
             self.push_diagnostic(Diagnostic::info("Connection settings discarded."));
             return;
         }
 
         self.snapshot.connection_settings = ConnectionSettingsSnapshot::default();
+        self.snapshot.connection_settings_overlay = None;
         self.snapshot.connection_surface = crate::ConnectionSurface::Launcher;
         self.push_diagnostic(Diagnostic::info("New connection draft discarded."));
+    }
+
+    pub(super) fn move_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        target_connection_id: ConnectionId,
+        after: bool,
+    ) {
+        if connection_id == target_connection_id {
+            return;
+        }
+
+        let Some(from_index) = self.connection_index(connection_id) else {
+            return;
+        };
+        let Some(target_index) = self.connection_index(target_connection_id) else {
+            return;
+        };
+
+        let connection = self.snapshot.connections.remove(from_index);
+        let mut insert_index = if from_index < target_index {
+            target_index.saturating_sub(1)
+        } else {
+            target_index
+        };
+        if after {
+            insert_index += 1;
+        }
+        let insert_index = insert_index.min(self.snapshot.connections.len());
+        self.snapshot.connections.insert(insert_index, connection);
     }
 
     pub(super) fn update_connection_setting(
