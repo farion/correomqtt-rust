@@ -298,6 +298,13 @@ fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
 
 fn badges(connection: &ConnectionConfig) -> Vec<ConnectionBadge> {
     let mut badges = Vec::new();
+    if connection
+        .username
+        .as_ref()
+        .is_some_and(|name| !name.trim().is_empty())
+    {
+        badges.push(ConnectionBadge::Credentials);
+    }
     if connection.ssl != TlsSsl::Off {
         badges.push(ConnectionBadge::Tls);
     }

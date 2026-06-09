@@ -2,20 +2,28 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionBadge, ConnectionState, ConnectionSummary,
 };
 use egui::{
-    Button, CornerRadius, CursorIcon, Layout, RichText, ScrollArea, Sense, Stroke, StrokeKind,
-    TextEdit, Ui, UiBuilder,
+    Button, CornerRadius, CursorIcon, Label, Layout, Response, RichText, ScrollArea, Sense, Stroke,
+    StrokeKind, TextEdit, Ui, UiBuilder,
 };
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
-use crate::widgets::with_icon_button_padding;
 use crate::widgets::{disable_tile_text_selection, tile_list_content_width};
 
-const ROW_HEIGHT: f32 = 96.0;
+const ROW_HEIGHT: f32 = 66.0;
 const ROW_GAP: f32 = 6.0;
-const HANDLE_WIDTH: f32 = 18.0;
-const ACTION_WIDTH: f32 = 104.0;
+const ROW_PADDING_X: f32 = 8.0;
+const ROW_PADDING_Y: f32 = 5.0;
+const ROW_LINE_GAP: f32 = 2.0;
+const STATUS_ICON_WIDTH: f32 = 26.0;
+const STATUS_ICON_SIZE: f32 = 21.0;
+const FEATURE_ICON_WIDTH: f32 = 19.0;
+const FEATURE_ICON_SIZE: f32 = 17.0;
+const FEATURE_ICON_GAP: f32 = 2.0;
+const ACTION_BUTTON_SIDE: f32 = 30.0;
+const ACTION_ICON_SIZE: f32 = 16.0;
+const ACTION_BUTTON_GAP: f32 = 4.0;
 
 pub fn panel(
     ui: &mut Ui,
@@ -143,7 +151,7 @@ fn connection_row(
         );
     }
 
-    let content_rect = rect.shrink(8.0);
+    let content_rect = rect.shrink2(egui::vec2(ROW_PADDING_X, ROW_PADDING_Y));
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
     disable_tile_text_selection(&mut content_ui);
     let button_clicked = row_contents(&mut content_ui, connection, tokens, commands, i18n);
@@ -181,73 +189,219 @@ fn row_contents(
     i18n: &I18n,
 ) -> bool {
     let mut button_clicked = false;
+    let content_height = ROW_HEIGHT - (ROW_PADDING_Y * 2.0);
     ui.horizontal(|ui| {
-        ui.set_height(ROW_HEIGHT - 16.0);
+        ui.spacing_mut().item_spacing.x = 8.0;
+        ui.set_height(content_height);
         ui.add_sized(
-            [HANDLE_WIDTH, ROW_HEIGHT - 16.0],
-            egui::Label::new(RichText::new(regular::DOTS_SIX_VERTICAL).color(tokens.text_disabled)),
+            [STATUS_ICON_WIDTH, content_height],
+            Label::new(
+                RichText::new(state_icon(connection.state))
+                    .size(STATUS_ICON_SIZE)
+                    .color(state_color(connection.state, tokens)),
+            ),
         )
-        .on_hover_text(i18n.text("connection-drag-reorder"));
+        .on_hover_text(i18n.connection_state_label(connection.state));
 
-        let info_width = (ui.available_width() - ACTION_WIDTH - 8.0).max(96.0);
-        ui.allocate_ui(egui::vec2(info_width, ROW_HEIGHT - 16.0), |ui| {
-            connection_info(ui, connection, tokens, i18n);
+        let info_width = ui.available_width().max(96.0);
+        ui.allocate_ui(egui::vec2(info_width, content_height), |ui| {
+            button_clicked = connection_info(ui, connection, tokens, commands, i18n);
         });
-
-        ui.allocate_ui_with_layout(
-            egui::vec2(ACTION_WIDTH, ROW_HEIGHT - 16.0),
-            Layout::right_to_left(egui::Align::Center),
-            |ui| {
-                if edit_button(ui, i18n).clicked() {
-                    send(commands, AppCommand::OpenConnectionSettings(connection.id));
-                    button_clicked = true;
-                }
-                if connection.state != ConnectionState::Connected {
-                    let connect = ui.add_enabled(
-                        connection.can_connect(),
-                        Button::new(i18n.text("common-connect")),
-                    );
-                    if connect.clicked() {
-                        send(commands, AppCommand::Connect(connection.id));
-                        button_clicked = true;
-                    }
-                }
-            },
-        );
     });
     button_clicked
 }
 
-fn connection_info(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTokens, i18n: &I18n) {
+fn connection_info(
+    ui: &mut Ui,
+    connection: &ConnectionSummary,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) -> bool {
+    let mut button_clicked = false;
+    let line_height = ((ui.available_height() - ROW_LINE_GAP) / 2.0).max(20.0);
     ui.vertical(|ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(&connection.name).strong());
-            ui.label(
-                RichText::new(i18n.connection_state_label(connection.state))
-                    .color(state_color(connection.state, tokens)),
-            );
-            for badge in &connection.badges {
-                ui.label(RichText::new(badge_label(*badge)).color(tokens.accent));
+        ui.spacing_mut().item_spacing.y = ROW_LINE_GAP;
+        connection_title_row(ui, connection, tokens, line_height);
+        if connection_endpoint_row(ui, connection, tokens, commands, i18n, line_height) {
+            button_clicked = true;
+        }
+    });
+    button_clicked
+}
+
+fn connection_title_row(
+    ui: &mut Ui,
+    connection: &ConnectionSummary,
+    tokens: ThemeTokens,
+    line_height: f32,
+) {
+    let features = feature_icons(connection);
+    let feature_width = feature_group_width(features.len());
+    ui.horizontal(|ui| {
+        ui.set_height(line_height);
+        let name_width = (ui.available_width() - feature_width - 6.0).max(32.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(name_width, line_height),
+            Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.add(Label::new(RichText::new(&connection.name).strong()).truncate())
+                    .on_hover_text(&connection.name);
+            },
+        );
+        ui.allocate_ui(egui::vec2(feature_width, line_height), |ui| {
+            ui.spacing_mut().item_spacing.x = FEATURE_ICON_GAP;
+            for feature in features {
+                feature_icon(ui, feature, tokens, line_height);
             }
         });
-        ui.label(RichText::new(&connection.endpoint).color(tokens.text_secondary));
     });
 }
 
-fn edit_button(ui: &mut Ui, i18n: &I18n) -> egui::Response {
-    with_icon_button_padding(ui, |ui| {
-        ui.add(
-            Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(
-                crate::theme::CONTROL_HEIGHT,
-                crate::theme::CONTROL_HEIGHT,
-            )),
-        )
-    })
-    .on_hover_text(i18n.text("connection-edit-tooltip"))
+fn connection_endpoint_row(
+    ui: &mut Ui,
+    connection: &ConnectionSummary,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+    line_height: f32,
+) -> bool {
+    let mut button_clicked = false;
+    let action_width = (ACTION_BUTTON_SIDE * 2.0) + ACTION_BUTTON_GAP;
+    let endpoint = endpoint_label(connection);
+
+    ui.horizontal(|ui| {
+        ui.set_height(line_height);
+        let endpoint_width = (ui.available_width() - action_width - 6.0).max(32.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(endpoint_width, line_height),
+            Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.add(
+                    Label::new(RichText::new(&endpoint).color(tokens.text_secondary)).truncate(),
+                )
+                .on_hover_text(&connection.endpoint);
+            },
+        );
+
+        ui.allocate_ui_with_layout(
+            egui::vec2(action_width, line_height),
+            Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().item_spacing.x = ACTION_BUTTON_GAP;
+                if edit_button(ui, i18n).clicked() {
+                    send(commands, AppCommand::OpenConnectionSettings(connection.id));
+                    button_clicked = true;
+                }
+                if connect_button(ui, connection, i18n).clicked() {
+                    send(commands, AppCommand::Connect(connection.id));
+                    button_clicked = true;
+                }
+            },
+        );
+    });
+
+    button_clicked
 }
 
-fn badge_label(badge: ConnectionBadge) -> &'static str {
-    badge.label()
+fn connect_button(ui: &mut Ui, connection: &ConnectionSummary, i18n: &I18n) -> Response {
+    let tooltip = if connection.can_connect() {
+        i18n.text("common-connect")
+    } else {
+        i18n.disabled_reason_label(disabled_reason(connection))
+    };
+    icon_button(ui, regular::PLUG, connection.can_connect()).on_hover_text(tooltip)
+}
+
+fn edit_button(ui: &mut Ui, i18n: &I18n) -> Response {
+    icon_button(ui, regular::PENCIL_SIMPLE, true)
+        .on_hover_text(i18n.text("connection-edit-tooltip"))
+}
+
+fn icon_button(ui: &mut Ui, icon: &'static str, enabled: bool) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = egui::vec2(5.0, 4.0);
+        ui.add_enabled(
+            enabled,
+            Button::new(RichText::new(icon).size(ACTION_ICON_SIZE))
+                .min_size(egui::vec2(ACTION_BUTTON_SIDE, ACTION_BUTTON_SIDE)),
+        )
+    })
+    .inner
+}
+
+fn feature_icon(ui: &mut Ui, feature: FeatureIcon, tokens: ThemeTokens, line_height: f32) {
+    ui.add_sized(
+        [FEATURE_ICON_WIDTH, line_height],
+        Label::new(
+            RichText::new(feature.icon)
+                .size(FEATURE_ICON_SIZE)
+                .color(tokens.accent),
+        ),
+    )
+    .on_hover_text(feature.label);
+}
+
+fn feature_icons(connection: &ConnectionSummary) -> Vec<FeatureIcon> {
+    let mut icons = vec![mqtt_feature_icon(&connection.mqtt_version)];
+    for badge in &connection.badges {
+        if let Some(icon) = badge_feature_icon(*badge) {
+            icons.push(icon);
+        }
+    }
+    icons
+}
+
+fn badge_feature_icon(badge: ConnectionBadge) -> Option<FeatureIcon> {
+    match badge {
+        ConnectionBadge::Credentials => Some(FeatureIcon::new(regular::KEY, "Credentials set")),
+        ConnectionBadge::Tls => Some(FeatureIcon::new(regular::LOCK_KEY, "TLS/SSL")),
+        ConnectionBadge::Proxy => Some(FeatureIcon::new(regular::SUBWAY, "Tunnel")),
+        ConnectionBadge::Lwt => None,
+    }
+}
+
+fn mqtt_feature_icon(version: &str) -> FeatureIcon {
+    if version.contains('5') {
+        FeatureIcon::new(regular::NUMBER_CIRCLE_FIVE, "MQTT 5")
+    } else {
+        FeatureIcon::new(regular::NUMBER_CIRCLE_THREE, "MQTT 3")
+    }
+}
+
+fn feature_group_width(count: usize) -> f32 {
+    if count == 0 {
+        0.0
+    } else {
+        (count as f32 * FEATURE_ICON_WIDTH) + ((count - 1) as f32 * FEATURE_ICON_GAP)
+    }
+}
+
+fn endpoint_label(connection: &ConnectionSummary) -> String {
+    if has_tunnel(connection) {
+        format!("via {} (tunnel)", connection.endpoint)
+    } else {
+        connection.endpoint.clone()
+    }
+}
+
+fn has_tunnel(connection: &ConnectionSummary) -> bool {
+    connection.badges.contains(&ConnectionBadge::Proxy)
+}
+
+fn state_icon(state: ConnectionState) -> &'static str {
+    match state {
+        ConnectionState::Connected
+        | ConnectionState::Connecting
+        | ConnectionState::Reconnecting => regular::WIFI_HIGH,
+        ConnectionState::Disconnected | ConnectionState::Error => regular::WIFI_SLASH,
+    }
+}
+
+fn disabled_reason(connection: &ConnectionSummary) -> correo_core::ConnectDisabledReason {
+    connection
+        .disabled_reason
+        .unwrap_or(correo_core::ConnectDisabledReason::Busy)
 }
 
 fn state_color(state: ConnectionState, tokens: ThemeTokens) -> egui::Color32 {
@@ -256,6 +410,58 @@ fn state_color(state: ConnectionState, tokens: ThemeTokens) -> egui::Color32 {
         ConnectionState::Connecting | ConnectionState::Reconnecting => tokens.warning,
         ConnectionState::Error => tokens.danger,
         ConnectionState::Disconnected => tokens.text_secondary,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FeatureIcon {
+    icon: &'static str,
+    label: &'static str,
+}
+
+impl FeatureIcon {
+    fn new(icon: &'static str, label: &'static str) -> Self {
+        Self { icon, label }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mqtt_feature_uses_number_circle_icons() {
+        assert_eq!(
+            mqtt_feature_icon("MQTT v5").icon,
+            regular::NUMBER_CIRCLE_FIVE
+        );
+        assert_eq!(
+            mqtt_feature_icon("MQTT 3.1.1").icon,
+            regular::NUMBER_CIRCLE_THREE
+        );
+    }
+
+    #[test]
+    fn badge_features_match_connection_tile_spec() {
+        assert_eq!(
+            badge_feature_icon(ConnectionBadge::Credentials)
+                .expect("credentials icon")
+                .icon,
+            regular::KEY
+        );
+        assert_eq!(
+            badge_feature_icon(ConnectionBadge::Tls)
+                .expect("tls icon")
+                .icon,
+            regular::LOCK_KEY
+        );
+        assert_eq!(
+            badge_feature_icon(ConnectionBadge::Proxy)
+                .expect("tunnel icon")
+                .icon,
+            regular::SUBWAY
+        );
+        assert!(badge_feature_icon(ConnectionBadge::Lwt).is_none());
     }
 }
 

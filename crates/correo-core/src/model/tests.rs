@@ -322,6 +322,7 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
     assert_eq!(first.name, "Synthetic Local Broker");
     assert_eq!(first.endpoint, "localhost:1883");
     assert_eq!(first.mqtt_version, "MQTT v5");
+    assert!(first.badges.contains(&ConnectionBadge::Credentials));
     assert!(first.badges.contains(&ConnectionBadge::Proxy));
     assert!(first.badges.contains(&ConnectionBadge::Lwt));
     assert_eq!(first.recent_subscriptions, 2);

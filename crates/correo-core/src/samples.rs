@@ -44,7 +44,7 @@ pub fn sample_snapshot(theme_mode: ThemeMode) -> AppSnapshot {
 
 fn sample_connection(name: &str, endpoint: &str, state: ConnectionState) -> ConnectionSummary {
     let badges = match name {
-        "QA TLS" => vec![ConnectionBadge::Tls],
+        "QA TLS" => vec![ConnectionBadge::Credentials, ConnectionBadge::Tls],
         "Staging MQTT5" => vec![ConnectionBadge::Tls, ConnectionBadge::Lwt],
         "Edge Lab" => vec![ConnectionBadge::Proxy],
         _ => vec![],

@@ -390,6 +390,9 @@ fn connection_summary(
 
 fn connection_badges(settings: &ConnectionSettingsSnapshot) -> Vec<ConnectionBadge> {
     let mut badges = Vec::new();
+    if !settings.username.trim().is_empty() || !settings.password.is_empty() {
+        badges.push(ConnectionBadge::Credentials);
+    }
     if settings.tls_mode != "No TLS/SSL" {
         badges.push(ConnectionBadge::Tls);
     }

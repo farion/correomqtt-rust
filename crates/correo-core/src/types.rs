@@ -202,6 +202,7 @@ impl ConnectionState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConnectionBadge {
+    Credentials,
     Tls,
     Proxy,
     Lwt,
@@ -210,8 +211,9 @@ pub enum ConnectionBadge {
 impl ConnectionBadge {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Credentials => "Credentials",
             Self::Tls => "TLS",
-            Self::Proxy => "Proxy",
+            Self::Proxy => "Tunnel",
             Self::Lwt => "LWT",
         }
     }
