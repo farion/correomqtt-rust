@@ -6,6 +6,9 @@ use egui::{Align, ComboBox, Layout, RichText, Ui};
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
 
+const APP_TITLE_BASE_SIZE: f32 = 16.0;
+const APP_TITLE_SIZE: f32 = APP_TITLE_BASE_SIZE * 1.5;
+
 pub fn command_bar(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
@@ -14,7 +17,7 @@ pub fn command_bar(
     i18n: &I18n,
 ) {
     ui.horizontal_centered(|ui| {
-        ui.label(RichText::new("CorreoMQTT").strong().size(16.0));
+        ui.label(RichText::new("CorreoMQTT").strong().size(APP_TITLE_SIZE));
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             theme_selector(ui, snapshot.theme_mode, commands, i18n);
@@ -100,5 +103,11 @@ mod tests {
         assert_eq!(language_label("system", &options, &i18n), "System");
         assert_eq!(language_label("de_DE", &options, &i18n), "Deutsch");
         assert_eq!(language_label("custom", &options, &i18n), "custom");
+    }
+
+    #[test]
+    fn app_title_font_size_is_scaled_by_one_and_a_half() {
+        assert_eq!(APP_TITLE_SIZE, 24.0);
+        assert_eq!(APP_TITLE_SIZE, APP_TITLE_BASE_SIZE * 1.5);
     }
 }
