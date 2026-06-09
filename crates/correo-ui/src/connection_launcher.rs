@@ -2,8 +2,8 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionBadge, ConnectionState, ConnectionSummary,
 };
 use egui::{
-    Button, CornerRadius, CursorIcon, Label, Layout, Response, RichText, ScrollArea, Sense, Stroke,
-    StrokeKind, TextEdit, Ui, UiBuilder,
+    Button, CornerRadius, CursorIcon, Label, Layout, Rect, Response, RichText, ScrollArea, Sense,
+    Stroke, StrokeKind, TextEdit, Ui, UiBuilder,
 };
 use egui_phosphor::regular;
 
@@ -17,8 +17,8 @@ use crate::widgets::{
 const ROW_HEIGHT: f32 = 66.0;
 const ROW_GAP: f32 = 6.0;
 const ROW_PADDING_X: f32 = 8.0;
-const ROW_PADDING_Y: f32 = 5.0;
-const ROW_LINE_GAP: f32 = 2.0;
+const ROW_PADDING_Y: f32 = 6.0;
+const ROW_LINE_GAP: f32 = 3.0;
 const STATUS_ICON_WIDTH: f32 = 26.0;
 const STATUS_ICON_SIZE: f32 = 21.0;
 const FEATURE_ICON_WIDTH: f32 = 19.0;
@@ -222,14 +222,19 @@ fn connection_info(
     i18n: &I18n,
 ) -> bool {
     let mut button_clicked = false;
-    let line_height = ((ui.available_height() - ROW_LINE_GAP) / 2.0).max(20.0);
-    ui.vertical(|ui| {
-        ui.spacing_mut().item_spacing.y = ROW_LINE_GAP;
-        connection_title_row(ui, connection, tokens, line_height);
-        if connection_endpoint_row(ui, connection, tokens, commands, i18n, line_height) {
-            button_clicked = true;
-        }
-    });
+    let rect = ui.max_rect();
+    let bottom_rect = Rect::from_min_max(
+        egui::pos2(rect.left(), rect.bottom() - ACTION_BUTTON_SIDE),
+        rect.right_bottom(),
+    );
+    let title_rect = Rect::from_min_max(
+        rect.left_top(),
+        egui::pos2(rect.right(), bottom_rect.top() - ROW_LINE_GAP),
+    );
+    connection_title_row(ui, connection, tokens, title_rect);
+    if connection_endpoint_row(ui, connection, tokens, commands, i18n, bottom_rect) {
+        button_clicked = true;
+    }
     button_clicked
 }
 
@@ -237,28 +242,37 @@ fn connection_title_row(
     ui: &mut Ui,
     connection: &ConnectionSummary,
     tokens: ThemeTokens,
-    line_height: f32,
+    rect: Rect,
 ) {
     let features = feature_icons(connection);
     let feature_width = feature_group_width(features.len());
-    ui.horizontal(|ui| {
-        ui.set_height(line_height);
-        let name_width = (ui.available_width() - feature_width - 6.0).max(32.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(name_width, line_height),
-            Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                ui.add(Label::new(RichText::new(&connection.name).strong()).truncate())
-                    .on_hover_text(&connection.name);
-            },
-        );
-        ui.allocate_ui(egui::vec2(feature_width, line_height), |ui| {
-            ui.spacing_mut().item_spacing.x = FEATURE_ICON_GAP;
-            for feature in features {
-                feature_icon(ui, feature, tokens, line_height);
-            }
-        });
-    });
+    let feature_rect = Rect::from_min_max(
+        egui::pos2((rect.right() - feature_width).max(rect.left()), rect.top()),
+        rect.right_bottom(),
+    );
+    let name_rect = Rect::from_min_max(
+        rect.left_top(),
+        egui::pos2((feature_rect.left() - 6.0).max(rect.left()), rect.bottom()),
+    );
+
+    let mut name_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(name_rect)
+            .layout(Layout::left_to_right(egui::Align::Center)),
+    );
+    name_ui
+        .add(Label::new(RichText::new(&connection.name).strong()).truncate())
+        .on_hover_text(&connection.name);
+
+    let mut feature_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(feature_rect)
+            .layout(Layout::left_to_right(egui::Align::Center)),
+    );
+    feature_ui.spacing_mut().item_spacing.x = FEATURE_ICON_GAP;
+    for feature in features {
+        feature_icon(&mut feature_ui, feature, tokens, rect.height());
+    }
 }
 
 fn connection_endpoint_row(
@@ -267,42 +281,43 @@ fn connection_endpoint_row(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
-    line_height: f32,
+    rect: Rect,
 ) -> bool {
     let mut button_clicked = false;
     let action_width = (ACTION_BUTTON_SIDE * 2.0) + ACTION_BUTTON_GAP;
     let endpoint = endpoint_label(connection);
+    let action_rect = Rect::from_min_max(
+        egui::pos2((rect.right() - action_width).max(rect.left()), rect.top()),
+        rect.right_bottom(),
+    );
+    let endpoint_rect = Rect::from_min_max(
+        rect.left_top(),
+        egui::pos2((action_rect.left() - 6.0).max(rect.left()), rect.bottom()),
+    );
 
-    ui.horizontal(|ui| {
-        ui.set_height(line_height);
-        let endpoint_width = (ui.available_width() - action_width - 6.0).max(32.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(endpoint_width, line_height),
-            Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                ui.add(
-                    Label::new(RichText::new(&endpoint).color(tokens.text_secondary)).truncate(),
-                )
-                .on_hover_text(&connection.endpoint);
-            },
-        );
+    let mut endpoint_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(endpoint_rect)
+            .layout(Layout::left_to_right(egui::Align::Center)),
+    );
+    endpoint_ui
+        .add(Label::new(RichText::new(&endpoint).color(tokens.text_secondary)).truncate())
+        .on_hover_text(&connection.endpoint);
 
-        ui.allocate_ui_with_layout(
-            egui::vec2(action_width, line_height),
-            Layout::right_to_left(egui::Align::Center),
-            |ui| {
-                ui.spacing_mut().item_spacing.x = ACTION_BUTTON_GAP;
-                if edit_button(ui, i18n).clicked() {
-                    send(commands, AppCommand::OpenConnectionSettings(connection.id));
-                    button_clicked = true;
-                }
-                if connect_button(ui, connection, i18n).clicked() {
-                    send(commands, AppCommand::Connect(connection.id));
-                    button_clicked = true;
-                }
-            },
-        );
-    });
+    let mut action_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(action_rect)
+            .layout(Layout::right_to_left(egui::Align::Center)),
+    );
+    action_ui.spacing_mut().item_spacing.x = ACTION_BUTTON_GAP;
+    if edit_button(&mut action_ui, i18n).clicked() {
+        send(commands, AppCommand::OpenConnectionSettings(connection.id));
+        button_clicked = true;
+    }
+    if connect_button(&mut action_ui, connection, i18n).clicked() {
+        send(commands, AppCommand::Connect(connection.id));
+        button_clicked = true;
+    }
 
     button_clicked
 }
