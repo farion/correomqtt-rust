@@ -1,6 +1,6 @@
 use crate::{
     normalize_keyring_backend, AppModel, Diagnostic, GlobalSettingField, GlobalSettingFlag,
-    GlobalSettingsSnapshot, SettingsFeedback, SettingsSection, ThemeMode,
+    GlobalSettingsSnapshot, PluginRepositoryRow, SettingsFeedback, SettingsSection, ThemeMode,
 };
 
 impl AppModel {
@@ -48,6 +48,43 @@ impl AppModel {
         self.mark_global_settings_dirty();
     }
 
+    pub(super) fn add_plugin_repository(&mut self) {
+        let id = next_plugin_repository_id(&self.snapshot.global_settings.plugin_repositories);
+        self.snapshot
+            .global_settings
+            .plugin_repositories
+            .push(PluginRepositoryRow {
+                id,
+                url: String::new(),
+            });
+        self.mark_global_settings_dirty();
+    }
+
+    pub(super) fn update_plugin_repository(&mut self, index: usize, url: String) {
+        let Some(repository) = self
+            .snapshot
+            .global_settings
+            .plugin_repositories
+            .get_mut(index)
+        else {
+            return;
+        };
+        if repository.url != url {
+            repository.url = url;
+            self.mark_global_settings_dirty();
+        }
+    }
+
+    pub(super) fn remove_plugin_repository(&mut self, index: usize) {
+        if index < self.snapshot.global_settings.plugin_repositories.len() {
+            self.snapshot
+                .global_settings
+                .plugin_repositories
+                .remove(index);
+            self.mark_global_settings_dirty();
+        }
+    }
+
     pub(super) fn save_global_settings(&mut self) {
         if !self.snapshot.global_settings.dirty {
             self.snapshot.global_settings.feedback = Some(SettingsFeedback::info(
@@ -78,5 +115,19 @@ impl AppModel {
     fn mark_global_settings_dirty(&mut self) {
         self.snapshot.global_settings.dirty = true;
         self.snapshot.global_settings.feedback = None;
+    }
+}
+
+fn next_plugin_repository_id(repositories: &[PluginRepositoryRow]) -> String {
+    let mut index = 1;
+    loop {
+        let candidate = format!("custom-{index}");
+        if repositories
+            .iter()
+            .all(|repository| repository.id != candidate)
+        {
+            return candidate;
+        }
+        index += 1;
     }
 }

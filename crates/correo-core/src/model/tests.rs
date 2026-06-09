@@ -191,6 +191,42 @@ fn global_settings_commands_track_dirty_save_and_discard() {
 }
 
 #[test]
+fn global_settings_plugin_repository_commands_edit_rows() {
+    let mut model = AppModel::empty();
+
+    model.apply_command(AppCommand::AddPluginRepository);
+    assert_eq!(
+        model.snapshot().global_settings.plugin_repositories.len(),
+        1
+    );
+    assert_eq!(
+        model.snapshot().global_settings.plugin_repositories[0].id,
+        "custom-1"
+    );
+    assert!(model.snapshot().global_settings.dirty);
+
+    model.apply_command(AppCommand::UpdatePluginRepository {
+        index: 0,
+        url: "https://example.invalid/plugins.json".to_owned(),
+    });
+    assert_eq!(
+        model.snapshot().global_settings.plugin_repositories[0].url,
+        "https://example.invalid/plugins.json"
+    );
+
+    model.apply_command(AppCommand::SaveGlobalSettings);
+    assert!(!model.snapshot().global_settings.dirty);
+
+    model.apply_command(AppCommand::RemovePluginRepository { index: 0 });
+    assert!(model
+        .snapshot()
+        .global_settings
+        .plugin_repositories
+        .is_empty());
+    assert!(model.snapshot().global_settings.dirty);
+}
+
+#[test]
 fn connect_command_queues_service_work_without_marking_open() {
     let mut model = AppModel::default();
     let connection_id = model.snapshot().connections[2].id;

@@ -216,6 +216,13 @@ impl AppModel {
             AppCommand::SetGlobalSettingFlag { flag, enabled } => {
                 self.set_global_setting_flag(flag, enabled);
             }
+            AppCommand::AddPluginRepository => self.add_plugin_repository(),
+            AppCommand::UpdatePluginRepository { index, url } => {
+                self.update_plugin_repository(index, url);
+            }
+            AppCommand::RemovePluginRepository { index } => {
+                self.remove_plugin_repository(index);
+            }
             AppCommand::SaveGlobalSettings => self.save_global_settings(),
             AppCommand::DiscardGlobalSettings => self.discard_global_settings(),
             AppCommand::Mqtt(command) => self.apply_mqtt_command(command),

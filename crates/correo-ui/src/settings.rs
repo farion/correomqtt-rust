@@ -1,13 +1,16 @@
 use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, GlobalSettingField, GlobalSettingFlag,
-    GlobalSettingsSnapshot, LegacyMigrationStatus, MigrationRecoveryCommand, SettingsFeedbackKind,
-    SettingsOption, ThemeMode,
+    GlobalSettingsSnapshot, SettingsOption,
 };
 use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
+use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{checkbox, padded_text_edit};
+
+const LABEL_WIDTH: f32 = 220.0;
+const CONTROL_WIDTH: f32 = 420.0;
 
 pub fn show(
     ui: &mut Ui,
@@ -17,45 +20,13 @@ pub fn show(
     i18n: &I18n,
 ) {
     let settings = &snapshot.global_settings;
-    ui.horizontal(|ui| {
-        ui.heading(i18n.text("settings-header"));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .add_enabled(settings.dirty, Button::new(i18n.text("common-save")))
-                .clicked()
-            {
-                send(commands, AppCommand::SaveGlobalSettings);
-            }
-            if ui
-                .add_enabled(settings.dirty, Button::new(i18n.text("common-discard")))
-                .clicked()
-            {
-                send(commands, AppCommand::DiscardGlobalSettings);
-            }
-        });
-    });
-    ui.separator();
+    ui.heading(i18n.text("settings-header"));
+    ui.add_space(8.0);
 
     ScrollArea::vertical()
         .id_salt("global-settings-scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            section(
-                ui,
-                i18n.settings_section_label(correo_core::SettingsSection::Appearance),
-                tokens,
-                |ui| {
-                    appearance(ui, snapshot.theme_mode, commands, i18n);
-                },
-            );
-            section(
-                ui,
-                i18n.settings_section_label(correo_core::SettingsSection::Language),
-                tokens,
-                |ui| {
-                    language(ui, settings, commands, i18n);
-                },
-            );
             section(
                 ui,
                 i18n.settings_section_label(correo_core::SettingsSection::Search),
@@ -88,26 +59,11 @@ pub fn show(
                     plugins(ui, settings, tokens, commands, i18n);
                 },
             );
-            section(
-                ui,
-                i18n.settings_section_label(correo_core::SettingsSection::Data),
-                tokens,
-                |ui| {
-                    data(ui, settings, tokens, commands, i18n);
-                },
-            );
-
-            if let Some(feedback) = &settings.feedback {
-                ui.separator();
-                ui.label(
-                    RichText::new(&feedback.message).color(feedback_color(feedback.kind, tokens)),
-                );
-            }
         });
 }
 
 fn section(ui: &mut Ui, title: String, tokens: ThemeTokens, add: impl FnOnce(&mut Ui)) {
-    ui.add_space(6.0);
+    ui.add_space(10.0);
     ui.label(
         RichText::new(title)
             .strong()
@@ -116,47 +72,7 @@ fn section(ui: &mut Ui, title: String, tokens: ThemeTokens, add: impl FnOnce(&mu
     );
     ui.add_space(6.0);
     add(ui);
-    ui.add_space(12.0);
-    ui.separator();
-}
-
-fn appearance(ui: &mut Ui, theme_mode: ThemeMode, commands: &AppCommandSender, i18n: &I18n) {
-    row(ui, &i18n.text("settings-theme"), |ui| {
-        let mut selected = theme_mode;
-        ComboBox::from_id_salt("settings-theme")
-            .selected_text(i18n.theme_label(theme_mode))
-            .width(160.0)
-            .show_ui(ui, |ui| {
-                for mode in ThemeMode::ALL {
-                    ui.selectable_value(&mut selected, mode, i18n.theme_label(mode));
-                }
-            });
-        if selected != theme_mode {
-            send(commands, AppCommand::SetThemeMode(selected));
-        }
-    });
-}
-
-fn language(
-    ui: &mut Ui,
-    settings: &GlobalSettingsSnapshot,
-    commands: &AppCommandSender,
-    i18n: &I18n,
-) {
-    row(ui, &i18n.text("settings-language"), |ui| {
-        option_combo(
-            ui,
-            "settings-language",
-            &settings.language,
-            &settings.language_options,
-            |value| AppCommand::UpdateGlobalSetting {
-                field: GlobalSettingField::Language,
-                value,
-            },
-            commands,
-            i18n,
-        );
-    });
+    ui.add_space(14.0);
 }
 
 fn search(
@@ -203,11 +119,15 @@ fn keyring(
         );
     });
     ui.add_space(8.0);
-    ui.label(RichText::new(&settings.cleanup_status).color(tokens.text_secondary));
-    ui.add_enabled(
-        false,
-        Button::new(i18n.text("settings-delete-sensitive-data")),
-    );
+    row(ui, &i18n.text("settings-sensitive-data"), |ui| {
+        ui.label(RichText::new(&settings.cleanup_status).color(tokens.text_secondary));
+    });
+    button_row(ui, |ui| {
+        ui.add_enabled(
+            false,
+            Button::new(i18n.text("settings-delete-sensitive-data")),
+        );
+    });
 }
 
 fn updates(
@@ -223,13 +143,15 @@ fn updates(
         GlobalSettingFlag::SearchUpdates,
         commands,
     );
-    ui.label(&settings.last_update_check);
+    row(ui, &i18n.text("settings-last-update-check"), |ui| {
+        ui.label(&settings.last_update_check);
+    });
 }
 
 fn plugins(
     ui: &mut Ui,
     settings: &GlobalSettingsSnapshot,
-    tokens: ThemeTokens,
+    _tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
@@ -250,11 +172,11 @@ fn plugins(
     row(ui, &i18n.text("settings-bundled-url"), |ui| {
         let mut url = settings.bundled_plugins_url.clone();
         let response = ui.add_sized(
-            [420.0, CONTROL_HEIGHT],
+            [CONTROL_WIDTH, CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut url)),
         );
         if response.changed() {
-            send(
+            send_and_save(
                 commands,
                 AppCommand::UpdateGlobalSetting {
                     field: GlobalSettingField::BundledPluginsUrl,
@@ -263,127 +185,94 @@ fn plugins(
             );
         }
     });
-    ui.separator();
-    ui.label(RichText::new(i18n.text("settings-plugin-repositories")).strong());
+    ui.add_space(6.0);
     if settings.plugin_repositories.is_empty() {
-        ui.label(
-            RichText::new(i18n.text("settings-no-custom-repositories"))
-                .color(tokens.text_secondary),
-        );
+        row(ui, &i18n.text("settings-plugin-repositories"), |ui| {
+            add_repository_button(ui, commands, i18n);
+        });
     } else {
-        for repository in &settings.plugin_repositories {
-            ui.horizontal(|ui| {
-                ui.monospace(&repository.id);
-                ui.label(RichText::new(&repository.url).color(tokens.text_secondary));
-            });
+        for (index, repository) in settings.plugin_repositories.iter().enumerate() {
+            repository_row(ui, index, &repository.url, commands, i18n);
         }
-    }
-}
-
-fn data(
-    ui: &mut Ui,
-    settings: &GlobalSettingsSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-    i18n: &I18n,
-) {
-    value_row(
-        ui,
-        &i18n.text("settings-config-version"),
-        &settings.config_version,
-    );
-    value_row(ui, &i18n.text("settings-window"), &settings.window_geometry);
-    value_row(
-        ui,
-        &i18n.text("settings-first-start"),
-        if settings.first_start { "yes" } else { "no" },
-    );
-    ui.separator();
-    legacy_migration(ui, settings, tokens, commands, i18n);
-    ui.separator();
-    ui.label(RichText::new(&settings.cleanup_status).color(tokens.text_secondary));
-}
-
-fn legacy_migration(
-    ui: &mut Ui,
-    settings: &GlobalSettingsSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-    i18n: &I18n,
-) {
-    let migration = &settings.legacy_migration;
-    ui.label(RichText::new(i18n.text("settings-legacy-migration")).strong());
-    value_row(
-        ui,
-        &i18n.text("settings-status"),
-        &i18n.legacy_migration_label(migration.status),
-    );
-    value_row(
-        ui,
-        &i18n.text("settings-last-result"),
-        &migration.last_status,
-    );
-    if let Some(path) = &migration.legacy_path_hint {
-        value_row(ui, &i18n.text("settings-legacy-path"), path);
-    }
-    if let Some(backup) = &migration.backup_name {
-        value_row(ui, &i18n.text("settings-backup"), backup);
-    }
-    if let Some(path) = &migration.backup_path_hint {
-        value_row(ui, &i18n.text("settings-backup-path"), path);
-    }
-    if migration.warning_count > 0 {
-        value_row(
-            ui,
-            &i18n.text("settings-warnings"),
-            &migration.warning_count.to_string(),
-        );
-    }
-    ui.horizontal_wrapped(|ui| {
-        if ui
-            .add_enabled(
-                migration.diagnostics_available,
-                Button::new(i18n.text("settings-view-diagnostics")),
-            )
-            .clicked()
-        {
-            send(
-                commands,
-                AppCommand::MigrationRecovery(MigrationRecoveryCommand::OpenDiagnostics),
-            );
-        }
-        if ui
-            .add_enabled(
-                migration.restore_available,
-                Button::new(i18n.text("settings-restore-backup")),
-            )
-            .clicked()
-        {
-            send(
-                commands,
-                AppCommand::MigrationRecovery(MigrationRecoveryCommand::RequestRestoreBackup),
-            );
-        }
-    });
-    if migration.status == LegacyMigrationStatus::NotRun {
-        ui.label(
-            RichText::new(i18n.text("settings-no-restore-target")).color(tokens.text_secondary),
-        );
+        button_row(ui, |ui| {
+            add_repository_button(ui, commands, i18n);
+        });
     }
 }
 
 fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
         ui.set_min_height(CONTROL_HEIGHT);
-        ui.add_sized([160.0, CONTROL_HEIGHT], egui::Label::new(label));
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(LABEL_WIDTH, CONTROL_HEIGHT),
+            egui::Sense::hover(),
+        );
+        ui.painter().text(
+            egui::pos2(rect.left(), rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::TextStyle::Body.resolve(ui.style()),
+            ui.visuals().text_color(),
+        );
         add(ui);
     });
 }
 
-fn value_row(ui: &mut Ui, label: &str, value: &str) {
-    row(ui, label, |ui| {
-        ui.label(value);
+fn button_row(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
+    row(ui, "", add);
+}
+
+fn repository_row(
+    ui: &mut Ui,
+    index: usize,
+    current_url: &str,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    let label = if index == 0 {
+        i18n.text("settings-plugin-repositories")
+    } else {
+        String::new()
+    };
+    row(ui, &label, |ui| {
+        let mut url = current_url.to_owned();
+        let response = ui.add_sized(
+            [CONTROL_WIDTH, CONTROL_HEIGHT],
+            padded_text_edit(TextEdit::singleline(&mut url)),
+        );
+        if response.changed() {
+            send_and_save(commands, AppCommand::UpdatePluginRepository { index, url });
+        }
+        if icon_button(
+            ui,
+            regular::MINUS,
+            i18n.text("settings-remove-plugin-repository"),
+        )
+        .clicked()
+        {
+            send_and_save(commands, AppCommand::RemovePluginRepository { index });
+        }
     });
+}
+
+fn add_repository_button(ui: &mut Ui, commands: &AppCommandSender, i18n: &I18n) {
+    if icon_button(
+        ui,
+        regular::PLUS,
+        i18n.text("settings-add-plugin-repository"),
+    )
+    .clicked()
+    {
+        send_and_save(commands, AppCommand::AddPluginRepository);
+    }
+}
+
+fn icon_button(ui: &mut Ui, icon: &str, hover_text: String) -> egui::Response {
+    ui.add_sized(
+        [CONTROL_HEIGHT, CONTROL_HEIGHT],
+        Button::new(RichText::new(icon).size(17.0)),
+    )
+    .on_hover_text(hover_text)
 }
 
 fn checkbox_flag(
@@ -394,9 +283,11 @@ fn checkbox_flag(
     commands: &AppCommandSender,
 ) {
     let mut enabled = current;
-    if checkbox(ui, &mut enabled, label).changed() {
-        send(commands, AppCommand::SetGlobalSettingFlag { flag, enabled });
-    }
+    row(ui, label, |ui| {
+        if checkbox(ui, &mut enabled, "").changed() {
+            send_and_save(commands, AppCommand::SetGlobalSettingFlag { flag, enabled });
+        }
+    });
 }
 
 fn option_combo(
@@ -419,7 +310,7 @@ fn option_combo(
             }
         });
     if selected != current {
-        send(commands, command(selected));
+        send_and_save(commands, command(selected));
     }
 }
 
@@ -431,14 +322,11 @@ fn option_label(current: &str, options: &[SettingsOption], i18n: &I18n) -> Strin
         .unwrap_or_else(|| current.to_owned())
 }
 
-fn feedback_color(kind: SettingsFeedbackKind, tokens: ThemeTokens) -> egui::Color32 {
-    match kind {
-        SettingsFeedbackKind::Info => tokens.success,
-        SettingsFeedbackKind::Warning => tokens.warning,
-        SettingsFeedbackKind::Error => tokens.danger,
-    }
-}
-
 fn send(commands: &AppCommandSender, command: AppCommand) {
     let _ = commands.send(command);
+}
+
+fn send_and_save(commands: &AppCommandSender, command: AppCommand) {
+    send(commands, command);
+    send(commands, AppCommand::SaveGlobalSettings);
 }

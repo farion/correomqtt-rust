@@ -101,6 +101,7 @@ fn storage_settings(snapshot: GlobalSettingsSnapshot) -> Settings {
     settings.plugin_repositories = snapshot
         .plugin_repositories
         .into_iter()
+        .filter(|row| !row.url.trim().is_empty())
         .map(repository_entry)
         .collect();
     settings.first_start = snapshot.first_start;
@@ -147,7 +148,7 @@ mod tests {
     use correo_storage::current::ConfigStore;
 
     use crate::{
-        available_keyring_options, GlobalSettingFlag, GlobalSettingsSnapshot,
+        available_keyring_options, GlobalSettingFlag, GlobalSettingsSnapshot, PluginRepositoryRow,
         SettingsPersistenceCommand, SettingsPersistenceEvent, SettingsPersistenceWorker, ThemeMode,
     };
 
@@ -165,6 +166,16 @@ mod tests {
         settings.search_use_regex = true;
         settings.search_ignore_case = true;
         settings.keyring_backend = keyring_backend.clone();
+        settings.plugin_repositories = vec![
+            PluginRepositoryRow {
+                id: "empty".to_owned(),
+                url: "  ".to_owned(),
+            },
+            PluginRepositoryRow {
+                id: "custom".to_owned(),
+                url: "https://example.invalid/plugins.json".to_owned(),
+            },
+        ];
 
         worker
             .dispatch(SettingsPersistenceCommand::Save {
@@ -185,6 +196,11 @@ mod tests {
         assert_eq!(
             config.settings.keyring_identifier.as_deref(),
             Some(keyring_backend.as_str())
+        );
+        assert_eq!(config.settings.plugin_repositories.len(), 1);
+        assert_eq!(
+            config.settings.plugin_repositories.get("custom"),
+            Some(&"https://example.invalid/plugins.json".to_owned())
         );
         assert_eq!(
             config

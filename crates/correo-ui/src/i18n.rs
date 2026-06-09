@@ -1,7 +1,6 @@
 use correo_core::{
-    ConnectDisabledReason, ConnectionSettingsTab, ConnectionState, KeyringState,
-    LegacyMigrationStatus, PluginLoadState, PluginSource, PluginStatus, PluginSurfaceTab,
-    SettingsSection, ThemeMode, Workspace,
+    ConnectDisabledReason, ConnectionSettingsTab, ConnectionState, KeyringState, PluginLoadState,
+    PluginSource, PluginStatus, PluginSurfaceTab, SettingsSection, ThemeMode, Workspace,
 };
 use fluent_bundle::{FluentBundle, FluentResource};
 use unic_langid::LanguageIdentifier;
@@ -138,18 +137,6 @@ impl I18n {
             ConnectDisabledReason::AlreadyConnected => "disabled-already-connected",
             ConnectDisabledReason::MissingHost => "disabled-missing-host",
             ConnectDisabledReason::Busy => "disabled-busy",
-        })
-    }
-
-    pub(crate) fn legacy_migration_label(&self, status: LegacyMigrationStatus) -> String {
-        self.text(match status {
-            LegacyMigrationStatus::NotRun => "legacy-not-run",
-            LegacyMigrationStatus::Detected => "legacy-detected",
-            LegacyMigrationStatus::Skipped => "legacy-skipped",
-            LegacyMigrationStatus::Complete => "legacy-complete",
-            LegacyMigrationStatus::PartialSuccess => "legacy-partial-success",
-            LegacyMigrationStatus::Failed => "legacy-failed",
-            LegacyMigrationStatus::Restored => "legacy-restored",
         })
     }
 

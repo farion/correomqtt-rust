@@ -106,6 +106,14 @@ pub enum AppCommand {
         flag: GlobalSettingFlag,
         enabled: bool,
     },
+    AddPluginRepository,
+    UpdatePluginRepository {
+        index: usize,
+        url: String,
+    },
+    RemovePluginRepository {
+        index: usize,
+    },
     SaveGlobalSettings,
     DiscardGlobalSettings,
     SearchScripts(String),
