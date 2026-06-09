@@ -3,9 +3,10 @@ use correo_core::{
     PluginLoadState, PluginRow, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
 };
 use egui::{
-    Button, CornerRadius, CursorIcon, Frame, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui,
-    UiBuilder, Window,
+    Button, CornerRadius, CursorIcon, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui, UiBuilder,
+    Window,
 };
+use egui_extras::{Size, StripBuilder};
 
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::padded_text_edit;
@@ -17,33 +18,34 @@ mod keyboard;
 #[path = "plugins/marketplace.rs"]
 mod marketplace;
 
-const TILE_HEIGHT: f32 = 118.0;
+const TILE_HEIGHT: f32 = 132.0;
+const TILE_PADDING: f32 = 8.0;
+const TILE_CONTENT_GAP: f32 = 4.0;
 const TILE_GAP: f32 = 6.0;
+const LIST_WIDTH: f32 = 340.0;
+const MIN_LIST_WIDTH: f32 = 260.0;
+const MAX_LIST_WIDTH: f32 = 520.0;
+const DETAIL_MIN_WIDTH: f32 = 280.0;
+const SPLIT_GUTTER: f32 = 24.0;
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     keyboard::handle(ui.ctx(), &snapshot.plugins, commands);
 
     ui.heading("Plugins");
     ui.add_space(8.0);
-    panel(tokens).show(ui, |ui| {
-        toolbar(ui, &snapshot.plugins, tokens, commands);
-        ui.separator();
-        if snapshot.plugins.load_state != PluginLoadState::Ready {
-            empty_state(ui, &snapshot.plugins, tokens);
-            return;
-        }
-        match snapshot.plugins.active_tab {
-            PluginSurfaceTab::Installed => installed::tab(ui, &snapshot.plugins, tokens, commands),
-            PluginSurfaceTab::Marketplace => {
-                marketplace::tab(ui, &snapshot.plugins, tokens, commands)
-            }
-            PluginSurfaceTab::Configuration
-            | PluginSurfaceTab::Hooks
-            | PluginSurfaceTab::Diagnostics => {
-                installed::tab(ui, &snapshot.plugins, tokens, commands)
-            }
-        }
-    });
+    toolbar(ui, &snapshot.plugins, tokens, commands);
+    ui.add_space(8.0);
+    if snapshot.plugins.load_state != PluginLoadState::Ready {
+        empty_state(ui, &snapshot.plugins, tokens);
+        return;
+    }
+    match snapshot.plugins.active_tab {
+        PluginSurfaceTab::Installed => installed::tab(ui, &snapshot.plugins, tokens, commands),
+        PluginSurfaceTab::Marketplace => marketplace::tab(ui, &snapshot.plugins, tokens, commands),
+        PluginSurfaceTab::Configuration
+        | PluginSurfaceTab::Hooks
+        | PluginSurfaceTab::Diagnostics => installed::tab(ui, &snapshot.plugins, tokens, commands),
+    }
     if let Some(confirmation) = &snapshot.plugins.disable_confirmation {
         disable_confirmation(ui, confirmation, tokens, commands);
     }
@@ -64,7 +66,7 @@ fn toolbar(
                 send(commands, AppCommand::SelectPluginSurfaceTab(tab));
             }
         }
-        ui.separator();
+        ui.add_space(8.0);
         ui.label(RichText::new(plugin_counts(plugins)).color(tokens.text_secondary));
     });
     if let Some(feedback) = &plugins.feedback {
@@ -120,9 +122,9 @@ pub(super) fn plugin_detail(
     if let Some(note) = &plugin.legacy_note {
         ui.label(RichText::new(note).color(tokens.warning));
     }
-    ui.separator();
+    ui.add_space(8.0);
     plugin_action_bar(ui, plugin, commands);
-    ui.separator();
+    ui.add_space(8.0);
     capability_chips(ui, plugin, tokens);
     plugin_operational_summary(ui, plugin, tokens);
 }
@@ -237,20 +239,57 @@ pub(super) fn plugin_tile(
     } else {
         tokens.border
     };
-    ui.painter().rect_filled(rect, CornerRadius::same(4), fill);
-    ui.painter().rect_stroke(
+    let clip_rect = rect.intersect(ui.clip_rect());
+    let painter = ui.painter().with_clip_rect(clip_rect);
+    painter.rect_filled(rect, CornerRadius::same(4), fill);
+    painter.rect_stroke(
         rect,
         CornerRadius::same(4),
         Stroke::new(1.0, stroke),
         StrokeKind::Inside,
     );
 
-    let content_rect = rect.shrink(8.0);
+    let content_rect = rect.shrink(TILE_PADDING);
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
-    content_ui.set_clip_rect(content_rect);
+    content_ui.spacing_mut().item_spacing.y = TILE_CONTENT_GAP;
+    content_ui.spacing_mut().interact_size.y = 20.0;
+    content_ui.set_clip_rect(content_rect.intersect(clip_rect));
     add_contents(&mut content_ui);
     ui.add_space(TILE_GAP);
     response
+}
+
+pub(super) fn plugin_split(
+    ui: &mut Ui,
+    tokens: ThemeTokens,
+    add_list: impl FnOnce(&mut Ui),
+    add_detail: impl FnOnce(&mut Ui),
+) {
+    let list_width = plugin_list_width(ui.available_width());
+    StripBuilder::new(ui)
+        .clip(true)
+        .size(Size::exact(list_width))
+        .size(Size::exact(SPLIT_GUTTER))
+        .size(Size::remainder().at_least(DETAIL_MIN_WIDTH))
+        .horizontal(|mut strip| {
+            strip.cell(add_list);
+            strip.cell(|ui| divider(ui, tokens));
+            strip.cell(add_detail);
+        });
+}
+
+fn plugin_list_width(available_width: f32) -> f32 {
+    let max_for_detail = (available_width - SPLIT_GUTTER - DETAIL_MIN_WIDTH).max(MIN_LIST_WIDTH);
+    LIST_WIDTH.clamp(MIN_LIST_WIDTH, MAX_LIST_WIDTH.min(max_for_detail))
+}
+
+fn divider(ui: &mut Ui, tokens: ThemeTokens) {
+    let rect = ui.max_rect();
+    let x = rect.center().x;
+    ui.painter().line_segment(
+        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+        Stroke::new(1.0, tokens.border),
+    );
 }
 
 pub(super) fn metadata_row(ui: &mut Ui, label: &str, value: &str, tokens: ThemeTokens) {
@@ -281,13 +320,6 @@ fn plugin_counts(plugins: &PluginSurfaceSnapshot) -> String {
         .filter(|plugin| plugin.enabled)
         .count();
     format!("{} installed, {enabled} enabled", plugins.plugins.len())
-}
-
-fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
 }
 
 pub(super) fn status_color(status: PluginStatus, tokens: ThemeTokens) -> egui::Color32 {

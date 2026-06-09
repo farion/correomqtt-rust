@@ -1,15 +1,12 @@
 use correo_core::{AppCommand, AppCommandSender, PluginMarketplaceRow, PluginSurfaceSnapshot};
-use egui::{Button, CentralPanel, Frame, RichText, ScrollArea, SidePanel, Ui};
+use egui::{Button, RichText, ScrollArea, Ui};
 
 use crate::theme::ThemeTokens;
 
 use super::{
-    install_button, marketplace_capability_chips, metadata_row, plugin_tile, search_field, send,
+    install_button, marketplace_capability_chips, metadata_row, plugin_split, plugin_tile,
+    search_field, send,
 };
-
-const LIST_WIDTH: f32 = 340.0;
-const MIN_LIST_WIDTH: f32 = 260.0;
-const MAX_LIST_WIDTH: f32 = 520.0;
 
 pub(super) fn tab(
     ui: &mut Ui,
@@ -18,17 +15,14 @@ pub(super) fn tab(
     commands: &AppCommandSender,
 ) {
     let filtered = plugins.filtered_marketplace_plugins();
-    SidePanel::left("plugin-marketplace-list-pane")
-        .default_width(LIST_WIDTH)
-        .width_range(MIN_LIST_WIDTH..=MAX_LIST_WIDTH)
-        .resizable(true)
-        .frame(pane_frame())
-        .show_inside(ui, |ui| {
+    plugin_split(
+        ui,
+        tokens,
+        |ui| {
             marketplace_list(ui, plugins, &filtered, tokens, commands);
-        });
-    CentralPanel::default()
-        .frame(pane_frame())
-        .show_inside(ui, |ui| selected_detail(ui, plugins, tokens, commands));
+        },
+        |ui| selected_detail(ui, plugins, tokens, commands),
+    );
 }
 
 fn marketplace_list(
@@ -73,11 +67,7 @@ fn marketplace_row(
         tokens,
         |ui| {
             ui.label(RichText::new(&plugin.name).strong());
-            ui.label(
-                RichText::new(&plugin.description)
-                    .color(tokens.text_secondary)
-                    .small(),
-            );
+            ui.label(RichText::new(&plugin.description).color(tokens.text_secondary));
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&plugin.version).color(tokens.text_secondary));
                 ui.label(RichText::new(&plugin.provider).color(tokens.text_secondary));
@@ -116,9 +106,9 @@ fn selected_detail(
     ui.label(&plugin.description);
     metadata_row(ui, "License", &plugin.license, tokens);
     metadata_row(ui, "Location", &plugin.location, tokens);
-    ui.separator();
+    ui.add_space(8.0);
     action_bar(ui, plugin, commands);
-    ui.separator();
+    ui.add_space(8.0);
     marketplace_capability_chips(ui, &plugin.capabilities, tokens);
     if let Some(installed) = plugins.installed_plugin_for_marketplace(plugin) {
         ui.add_space(8.0);
@@ -136,8 +126,4 @@ fn action_bar(ui: &mut Ui, plugin: &PluginMarketplaceRow, commands: &AppCommandS
             install_button(ui, &plugin.id, commands);
         }
     });
-}
-
-fn pane_frame() -> Frame {
-    Frame::NONE.inner_margin(egui::Margin::same(8))
 }

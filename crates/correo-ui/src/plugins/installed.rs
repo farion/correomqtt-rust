@@ -1,13 +1,11 @@
 use correo_core::{AppCommand, AppCommandSender, PluginRow, PluginSurfaceSnapshot};
-use egui::{CentralPanel, Frame, RichText, ScrollArea, SidePanel, Ui};
+use egui::{RichText, ScrollArea, Ui};
 
 use crate::theme::ThemeTokens;
 
-use super::{capability_chips, plugin_detail, plugin_tile, search_field, send, status_color};
-
-const LIST_WIDTH: f32 = 340.0;
-const MIN_LIST_WIDTH: f32 = 260.0;
-const MAX_LIST_WIDTH: f32 = 520.0;
+use super::{
+    capability_chips, plugin_detail, plugin_split, plugin_tile, search_field, send, status_color,
+};
 
 pub(super) fn tab(
     ui: &mut Ui,
@@ -16,17 +14,14 @@ pub(super) fn tab(
     commands: &AppCommandSender,
 ) {
     let filtered = plugins.filtered_plugins();
-    SidePanel::left("plugin-installed-list-pane")
-        .default_width(LIST_WIDTH)
-        .width_range(MIN_LIST_WIDTH..=MAX_LIST_WIDTH)
-        .resizable(true)
-        .frame(pane_frame())
-        .show_inside(ui, |ui| {
+    plugin_split(
+        ui,
+        tokens,
+        |ui| {
             plugin_list(ui, plugins, &filtered, tokens, commands);
-        });
-    CentralPanel::default()
-        .frame(pane_frame())
-        .show_inside(ui, |ui| selected_detail(ui, plugins, tokens, commands));
+        },
+        |ui| selected_detail(ui, plugins, tokens, commands),
+    );
 }
 
 fn plugin_list(
@@ -67,11 +62,7 @@ fn plugin_row(
 ) {
     let response = plugin_tile(ui, plugins.selected_plugin_id == plugin.id, tokens, |ui| {
         ui.label(RichText::new(&plugin.name).strong());
-        ui.label(
-            RichText::new(&plugin.description)
-                .color(tokens.text_secondary)
-                .small(),
-        );
+        ui.label(RichText::new(&plugin.description).color(tokens.text_secondary));
         ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new(plugin.status.label()).color(status_color(plugin.status, tokens)),
@@ -100,8 +91,4 @@ fn selected_detail(
         return;
     };
     plugin_detail(ui, plugin, tokens, commands);
-}
-
-fn pane_frame() -> Frame {
-    Frame::NONE.inner_margin(egui::Margin::same(8))
 }
