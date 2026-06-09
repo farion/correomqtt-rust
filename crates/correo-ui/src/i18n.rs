@@ -1,6 +1,7 @@
 use correo_core::{
     ConnectDisabledReason, ConnectionSettingsTab, ConnectionState, KeyringState,
-    LegacyMigrationStatus, SettingsSection, ThemeMode, Workspace,
+    LegacyMigrationStatus, PluginLoadState, PluginSource, PluginStatus, PluginSurfaceTab,
+    SettingsSection, ThemeMode, Workspace,
 };
 use fluent_bundle::{FluentBundle, FluentResource};
 use unic_langid::LanguageIdentifier;
@@ -160,6 +161,44 @@ impl I18n {
         })
     }
 
+    pub(crate) fn plugin_tab_label(&self, tab: PluginSurfaceTab) -> String {
+        self.text(match tab {
+            PluginSurfaceTab::Installed => "plugin-tab-installed",
+            PluginSurfaceTab::Marketplace => "plugin-tab-marketplace",
+            PluginSurfaceTab::Configuration => "plugin-tab-configuration",
+            PluginSurfaceTab::Hooks => "plugin-tab-hooks",
+            PluginSurfaceTab::Diagnostics => "plugin-tab-diagnostics",
+        })
+    }
+
+    pub(crate) fn plugin_load_message(&self, state: PluginLoadState) -> String {
+        match state {
+            PluginLoadState::Loading => self.text("plugin-load-loading"),
+            PluginLoadState::Empty => self.text("plugin-load-empty"),
+            PluginLoadState::Ready => String::new(),
+        }
+    }
+
+    pub(crate) fn plugin_source_label(&self, source: PluginSource) -> String {
+        self.text(match source {
+            PluginSource::Bundled => "plugin-source-bundled",
+            PluginSource::UserManifest => "plugin-source-user-manifest",
+            PluginSource::LegacyJava => "plugin-source-legacy-java",
+        })
+    }
+
+    pub(crate) fn plugin_status_label(&self, status: PluginStatus) -> String {
+        self.text(match status {
+            PluginStatus::Active => "plugin-status-active",
+            PluginStatus::Disabled => "plugin-status-disabled",
+            PluginStatus::NeedsConfig => "plugin-status-needs-config",
+            PluginStatus::CapabilityDenied => "plugin-status-capability-denied",
+            PluginStatus::LoadError => "plugin-status-load-error",
+            PluginStatus::HookFailed => "plugin-status-hook-failed",
+            PluginStatus::UnsupportedLegacy => "plugin-status-unsupported-legacy",
+        })
+    }
+
     pub(crate) fn language_option_label(&self, id: &str, fallback: &str) -> String {
         match id {
             "system" => self.text("common-system"),
@@ -189,6 +228,7 @@ mod tests {
 
         assert_eq!(i18n.text("settings-header"), "Einstellungen für CorreoMQTT");
         assert_eq!(i18n.text("common-save"), "Speichern");
+        assert_eq!(i18n.text("plugin-header"), "Plugins für CorreoMQTT");
         assert_eq!(i18n.workspace_label(Workspace::Settings), "Einstellungen");
         assert_eq!(i18n.theme_label(ThemeMode::Dark), "Dunkel");
     }

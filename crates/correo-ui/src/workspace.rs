@@ -41,7 +41,7 @@ pub fn show(
         Workspace::Connections => connections(ui, snapshot, tokens, commands, i18n),
         Workspace::ImportExport => skeletons::import_export(ui, snapshot, tokens, commands),
         Workspace::Scripts => scripts::show(ui, snapshot, tokens, commands),
-        Workspace::Plugins => plugins::show(ui, snapshot, tokens, commands),
+        Workspace::Plugins => plugins::show(ui, snapshot, tokens, commands, i18n),
         Workspace::Diagnostics => diagnostics::workspace(ui, snapshot, tokens, i18n),
         Workspace::Settings => settings::show(ui, snapshot, tokens, commands, i18n),
         Workspace::About => about::show(ui, tokens, i18n),
