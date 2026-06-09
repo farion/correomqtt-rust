@@ -4,12 +4,22 @@ use correo_core::{
 };
 use egui::{Button, Ui};
 
+const BUTTON_WIDTH: f32 = 190.0;
+const BUTTON_HEIGHT: f32 = 28.0;
+
 pub(super) fn action_bar(
     ui: &mut Ui,
     snapshot: &MigrationRecoverySnapshot,
     commands: &AppCommandSender,
 ) {
-    ui.horizontal_wrapped(|ui| match snapshot.state {
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space((ui.available_width() - action_width(snapshot)).max(0.0));
+        actions(ui, snapshot, commands);
+    });
+}
+
+fn actions(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &AppCommandSender) {
+    match snapshot.state {
         MigrationRecoveryState::NeedsDecision => {
             button(
                 ui,
@@ -49,7 +59,8 @@ pub(super) fn action_bar(
             if ui
                 .add_enabled(
                     snapshot.selected_count() > 0,
-                    Button::new("Migrate selected").min_size(egui::vec2(190.0, 28.0)),
+                    Button::new("Migrate selected")
+                        .min_size(egui::vec2(BUTTON_WIDTH, BUTTON_HEIGHT)),
                 )
                 .clicked()
             {
@@ -108,7 +119,28 @@ pub(super) fn action_bar(
             );
         }
         MigrationRecoveryState::NotDetected | MigrationRecoveryState::Detecting => {}
-    });
+    }
+}
+
+fn action_width(snapshot: &MigrationRecoverySnapshot) -> f32 {
+    let count = match snapshot.state {
+        MigrationRecoveryState::NeedsDecision
+        | MigrationRecoveryState::Reviewing
+        | MigrationRecoveryState::Complete
+        | MigrationRecoveryState::RestoreConfirm => 2,
+        MigrationRecoveryState::NeedsPassword => 3,
+        MigrationRecoveryState::Failed if snapshot.backup_name.is_some() => 4,
+        MigrationRecoveryState::Failed
+        | MigrationRecoveryState::CreatingBackup
+        | MigrationRecoveryState::Applying
+        | MigrationRecoveryState::Restoring => 1,
+        MigrationRecoveryState::NotDetected | MigrationRecoveryState::Detecting => 0,
+    };
+    if count == 0 {
+        0.0
+    } else {
+        count as f32 * BUTTON_WIDTH + (count - 1) as f32 * 8.0
+    }
 }
 
 pub(super) fn handle_keyboard(
@@ -136,7 +168,10 @@ pub(super) fn button(
     commands: &AppCommandSender,
     command: MigrationRecoveryCommand,
 ) {
-    if ui.add_sized([190.0, 28.0], Button::new(label)).clicked() {
+    if ui
+        .add_sized([BUTTON_WIDTH, BUTTON_HEIGHT], Button::new(label))
+        .clicked()
+    {
         send(commands, command);
     }
 }
