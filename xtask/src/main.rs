@@ -4,6 +4,7 @@ use std::process::{Command, ExitStatus};
 use thiserror::Error;
 
 mod package;
+mod plugin_repository;
 
 fn main() -> Result<(), XtaskError> {
     let mut args = std::env::args().skip(1);
@@ -12,6 +13,7 @@ fn main() -> Result<(), XtaskError> {
         Some("test") => cargo(&["test", "--workspace"]),
         Some("package") => package::run(args.collect()),
         Some("package-smoke") => package::smoke(args.collect()),
+        Some("plugin-repository") => plugin_repository::run(args.collect()),
         Some("migrate-fixtures") => migrate_fixtures(),
         Some(command) => Err(XtaskError::UnknownCommand(command.to_owned())),
         None => {
@@ -62,11 +64,14 @@ fn ensure_success(status: ExitStatus, args: &[&str]) -> Result<(), XtaskError> {
 }
 
 fn print_help() {
-    println!("Usage: cargo xtask <check|test|package|package-smoke|migrate-fixtures>");
+    println!(
+        "Usage: cargo xtask <check|test|package|package-smoke|plugin-repository|migrate-fixtures>"
+    );
     println!();
     println!("Package options:");
     println!("  cargo xtask package [--target <triple>] [--out-dir <dir>] [--no-build]");
     println!("  cargo xtask package-smoke [--target <triple>] [--out-dir <dir>] [--no-build]");
+    println!("  cargo xtask plugin-repository [--out-dir <dir>]");
 }
 
 #[derive(Debug, Error)]
@@ -94,4 +99,8 @@ pub(crate) enum XtaskError {
     Io(#[from] std::io::Error),
     #[error("zip error: {0}")]
     Zip(#[from] zip::result::ZipError),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("plugin repository error: {0}")]
+    PluginRepository(#[from] correo_plugins::PluginRepositoryError),
 }

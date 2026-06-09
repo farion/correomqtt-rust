@@ -10,6 +10,7 @@ use crate::{cargo_dynamic, XtaskError};
 
 mod checksums;
 mod guard;
+mod plugins;
 
 use self::checksums::write_checksum_files;
 
@@ -63,6 +64,7 @@ fn package(command_base: &str, args: Vec<String>) -> Result<Option<PackageOutput
         Platform::Macos => stage_macos(&binary, &stage_dir)?,
         Platform::Windows => stage_windows(&binary, &stage_dir)?,
     }
+    plugins::stage(platform, &stage_dir)?;
 
     fs::create_dir_all(&plan.out_dir)?;
     let artifact = plan.artifact_path();
@@ -336,7 +338,9 @@ fn package_readme() -> String {
          org/CorreoMQTT/CorreoMQTT and also checks legacy Java roots during startup.\n\
          Current config and histories live under that root. Script execution \
          metadata/logs live under scripts/executions/ and scripts/logs/ when \
-         scripting persistence writes them. App diagnostics currently go to stdout/stderr.\n",
+         scripting persistence writes them. Bundled Rust plugin marketplace \
+         metadata is included as plugins/repository.json in this package. \
+         App diagnostics currently go to stdout/stderr.\n",
         env!("CARGO_PKG_VERSION")
     )
 }

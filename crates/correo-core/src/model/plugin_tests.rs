@@ -238,6 +238,42 @@ fn marketplace_install_and_uninstall_updates_manager_state() {
 }
 
 #[test]
+fn marketplace_installs_every_plugin_from_local_repository_fixture() {
+    let marketplace_plugins = crate::marketplace_rows_from_repository_json(include_str!(
+        "../../../correo-plugins/tests/fixtures/repository.json"
+    ))
+    .unwrap();
+    let marketplace_ids = marketplace_plugins
+        .iter()
+        .map(|plugin| plugin.id.clone())
+        .collect::<Vec<_>>();
+    let mut model = AppModel::default();
+    model.snapshot.plugins.marketplace_plugins = marketplace_plugins;
+
+    for plugin_id in &marketplace_ids {
+        model.apply_command(AppCommand::SelectMarketplacePlugin(plugin_id.clone()));
+        model.apply_command(AppCommand::InstallMarketplacePlugin {
+            marketplace_plugin_id: plugin_id.clone(),
+        });
+
+        assert!(model
+            .snapshot()
+            .plugins
+            .plugins
+            .iter()
+            .any(|plugin| &plugin.id == plugin_id));
+        assert_eq!(
+            model
+                .snapshot()
+                .plugins
+                .selected_marketplace_plugin()
+                .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+            Some(plugin_id.as_str())
+        );
+    }
+}
+
+#[test]
 fn plugin_denials_legacy_plugins_and_diagnostics_stay_visible() {
     let mut model = AppModel::default();
 

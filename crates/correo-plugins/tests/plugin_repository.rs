@@ -19,10 +19,14 @@ fn bundled_repository_definition_lists_installable_replacements() {
     assert_eq!(
         ids,
         BTreeSet::from([
+            "builtin.advanced-validator",
             "builtin.base64",
             "builtin.contains-string-validator",
             "builtin.json-format",
+            "builtin.system-topic",
             "builtin.xml-format",
+            "builtin.xml-xsd-validator",
+            "builtin.zip-manipulator",
         ])
     );
 

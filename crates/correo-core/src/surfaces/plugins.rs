@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+#[path = "plugins/repository.rs"]
+mod repository;
+pub use repository::*;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginSurfaceSnapshot {
     pub active_tab: PluginSurfaceTab,

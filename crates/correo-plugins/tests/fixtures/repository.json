@@ -1,0 +1,507 @@
+{
+  "repository_format_version": 1,
+  "id": "local-bundled-rust",
+  "name": "Bundled Rust Plugins",
+  "plugins": [
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.advanced-validator",
+        "name": "Advanced Validator",
+        "version": "0.1.0",
+        "description": "Composes configured validator rules with AND and OR groups.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "message_validator"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "message_validator",
+            "export": "builtin_message_validator"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "$defs": {
+              "extension": {
+                "additionalProperties": false,
+                "properties": {
+                  "config": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "case_sensitive": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "extensionId": {
+                    "type": "string"
+                  },
+                  "extension_id": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "pluginId": {
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "config"
+                ],
+                "type": "object"
+              },
+              "rule": {
+                "additionalProperties": false,
+                "properties": {
+                  "and": {
+                    "items": {
+                      "$ref": "#/$defs/rule"
+                    },
+                    "type": "array"
+                  },
+                  "extensions": {
+                    "items": {
+                      "$ref": "#/$defs/extension"
+                    },
+                    "type": "array"
+                  },
+                  "or": {
+                    "items": {
+                      "$ref": "#/$defs/rule"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "and": {
+                "items": {
+                  "$ref": "#/$defs/rule"
+                },
+                "type": "array"
+              },
+              "extensions": {
+                "items": {
+                  "$ref": "#/$defs/extension"
+                },
+                "type": "array"
+              },
+              "or": {
+                "items": {
+                  "$ref": "#/$defs/rule"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.advanced-validator"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.base64",
+        "name": "Base64 Transform",
+        "version": "0.1.0",
+        "description": "Encodes outgoing payloads and decodes incoming payloads with Base64.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "outgoing_message_transform",
+            "incoming_message_transform"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "outgoing_message_transform",
+            "export": "builtin_outgoing_message_transform"
+          },
+          {
+            "hook": "incoming_message_transform",
+            "export": "builtin_incoming_message_transform"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.base64"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.contains-string-validator",
+        "name": "Contains String Validator",
+        "version": "0.1.0",
+        "description": "Validates text payloads by checking for configured text.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "message_validator"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "message_validator",
+            "export": "builtin_message_validator"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "properties": {
+              "case_sensitive": {
+                "default": true,
+                "type": "boolean"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.contains-string-validator"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.json-format",
+        "name": "JSON Formatter",
+        "version": "0.1.0",
+        "description": "Formats valid JSON payloads for the message detail view.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "detail_formatter"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "detail_formatter",
+            "export": "builtin_detail_formatter"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.json-format"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.system-topic",
+        "name": "System Topic Formatter",
+        "version": "0.1.0",
+        "description": "Labels known $SYS broker metrics for the message detail view.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "detail_formatter"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "detail_formatter",
+            "export": "builtin_detail_formatter"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.system-topic"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.xml-format",
+        "name": "XML Formatter",
+        "version": "0.1.0",
+        "description": "Formats XML-like payloads for the message detail view.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "detail_formatter"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "detail_formatter",
+            "export": "builtin_detail_formatter"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.xml-format"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.xml-xsd-validator",
+        "name": "XML/XSD Validator",
+        "version": "0.1.0",
+        "description": "Validates XML payloads against configured inline XSD schema text.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "message_validator"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "message_validator",
+            "export": "builtin_message_validator"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "schema_text"
+                ]
+              },
+              {
+                "required": [
+                  "schema_source"
+                ]
+              },
+              {
+                "required": [
+                  "schema"
+                ]
+              }
+            ],
+            "properties": {
+              "schema": {
+                "type": "string"
+              },
+              "schema_source": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "inline"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "type": "object"
+              },
+              "schema_text": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.xml-xsd-validator"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "builtin.zip-manipulator",
+        "name": "ZIP Manipulator",
+        "version": "0.1.0",
+        "description": "Compresses or decompresses message detail bytes with GZIP.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "detail_byte_transform"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": false,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "detail_byte_transform",
+            "export": "builtin_detail_byte_transform"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "properties": {
+              "max_input_bytes": {
+                "default": 1048576,
+                "maximum": 1048576,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_output_bytes": {
+                "default": 4194304,
+                "maximum": 4194304,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "operation": {
+                "default": "unzip",
+                "enum": [
+                  "zip",
+                  "unzip"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "bundled",
+        "plugin_id": "builtin.zip-manipulator"
+      }
+    }
+  ]
+}

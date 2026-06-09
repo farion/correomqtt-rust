@@ -1,0 +1,50 @@
+manifest_version = 1
+id = "org.correomqtt.plugins.xml-xsd-validator"
+name = "XML/XSD Validator"
+version = "0.1.0"
+description = "Validates XML message payloads against configured inline XSD schema text."
+provider = "CorreoMQTT"
+license = "GPL-3.0-or-later"
+compatible_correomqtt = ">=0.1.0, <1.0.0"
+
+[capabilities]
+hooks = ["message_validator"]
+
+[capabilities.host]
+filesystem = false
+network = false
+secrets = false
+mqtt = false
+
+[[entrypoints]]
+hook = "message_validator"
+export = "correo_message_validator"
+
+[config_schema]
+schema_version = 1
+
+[config_schema.document]
+type = "object"
+anyOf = [
+    { required = ["schema_text"] },
+    { required = ["schema_source"] },
+    { required = ["schema"] },
+]
+additionalProperties = false
+
+[config_schema.document.properties.schema_text]
+type = "string"
+
+[config_schema.document.properties.schema]
+type = "string"
+
+[config_schema.document.properties.schema_source]
+type = "object"
+required = ["kind", "text"]
+additionalProperties = false
+
+[config_schema.document.properties.schema_source.properties.kind]
+const = "inline"
+
+[config_schema.document.properties.schema_source.properties.text]
+type = "string"

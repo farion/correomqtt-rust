@@ -1,0 +1,19 @@
+[package]
+name = "correo-plugins-xml-xsd-validator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+uppsala.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"

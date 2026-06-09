@@ -1,16 +1,19 @@
 [package]
-name = "xtask"
+name = "correo-plugin-zip-manipulator"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-correo-plugins = { path = "../crates/correo-plugins" }
+flate2.workspace = true
+serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 thiserror.workspace = true
-zip.workspace = true
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "allow"
