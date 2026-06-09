@@ -243,6 +243,8 @@ pub struct DetailByteTransformResponse {
     pub bytes: Vec<u8>,
     #[serde(default)]
     pub content_type: Option<String>,
+    #[serde(default)]
+    pub host_actions: Vec<HostActionDto>,
 }
 
 impl DetailByteTransformResponse {
@@ -251,6 +253,7 @@ impl DetailByteTransformResponse {
             abi_version: ABI_VERSION,
             bytes: bytes.into(),
             content_type: None,
+            host_actions: Vec::new(),
         }
     }
 }
@@ -259,6 +262,20 @@ impl VersionedDto for DetailByteTransformResponse {
     fn abi_version(&self) -> u16 {
         self.abi_version
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum HostActionDto {
+    SavePayload(SavePayloadActionDto),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavePayloadActionDto {
+    pub suggested_file_name: String,
+    pub bytes: Vec<u8>,
+    #[serde(default)]
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

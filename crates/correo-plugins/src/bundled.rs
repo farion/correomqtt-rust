@@ -17,6 +17,7 @@ const BASE64_ID: &str = "builtin.base64";
 const JSON_FORMAT_ID: &str = "builtin.json-format";
 const XML_FORMAT_ID: &str = "builtin.xml-format";
 const CONTAINS_STRING_ID: &str = "builtin.contains-string-validator";
+pub const SAVE_MANIPULATOR_ID: &str = "org.correomqtt.plugins.save-manipulator";
 
 #[derive(Debug, Clone)]
 pub struct BundledPlugin {
@@ -159,7 +160,7 @@ pub fn bundled_plugin_by_id(plugin_id: &str) -> Option<BundledPlugin> {
 pub struct LegacyPluginReplacementDecision {
     pub legacy_plugin_id: &'static str,
     pub status: LegacyPluginReplacementStatus,
-    pub bundled_plugin_id: Option<&'static str>,
+    pub replacement_plugin_id: Option<&'static str>,
     pub reason: &'static str,
 }
 
@@ -171,10 +172,15 @@ pub enum LegacyPluginReplacementStatus {
 
 pub fn legacy_plugin_replacement_decisions() -> Vec<LegacyPluginReplacementDecision> {
     vec![
-        supported("base64", BASE64_ID),
-        supported("json-format", JSON_FORMAT_ID),
-        supported("xml-format", XML_FORMAT_ID),
-        supported("contains-string-validator", CONTAINS_STRING_ID),
+        supported_builtin("base64", BASE64_ID),
+        supported_builtin("json-format", JSON_FORMAT_ID),
+        supported_builtin("xml-format", XML_FORMAT_ID),
+        supported_builtin("contains-string-validator", CONTAINS_STRING_ID),
+        supported(
+            "save-manipulator",
+            SAVE_MANIPULATOR_ID,
+            "Covered by a Rust/WASM plugin that requests host-mediated payload saves.",
+        ),
         unsupported(
             "xml-xsd-validator",
             "XSD validation needs a bounded schema-source design before filesystem-like inputs are granted.",
@@ -182,10 +188,6 @@ pub fn legacy_plugin_replacement_decisions() -> Vec<LegacyPluginReplacementDecis
         unsupported(
             "zip-manipulator",
             "Zip archive transformation is deferred until archive size and expansion limits are specified.",
-        ),
-        unsupported(
-            "save-manipulator",
-            "Saving payloads to arbitrary files is deferred because bundled plugins do not receive filesystem access.",
         ),
         unsupported(
             "advanced-validator",
@@ -355,15 +357,27 @@ fn bundled_export_name(hook: HookKind) -> &'static str {
     }
 }
 
+fn supported_builtin(
+    legacy_plugin_id: &'static str,
+    replacement_plugin_id: &'static str,
+) -> LegacyPluginReplacementDecision {
+    supported(
+        legacy_plugin_id,
+        replacement_plugin_id,
+        "Covered by a bundled Rust replacement for the MVP hook surface.",
+    )
+}
+
 fn supported(
     legacy_plugin_id: &'static str,
-    bundled_plugin_id: &'static str,
+    replacement_plugin_id: &'static str,
+    reason: &'static str,
 ) -> LegacyPluginReplacementDecision {
     LegacyPluginReplacementDecision {
         legacy_plugin_id,
         status: LegacyPluginReplacementStatus::Supported,
-        bundled_plugin_id: Some(bundled_plugin_id),
-        reason: "Covered by a bundled Rust replacement for the MVP hook surface.",
+        replacement_plugin_id: Some(replacement_plugin_id),
+        reason,
     }
 }
 
@@ -374,7 +388,7 @@ fn unsupported(
     LegacyPluginReplacementDecision {
         legacy_plugin_id,
         status: LegacyPluginReplacementStatus::Unsupported,
-        bundled_plugin_id: None,
+        replacement_plugin_id: None,
         reason,
     }
 }

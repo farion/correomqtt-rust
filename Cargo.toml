@@ -11,6 +11,7 @@ members = [
     "crates/correo-ui",
     "plugins/xml-format",
     "plugins/correo-plugins-contains-string-validator",
+    "plugins/save-manipulator",
     "xtask",
 ]
 resolver = "2"

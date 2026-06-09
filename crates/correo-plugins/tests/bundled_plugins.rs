@@ -66,6 +66,7 @@ fn legacy_plugin_decisions_are_explicit_for_supported_and_deferred_plugins() {
             "base64",
             "contains-string-validator",
             "json-format",
+            "save-manipulator",
             "xml-format",
         ])
     );
@@ -73,7 +74,6 @@ fn legacy_plugin_decisions_are_explicit_for_supported_and_deferred_plugins() {
         unsupported,
         BTreeSet::from([
             "advanced-validator",
-            "save-manipulator",
             "systopic",
             "xml-xsd-validator",
             "zip-manipulator",
@@ -84,7 +84,7 @@ fn legacy_plugin_decisions_are_explicit_for_supported_and_deferred_plugins() {
         .filter(|decision| {
             decision.status == correo_plugins::LegacyPluginReplacementStatus::Unsupported
         })
-        .all(|decision| !decision.reason.is_empty() && decision.bundled_plugin_id.is_none()));
+        .all(|decision| !decision.reason.is_empty() && decision.replacement_plugin_id.is_none()));
 }
 
 #[test]

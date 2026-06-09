@@ -70,6 +70,8 @@ pub struct HostCapabilityGrants {
     #[serde(default)]
     pub filesystem: bool,
     #[serde(default)]
+    pub message_save: bool,
+    #[serde(default)]
     pub network: bool,
     #[serde(default)]
     pub secrets: bool,
@@ -81,6 +83,7 @@ impl HostCapabilityGrants {
     pub fn grants(&self, surface: HostSurface) -> bool {
         match surface {
             HostSurface::Filesystem => self.filesystem,
+            HostSurface::MessageSave => self.message_save,
             HostSurface::Network => self.network,
             HostSurface::Secrets => self.secrets,
             HostSurface::Mqtt => self.mqtt,
@@ -92,6 +95,7 @@ impl HostCapabilityGrants {
 #[serde(rename_all = "snake_case")]
 pub enum HostSurface {
     Filesystem,
+    MessageSave,
     Network,
     Secrets,
     Mqtt,

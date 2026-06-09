@@ -1,10 +1,10 @@
 use correo_plugins::{
     CapabilityGrants, DetailByteTransformRequest, DetailByteTransformResponse,
-    DetailFormatterRequest, DetailFormatterResponse, HookKind, HostSurface,
+    DetailFormatterRequest, DetailFormatterResponse, HookKind, HostActionDto, HostSurface,
     IncomingMessageTransformRequest, IncomingMessageTransformResponse, ManifestError, MessageDto,
     MessageValidatorRequest, MessageValidatorResponse, NoopHookFixture,
     OutgoingMessageTransformRequest, OutgoingMessageTransformResponse, PluginManifest,
-    VersionedDto, WasmFixtureHarness, ABI_VERSION,
+    SavePayloadActionDto, VersionedDto, WasmFixtureHarness, ABI_VERSION,
 };
 use semver::Version;
 use serde::{de::DeserializeOwned, Serialize};
@@ -78,6 +78,7 @@ fn capability_grants_deny_host_surfaces_by_default() {
 
     for surface in [
         HostSurface::Filesystem,
+        HostSurface::MessageSave,
         HostSurface::Network,
         HostSurface::Secrets,
         HostSurface::Mqtt,
@@ -101,6 +102,22 @@ fn hook_dtos_round_trip_as_versioned_json() {
     assert_versioned_json_round_trip(DetailByteTransformResponse::unchanged(b"{}".to_vec()));
     assert_versioned_json_round_trip(DetailFormatterRequest::new(b"{}".to_vec()));
     assert_versioned_json_round_trip(DetailFormatterResponse::plain_text("{}"));
+}
+
+#[test]
+fn detail_byte_transform_response_can_request_host_save() {
+    let response = DetailByteTransformResponse {
+        abi_version: ABI_VERSION,
+        bytes: b"payload".to_vec(),
+        content_type: Some("text/plain".to_owned()),
+        host_actions: vec![HostActionDto::SavePayload(SavePayloadActionDto {
+            suggested_file_name: "payload.txt".to_owned(),
+            bytes: b"payload".to_vec(),
+            content_type: Some("text/plain".to_owned()),
+        })],
+    };
+
+    assert_versioned_json_round_trip(response);
 }
 
 #[test]
