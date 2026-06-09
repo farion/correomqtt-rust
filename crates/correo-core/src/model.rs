@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use correo_mqtt::ConnectionId;
 
 use crate::{
-    AppCommand, AppEvent, AppSnapshot, ConnectDisabledReason, ConnectionSettingField,
-    ConnectionSettingsSnapshot, ConnectionState, Diagnostic, MqttCommand, MqttCommandBuildError,
-    StartupState,
+    AppCommand, AppEvent, AppSnapshot, ConnectDisabledReason, ConnectionSettingsSnapshot,
+    ConnectionState, Diagnostic, MqttCommand, MqttCommandBuildError, StartupState,
 };
 
+mod connections;
 mod history;
 mod migration_recovery;
 mod mqtt;
@@ -108,9 +108,7 @@ impl AppModel {
             AppCommand::Reconnect(id) => self.record_action(id, "Reconnect requested"),
             AppCommand::Disconnect(id) => self.disconnect(id),
             AppCommand::DuplicateConnection(id) => self.record_action(id, "Duplicate requested"),
-            AppCommand::AddConnection => {
-                self.push_diagnostic(Diagnostic::info("Add connection command queued."));
-            }
+            AppCommand::AddConnection => self.add_connection(),
             AppCommand::ImportConnections => self.import_connections(),
             AppCommand::ExportConnections => self.open_connection_export(),
             AppCommand::ChooseConnectionImportFile => self.choose_connection_import_file(),
@@ -169,10 +167,7 @@ impl AppModel {
                 self.snapshot.connection_settings.dirty = true;
             }
             AppCommand::SaveConnectionSettings => self.save_connection_settings(),
-            AppCommand::DiscardConnectionSettings => {
-                self.snapshot.connection_settings.dirty = false;
-                self.push_diagnostic(Diagnostic::info("Connection settings discarded."));
-            }
+            AppCommand::DiscardConnectionSettings => self.discard_connection_settings(),
             AppCommand::RequestDeleteConnection => {
                 self.snapshot.connection_settings.delete_confirmation_open = true;
             }
@@ -281,48 +276,6 @@ impl AppModel {
         }
     }
 
-    fn connect(&mut self, id: ConnectionId) {
-        let Some(index) = self.connection_index(id) else {
-            return;
-        };
-
-        if !self.snapshot.connections[index].can_connect() {
-            let reason = self.snapshot.connections[index]
-                .disabled_reason
-                .unwrap_or(ConnectDisabledReason::Busy)
-                .label();
-            self.push_diagnostic(Diagnostic::warning(reason));
-            return;
-        }
-
-        let name = self.snapshot.connections[index].name.clone();
-        self.update_connection_state(
-            id,
-            ConnectionState::Connecting,
-            Some(ConnectDisabledReason::Busy),
-            "connect command queued".to_owned(),
-        );
-        self.snapshot.selected_connection = Some(id);
-        self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
-        self.push_diagnostic(Diagnostic::info(format!("Connect requested for {name}.")));
-    }
-
-    fn disconnect(&mut self, id: ConnectionId) {
-        let Some(index) = self.connection_index(id) else {
-            return;
-        };
-        let name = {
-            let connection = &mut self.snapshot.connections[index];
-            connection.state = ConnectionState::Disconnected;
-            connection.disabled_reason = None;
-            connection.name.clone()
-        };
-        self.snapshot.active_connection = None;
-        self.push_diagnostic(Diagnostic::info(format!(
-            "{name} disconnect command queued."
-        )));
-    }
-
     fn publish_from_snapshot(&mut self) {
         if self.snapshot.active_connection.is_none() {
             self.snapshot.workbench.publish.feedback = Some(crate::WorkflowFeedback::warning(
@@ -396,89 +349,9 @@ impl AppModel {
         )));
     }
 
-    fn save_connection_settings(&mut self) {
-        if self.snapshot.connection_settings.dirty && self.snapshot.connection_settings.valid {
-            self.snapshot.connection_settings.dirty = false;
-            self.push_diagnostic(Diagnostic::info("Connection settings save command queued."));
-        } else {
-            let reason = self
-                .snapshot
-                .connection_settings
-                .save_disabled_reason
-                .clone();
-            self.push_diagnostic(Diagnostic::warning(reason));
-        }
-    }
-
-    fn update_connection_setting(&mut self, field: ConnectionSettingField, value: String) {
-        let settings = &mut self.snapshot.connection_settings;
-        match field {
-            ConnectionSettingField::ProfileName => settings.profile_name = value,
-            ConnectionSettingField::Host => settings.host = value,
-            ConnectionSettingField::Port => settings.port = value,
-            ConnectionSettingField::MqttVersion => settings.mqtt_version = value,
-            ConnectionSettingField::ClientId => settings.client_id = value,
-            ConnectionSettingField::AuthMode => settings.auth_mode = value,
-            ConnectionSettingField::TlsMode => settings.tls_mode = value,
-            ConnectionSettingField::TlsStore => settings.tls_store = value,
-            ConnectionSettingField::ProxyMode => settings.proxy_mode = value,
-            ConnectionSettingField::ProxyEndpoint => settings.proxy_endpoint = value,
-            ConnectionSettingField::LwtTopic => settings.lwt_topic = value,
-            ConnectionSettingField::LwtPayload => settings.lwt_payload = value,
-        }
-        settings.dirty = true;
-        settings.valid = settings.host.trim().len() >= 2
-            && settings.port.parse::<u16>().is_ok()
-            && !settings.profile_name.trim().is_empty();
-        settings.save_disabled_reason = if settings.valid {
-            "No changes to save".to_owned()
-        } else {
-            "Resolve validation errors before saving".to_owned()
-        };
-    }
-
-    fn record_action(&mut self, id: correo_mqtt::ConnectionId, action: &'static str) {
-        let name = self
-            .snapshot
-            .connections
-            .iter()
-            .find(|connection| connection.id == id)
-            .map(|connection| connection.name.clone())
-            .unwrap_or_else(|| "Unknown connection".to_owned());
-        self.push_diagnostic(Diagnostic::info(format!("{action}: {name}.")));
-    }
-
-    fn connection_index(&self, id: correo_mqtt::ConnectionId) -> Option<usize> {
-        self.snapshot
-            .connections
-            .iter()
-            .position(|connection| connection.id == id)
-    }
-
     fn push_diagnostic(&mut self, diagnostic: Diagnostic) {
         self.snapshot.diagnostics.insert(0, diagnostic.redacted());
         self.snapshot.diagnostics.truncate(12);
-    }
-
-    fn update_connection_state(
-        &mut self,
-        id: correo_mqtt::ConnectionId,
-        state: ConnectionState,
-        disabled_reason: Option<ConnectDisabledReason>,
-        last_activity: String,
-    ) {
-        if let Some(index) = self.connection_index(id) {
-            let connection = &mut self.snapshot.connections[index];
-            connection.state = state;
-            connection.disabled_reason = disabled_reason;
-            connection.last_activity = last_activity;
-        }
-    }
-
-    fn load_connection_settings(&mut self, id: correo_mqtt::ConnectionId) {
-        if let Some(settings) = self.connection_settings.get(&id) {
-            self.snapshot.connection_settings = settings.clone();
-        }
     }
 }
 

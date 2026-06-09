@@ -157,12 +157,13 @@ impl MigrationApplier {
     }
 
     fn create_backup(&self) -> Result<MigrationBackup> {
+        let id = timestamped_backup_id();
+        let backup_path = self.backup_root.join(&id);
+        ensure_copy_target_outside_source(&self.target_root, &backup_path)?;
         fs::create_dir_all(&self.backup_root).map_err(|source| StorageError::CreateDir {
             path: self.backup_root.clone(),
             source,
         })?;
-        let id = timestamped_backup_id();
-        let backup_path = self.backup_root.join(&id);
         fs::create_dir_all(&backup_path).map_err(|source| StorageError::CreateDir {
             path: backup_path.clone(),
             source,
@@ -237,6 +238,7 @@ fn default_backup_root(target_root: &Path) -> PathBuf {
 }
 
 fn copy_dir_contents(source: &Path, target: &Path, skip_names: &[&str]) -> Result<()> {
+    ensure_copy_target_outside_source(source, target)?;
     fs::create_dir_all(target).map_err(|source_error| StorageError::CreateDir {
         path: target.to_path_buf(),
         source: source_error,
@@ -268,6 +270,38 @@ fn copy_dir_contents(source: &Path, target: &Path, skip_names: &[&str]) -> Resul
         }
     }
     Ok(())
+}
+
+fn ensure_copy_target_outside_source(source: &Path, target: &Path) -> Result<()> {
+    let source = normalize_path(source);
+    let target = normalize_path(target);
+    if target == source || target.starts_with(&source) {
+        return Err(StorageError::MigrationRollbackSafety {
+            reason: "migration backup destination must be outside the migration target".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            _ => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
 }
 
 fn directory_fingerprint(root: &Path) -> Result<String> {

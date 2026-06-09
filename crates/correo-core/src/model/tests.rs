@@ -5,12 +5,12 @@ use correo_storage::migration::MigrationPreview;
 
 use super::{AppEvent, AppModel};
 use crate::{
-    startup_state_from_migration, AppCommand, ConnectionBadge, ConnectionState, Diagnostic,
-    GlobalSettingField, GlobalSettingFlag, KeyringState, LegacyMigrationStatus,
+    startup_state_from_migration, AppCommand, ConnectionBadge, ConnectionState, ConnectionSurface,
+    Diagnostic, GlobalSettingField, GlobalSettingFlag, KeyringState, LegacyMigrationStatus,
     MigrationFailureStage, MigrationRecoveryCommand, MigrationRecoveryCompletion,
     MigrationRecoveryCounts, MigrationRecoveryEvent, MigrationRecoveryFailure,
     MigrationRecoverySnapshot, MigrationRecoveryState, MqttCommand, StartupState, ThemeMode,
-    TransferSection,
+    TransferSection, Workspace,
 };
 
 fn storage_fixture(path: &str) -> PathBuf {
@@ -205,6 +205,58 @@ fn connect_command_queues_service_work_without_marking_open() {
         model.snapshot().connections[2].state,
         ConnectionState::Connecting
     );
+}
+
+#[test]
+fn add_connection_opens_settings_draft_and_save_adds_profile() {
+    let mut model = AppModel::empty();
+
+    model.apply_command(AppCommand::AddConnection);
+
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Settings
+    );
+    assert_eq!(model.snapshot().selected_connection, None);
+    assert_eq!(
+        model.snapshot().connection_settings.profile_name,
+        "New connection"
+    );
+    assert!(model.snapshot().connection_settings.dirty);
+    assert!(!model.snapshot().connection_settings.valid);
+    assert!(model
+        .snapshot()
+        .connection_settings
+        .validation_errors
+        .iter()
+        .any(|error| error == "Host is required"));
+
+    model.apply_command(AppCommand::UpdateConnectionSetting {
+        field: crate::ConnectionSettingField::Host,
+        value: "localhost".to_owned(),
+    });
+    assert!(model.snapshot().connection_settings.valid);
+
+    model.apply_command(AppCommand::SaveConnectionSettings);
+
+    let connection_id = model
+        .snapshot()
+        .selected_connection
+        .expect("saved draft should become selected");
+    let connection = model
+        .snapshot()
+        .selected_connection()
+        .expect("saved draft should be visible in launcher");
+    assert_eq!(model.snapshot().connection_count, 1);
+    assert_eq!(connection.name, "New connection");
+    assert_eq!(connection.endpoint, "localhost:1883");
+    assert!(!model.snapshot().connection_settings.dirty);
+    assert!(model
+        .mqtt_commands_for_app_command(&AppCommand::Connect(connection_id))
+        .expect("new profile should build connect command")
+        .iter()
+        .any(|command| matches!(command, MqttCommand::Connect { .. })));
 }
 
 #[test]
