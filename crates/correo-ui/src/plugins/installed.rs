@@ -2,6 +2,7 @@ use correo_core::{AppCommand, AppCommandSender, PluginRow, PluginSurfaceSnapshot
 use egui::{RichText, ScrollArea, Ui};
 
 use crate::theme::ThemeTokens;
+use crate::widgets::tile_list_content_width;
 
 use super::{
     capability_chips, plugin_detail, plugin_split, plugin_tile, search_field, send, status_color,
@@ -39,7 +40,7 @@ fn plugin_list(
         .id_salt("plugin-installed-list")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            ui.set_width(ui.available_width());
+            ui.set_width(tile_list_content_width(ui));
             if filtered.is_empty() {
                 ui.label(
                     RichText::new("No installed plugins match this search.")

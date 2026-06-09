@@ -9,7 +9,7 @@ use egui::{
 use egui_extras::{Size, StripBuilder};
 
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
-use crate::widgets::padded_text_edit;
+use crate::widgets::{disable_tile_text_selection, padded_text_edit};
 
 #[path = "plugins/installed.rs"]
 mod installed;
@@ -18,7 +18,7 @@ mod keyboard;
 #[path = "plugins/marketplace.rs"]
 mod marketplace;
 
-const TILE_HEIGHT: f32 = 132.0;
+const TILE_HEIGHT: f32 = 104.0;
 const TILE_PADDING: f32 = 8.0;
 const TILE_CONTENT_GAP: f32 = 4.0;
 const TILE_GAP: f32 = 6.0;
@@ -251,6 +251,7 @@ pub(super) fn plugin_tile(
 
     let content_rect = rect.shrink(TILE_PADDING);
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+    disable_tile_text_selection(&mut content_ui);
     content_ui.spacing_mut().item_spacing.y = TILE_CONTENT_GAP;
     content_ui.spacing_mut().interact_size.y = 20.0;
     content_ui.set_clip_rect(content_rect.intersect(clip_rect));

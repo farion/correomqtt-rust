@@ -10,6 +10,7 @@ use egui_phosphor::regular;
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
 use crate::widgets::with_icon_button_padding;
+use crate::widgets::{disable_tile_text_selection, tile_list_content_width};
 
 const ROW_HEIGHT: f32 = 96.0;
 const ROW_GAP: f32 = 6.0;
@@ -69,7 +70,7 @@ pub fn panel(
         .id_salt("connection-list")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            ui.set_width(ui.available_width());
+            ui.set_width(tile_list_content_width(ui));
             for connection in connections {
                 connection_row(ui, connection, snapshot, tokens, commands, i18n);
             }
@@ -144,6 +145,7 @@ fn connection_row(
 
     let content_rect = rect.shrink(8.0);
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+    disable_tile_text_selection(&mut content_ui);
     let button_clicked = row_contents(&mut content_ui, connection, tokens, commands, i18n);
 
     if let Some(dropped) = response.dnd_release_payload() {

@@ -14,6 +14,7 @@ mod mqtt;
 mod plugin_workflows;
 mod plugins;
 mod scripting;
+mod scripting_cleanup;
 mod scripting_commands;
 #[cfg(test)]
 mod scripting_tests;

@@ -8,6 +8,7 @@ use crate::theme::control_margin;
 
 const CHECKBOX_ICON_SCALE: f32 = 2.0;
 const CHECKBOX_TEXT_TRAILING_PADDING: f32 = 8.0;
+const TILE_SCROLLBAR_GUTTER: f32 = 16.0;
 
 pub(crate) fn padded_text_edit<'a>(text_edit: TextEdit<'a>) -> TextEdit<'a> {
     text_edit.margin(control_margin())
@@ -34,6 +35,15 @@ pub(crate) fn checkbox_icon(checked: bool) -> &'static str {
     } else {
         regular::SQUARE
     }
+}
+
+pub(crate) fn disable_tile_text_selection(ui: &mut Ui) {
+    ui.style_mut().interaction.selectable_labels = false;
+    ui.style_mut().interaction.multi_widget_text_select = false;
+}
+
+pub(crate) fn tile_list_content_width(ui: &Ui) -> f32 {
+    (ui.available_width() - TILE_SCROLLBAR_GUTTER).max(0.0)
 }
 
 fn checkbox_icon_font(mut font: FontId) -> FontId {

@@ -117,6 +117,24 @@ impl AppModel {
         self.push_diagnostic(Diagnostic::info("Script save command queued."));
     }
 
+    pub(super) fn discard_script_changes(&mut self) {
+        let Some(index) = self.selected_script_index() else {
+            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(
+                "Select a script before discarding changes.",
+            ));
+            return;
+        };
+        let script = &mut self.snapshot.scripts.scripts[index];
+        script.source = script.saved_source.clone();
+        if script.status != ScriptFileStatus::Running {
+            script.status = ScriptFileStatus::Ready;
+        }
+        self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
+            "Discarded changes to {}.",
+            script.name
+        )));
+    }
+
     pub(super) fn request_rename_script(&mut self) {
         if self.snapshot.scripts.selected_script().is_none() {
             self.snapshot.scripts.feedback =
@@ -333,7 +351,9 @@ impl AppModel {
             execution.error = redacted_error.clone();
         }
 
-        if status.is_terminal() && self.snapshot.scripts.active_execution_id == Some(execution_id) {
+        if status.is_terminal()
+            && self.snapshot.scripts.active_execution_id.as_deref() == Some(execution_id.as_str())
+        {
             self.snapshot.scripts.running = false;
             self.snapshot.scripts.active_execution_id = None;
             if let Some(index) = self.selected_script_index() {
@@ -345,14 +365,16 @@ impl AppModel {
             }
         }
 
-        self.snapshot.scripts.last_error = redacted_error.clone();
-        if let Some(error) = redacted_error {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(format!(
-                "{}: {}",
-                error.kind.label(),
-                error.message
-            )));
+        if let Some(error) = redacted_error.clone() {
+            self.append_script_log(
+                execution_id,
+                ScriptLogLevel::Error,
+                format!("{}: {}", error.kind.label(), error.message),
+                "now".to_owned(),
+            );
+            self.snapshot.scripts.last_error = Some(error);
         } else if status.is_terminal() {
+            self.snapshot.scripts.last_error = None;
             self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
                 "Execution {}.",
                 status.label()

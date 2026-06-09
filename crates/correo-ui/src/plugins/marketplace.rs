@@ -2,6 +2,7 @@ use correo_core::{AppCommand, AppCommandSender, PluginMarketplaceRow, PluginSurf
 use egui::{Button, RichText, ScrollArea, Ui};
 
 use crate::theme::ThemeTokens;
+use crate::widgets::tile_list_content_width;
 
 use super::{
     install_button, marketplace_capability_chips, metadata_row, plugin_split, plugin_tile,
@@ -40,7 +41,7 @@ fn marketplace_list(
         .id_salt("plugin-marketplace-list")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            ui.set_width(ui.available_width());
+            ui.set_width(tile_list_content_width(ui));
             if filtered.is_empty() {
                 ui.label(
                     RichText::new("No marketplace plugins match this search.")
