@@ -1279,10 +1279,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "correo-plugin-xml-format"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "correo-plugins"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "correo-plugin-xml-format",
  "semver",
  "serde",
  "serde_json",

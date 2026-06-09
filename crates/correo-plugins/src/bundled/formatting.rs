@@ -3,6 +3,10 @@ use crate::{
     DetailFormatDto, DetailFormatterRequest, DetailFormatterResponse, FormattedDetailDto,
     HookDiagnosticDto, HookDiagnosticSeverityDto, HookKind, ABI_VERSION,
 };
+use correo_plugin_xml_format::{
+    format_xml_bytes, XmlDetailFormat, XmlFormatDiagnostic, XmlFormatDiagnosticSeverity,
+    XmlFormatOutput,
+};
 use serde_json::Value;
 
 pub(super) fn format_json(
@@ -28,62 +32,13 @@ pub(super) fn format_xml(
     request: DetailFormatterRequest,
     plugin_id: &str,
 ) -> Result<DetailFormatterResponse, BundledPluginError> {
-    let text = utf8_payload(request.bytes, plugin_id, HookKind::DetailFormatter)?;
-    match pretty_xml(&text) {
-        Some(pretty) => Ok(formatted_detail(DetailFormatDto::Xml, pretty, Vec::new())),
-        None => Ok(formatted_detail(
-            DetailFormatDto::PlainText,
-            text,
-            vec![warning(
-                "Input is not valid XML-like text; returned unchanged.",
-            )],
-        )),
-    }
-}
-
-fn pretty_xml(input: &str) -> Option<String> {
-    let text = input.trim();
-    if !text.starts_with('<') || !text.ends_with('>') {
-        return None;
-    }
-
-    let mut out = String::new();
-    let mut indent = 0usize;
-    let mut cursor = 0usize;
-    let mut saw_tag = false;
-
-    while cursor < text.len() {
-        let open = text[cursor..].find('<')?;
-        let content = text[cursor..cursor + open].trim();
-        if !content.is_empty() {
-            push_xml_line(&mut out, indent, content);
-        }
-        cursor += open;
-
-        let close = text[cursor..].find('>')?;
-        let tag = &text[cursor..cursor + close + 1];
-        if tag.len() <= 2 {
-            return None;
-        }
-
-        if tag.starts_with("</") {
-            indent = indent.checked_sub(1)?;
-            push_xml_line(&mut out, indent, tag);
-        } else if tag.starts_with("<?") || tag.starts_with("<!") || tag.ends_with("/>") {
-            push_xml_line(&mut out, indent, tag);
-        } else {
-            push_xml_line(&mut out, indent, tag);
-            indent += 1;
-        }
-        saw_tag = true;
-        cursor += close + 1;
-    }
-
-    if saw_tag && indent == 0 {
-        Some(out.trim_end().to_owned())
-    } else {
-        None
-    }
+    format_xml_bytes(request.bytes)
+        .map(xml_output)
+        .map_err(|source| BundledPluginError::InvalidUtf8 {
+            plugin_id: plugin_id.to_owned(),
+            hook: HookKind::DetailFormatter,
+            source: source.into_source(),
+        })
 }
 
 fn formatted_detail(
@@ -113,10 +68,28 @@ fn utf8_payload(
     })
 }
 
-fn push_xml_line(out: &mut String, indent: usize, line: &str) {
-    out.push_str(&"  ".repeat(indent));
-    out.push_str(line);
-    out.push('\n');
+fn xml_output(output: XmlFormatOutput) -> DetailFormatterResponse {
+    formatted_detail(
+        xml_format(output.format),
+        output.text,
+        output.diagnostics.into_iter().map(xml_diagnostic).collect(),
+    )
+}
+
+fn xml_format(format: XmlDetailFormat) -> DetailFormatDto {
+    match format {
+        XmlDetailFormat::Xml => DetailFormatDto::Xml,
+        XmlDetailFormat::PlainText => DetailFormatDto::PlainText,
+    }
+}
+
+fn xml_diagnostic(diagnostic: XmlFormatDiagnostic) -> HookDiagnosticDto {
+    HookDiagnosticDto {
+        severity: match diagnostic.severity {
+            XmlFormatDiagnosticSeverity::Warning => HookDiagnosticSeverityDto::Warning,
+        },
+        message: diagnostic.message,
+    }
 }
 
 fn warning(message: &str) -> HookDiagnosticDto {

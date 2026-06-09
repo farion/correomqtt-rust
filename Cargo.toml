@@ -8,6 +8,7 @@ members = [
     "crates/correo-scripting",
     "crates/correo-storage",
     "crates/correo-ui",
+    "plugins/xml-format",
     "xtask",
 ]
 resolver = "2"
