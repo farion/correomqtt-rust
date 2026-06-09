@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use correo_mqtt::ConnectionId;
 use correo_storage::current::{
     AppConfig, Auth, ConnectionConfig, ConnectionHistorySnapshot, HistoryPersistenceSnapshot, Lwt,
-    MqttVersion, Proxy, Qos as StorageQos, Settings, ThemeSettings, TlsSsl,
+    MqttVersion, Proxy, Qos as StorageQos, ScriptPersistenceSnapshot, Settings, ThemeSettings,
+    TlsSsl,
 };
 use correo_storage::migration::MigrationPreview;
 
@@ -14,6 +15,10 @@ use crate::{
     PluginRepositoryRow, PublishHistoryRow, QosLevel, SubscribePaneSnapshot, SubscriptionRow,
     ThemeMode,
 };
+
+#[path = "bootstrap_scripts.rs"]
+mod bootstrap_scripts;
+use bootstrap_scripts::{apply_default_script_connection, script_surface};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupState {
@@ -61,6 +66,7 @@ impl StartupState {
 pub fn startup_state_from_current(
     config: AppConfig,
     histories: HistoryPersistenceSnapshot,
+    scripts: ScriptPersistenceSnapshot,
     warnings: Vec<String>,
     fallback_theme: ThemeMode,
 ) -> StartupState {
@@ -83,6 +89,7 @@ pub fn startup_state_from_current(
     snapshot.connections = mapped;
     snapshot.theme_mode = theme_mode;
     snapshot.global_settings = global_settings(&config.settings);
+    snapshot.scripts = script_surface(&scripts);
     snapshot.diagnostics = warnings
         .into_iter()
         .map(|warning| Diagnostic::warning(warning).redacted())
@@ -100,6 +107,7 @@ pub fn startup_state_from_current(
             apply_history(&mut snapshot, histories.connections.get(storage_id));
         }
     }
+    apply_default_script_connection(&mut snapshot);
 
     StartupState {
         snapshot,
@@ -124,6 +132,7 @@ pub fn startup_state_from_migration(
             settings: preview.settings,
         },
         preview.histories,
+        preview.scripts,
         warnings,
         fallback_theme,
     )

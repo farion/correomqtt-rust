@@ -218,6 +218,29 @@ impl ScriptStore {
             .collect()
     }
 
+    pub fn load_snapshot(&self, max_log_records: usize) -> Result<ScriptPersistenceSnapshot> {
+        let files = self.list_scripts()?;
+        let mut executions = Vec::new();
+        let mut logs = Vec::new();
+        for file in &files {
+            let script_executions = self.load_executions(&file.relative_path)?;
+            for execution in &script_executions {
+                let loaded = self.load_log(
+                    &file.relative_path,
+                    &execution.execution_id,
+                    max_log_records,
+                )?;
+                logs.extend(loaded.records);
+            }
+            executions.extend(script_executions);
+        }
+        Ok(ScriptPersistenceSnapshot {
+            files,
+            executions,
+            logs,
+        })
+    }
+
     pub fn replace_all(&self, snapshot: &ScriptPersistenceSnapshot) -> Result<()> {
         let root = self.scripts_root();
         remove_dir_if_exists(root.clone())?;

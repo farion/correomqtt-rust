@@ -4,12 +4,13 @@ use crate::{
     AppCommand, AppCommandSender, AppEvent, AppEventSender, AppModel, AppSnapshot, Diagnostic,
     HistoryPersistenceEvent, HistoryPersistenceKind, HistoryPersistenceWorker,
     MigrationPersistenceCommand, MigrationPersistenceWorker, MqttCommandSender, MqttService,
-    NoopPluginHookExecutor, PluginHookExecutor, SettingsPersistenceCommand,
+    NoopPluginHookExecutor, PluginHookExecutor, ScriptingWorker, SettingsPersistenceCommand,
     SettingsPersistenceEvent, SettingsPersistenceWorker, StartupState,
 };
 
 mod plugin_helpers;
 mod plugins;
+mod scripting;
 
 #[derive(Debug)]
 pub struct AppRuntime {
@@ -23,6 +24,7 @@ pub struct AppRuntime {
     migration_worker: Option<MigrationPersistenceWorker>,
     plugin_hooks: Arc<dyn PluginHookExecutor>,
     settings_worker: Option<SettingsPersistenceWorker>,
+    scripting_worker: Option<ScriptingWorker>,
     shutdown_requested: bool,
 }
 
@@ -53,6 +55,7 @@ impl AppRuntime {
             migration_worker: None,
             plugin_hooks: Arc::new(NoopPluginHookExecutor),
             settings_worker: None,
+            scripting_worker: None,
             shutdown_requested: false,
         }
     }
@@ -88,7 +91,9 @@ impl AppRuntime {
     pub fn attach_settings_worker(&mut self, worker: SettingsPersistenceWorker) {
         self.settings_worker = Some(worker);
     }
-
+    pub fn attach_scripting_worker(&mut self, worker: ScriptingWorker) {
+        self.scripting_worker = Some(worker);
+    }
     pub fn mqtt_command_sender(&self) -> Option<MqttCommandSender> {
         self.mqtt_service.as_ref().map(MqttService::command_sender)
     }
@@ -126,6 +131,11 @@ impl AppRuntime {
             report.events_processed += 1;
         }
 
+        while let Some(event) = self.try_recv_scripting_event() {
+            self.apply_scripting_event(event);
+            report.events_processed += 1;
+        }
+
         while let Some(event) = self.try_recv_migration_event() {
             self.model.apply_event(event);
             report.events_processed += 1;
@@ -137,6 +147,7 @@ impl AppRuntime {
         }
 
         while let Ok(command) = self.command_receiver.try_recv() {
+            let command_before = self.model.snapshot().clone();
             let should_persist_settings = matches!(command, AppCommand::SaveGlobalSettings)
                 && self.model.snapshot().global_settings.dirty;
             if matches!(command, AppCommand::Shutdown) {
@@ -151,6 +162,7 @@ impl AppRuntime {
             if should_persist_settings {
                 self.dispatch_global_settings_save();
             }
+            self.dispatch_scripting_command(&command, &command_before);
             report.commands_processed += 1;
         }
 
@@ -175,6 +187,12 @@ impl AppRuntime {
         self.settings_worker
             .as_ref()
             .and_then(SettingsPersistenceWorker::try_recv_event)
+    }
+
+    fn try_recv_scripting_event(&self) -> Option<crate::ScriptingEvent> {
+        self.scripting_worker
+            .as_ref()
+            .and_then(ScriptingWorker::try_recv_event)
     }
 
     fn try_recv_migration_event(&self) -> Option<AppEvent> {

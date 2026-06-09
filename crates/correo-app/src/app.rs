@@ -1,6 +1,6 @@
 use correo_core::{
     AppRuntime, Diagnostic, HistoryPersistenceWorker, MigrationPersistenceWorker, MqttService,
-    RumqttSessionFactory, SettingsPersistenceWorker,
+    RumqttSessionFactory, ScriptingWorker, SettingsPersistenceWorker,
 };
 
 use crate::startup::{history_root, load_startup_state};
@@ -45,7 +45,8 @@ impl CorreoDesktopApp {
         let storage_root = history_root();
         runtime.attach_history_worker(HistoryPersistenceWorker::start(storage_root.clone()));
         runtime.attach_migration_worker(MigrationPersistenceWorker::start(storage_root.clone()));
-        runtime.attach_settings_worker(SettingsPersistenceWorker::start(storage_root));
+        runtime.attach_settings_worker(SettingsPersistenceWorker::start(storage_root.clone()));
+        runtime.attach_scripting_worker(ScriptingWorker::start(storage_root));
         let ui = correo_ui::CorreoUi::with_command_sender(
             creation_context,
             runtime.snapshot().clone(),

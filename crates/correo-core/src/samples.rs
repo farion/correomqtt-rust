@@ -34,7 +34,7 @@ pub fn sample_snapshot(theme_mode: ThemeMode) -> AppSnapshot {
     ];
     snapshot.global_settings = sample_global_settings();
     snapshot.plugins = sample_plugins();
-    snapshot.scripts = sample_scripts();
+    snapshot.scripts = sample_scripts(selected_connection);
     snapshot.selected_connection = selected_connection;
     snapshot.theme_mode = theme_mode;
     snapshot.transfer = sample_transfer();
@@ -211,9 +211,10 @@ fn sample_connection_settings() -> ConnectionSettingsSnapshot {
     }
 }
 
-fn sample_scripts() -> ScriptSurfaceSnapshot {
+fn sample_scripts(selected_connection: Option<ConnectionId>) -> ScriptSurfaceSnapshot {
     ScriptSurfaceSnapshot {
         selected_connection: "Local Broker".to_owned(),
+        selected_connection_id: selected_connection.map(|id| id.to_string()),
         selected_script: "payload_replay.js".to_owned(),
         scripts: vec![
             script("payload_replay.js", ScriptFileStatus::Running, 12),
@@ -490,6 +491,7 @@ fn execution(
 
 fn log(timestamp: &str, level: ScriptLogLevel, message: &str) -> ScriptLogLine {
     ScriptLogLine {
+        execution_id: "exec-1001".to_owned(),
         timestamp: timestamp.to_owned(),
         level,
         message: message.to_owned(),

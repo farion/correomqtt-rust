@@ -18,6 +18,22 @@ impl AppModel {
         }
     }
 
+    pub(super) fn select_script_connection(&mut self, connection_id: &str) {
+        let Some(connection) = self
+            .snapshot
+            .connections
+            .iter()
+            .find(|connection| connection.id.to_string() == connection_id)
+        else {
+            self.snapshot.scripts.feedback =
+                Some(ScriptFeedback::warning("Select an available connection."));
+            return;
+        };
+        self.snapshot.scripts.selected_connection_id = Some(connection.id.to_string());
+        self.snapshot.scripts.selected_connection = connection.name.clone();
+        self.snapshot.scripts.feedback = None;
+    }
+
     pub(super) fn update_new_script_name(&mut self, name: String) {
         self.snapshot.scripts.new_script_name = name;
     }
@@ -184,6 +200,9 @@ impl AppModel {
             .first()
             .map(|script| script.name.clone())
             .unwrap_or_default();
+        if self.snapshot.scripts.scripts.is_empty() {
+            self.snapshot.scripts.selected_execution_id = None;
+        }
         self.snapshot.scripts.delete_confirmation_open = false;
         self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(format!(
             "Deleted {deleted}; script sidecars will be removed by storage."
@@ -192,6 +211,18 @@ impl AppModel {
 
     pub(super) fn select_script_detail_tab(&mut self, tab: ScriptDetailTab) {
         self.snapshot.scripts.active_tab = tab;
+    }
+
+    pub(super) fn select_script_execution(&mut self, execution_id: String) {
+        if self
+            .snapshot
+            .scripts
+            .executions
+            .iter()
+            .any(|execution| execution.execution_id == execution_id)
+        {
+            self.snapshot.scripts.selected_execution_id = Some(execution_id);
+        }
     }
 
     pub(super) fn run_script(&mut self) {
@@ -211,6 +242,7 @@ impl AppModel {
         let execution_id = format!("script-exec-{}", self.snapshot.scripts.executions.len() + 1);
         self.snapshot.scripts.running = true;
         self.snapshot.scripts.active_execution_id = Some(execution_id.clone());
+        self.snapshot.scripts.selected_execution_id = Some(execution_id.clone());
         self.snapshot.scripts.active_tab = ScriptDetailTab::Executions;
         self.snapshot.scripts.scripts[index].status = ScriptFileStatus::Running;
         self.snapshot.scripts.scripts[index].execution_count += 1;
@@ -270,6 +302,7 @@ impl AppModel {
         timestamp: String,
     ) {
         self.snapshot.scripts.log_lines.push(ScriptLogLine {
+            execution_id: execution_id.clone(),
             timestamp,
             level,
             message: redact_script_output(&format!("[{execution_id}] {message}")),
@@ -392,97 +425,5 @@ fn redact_script_output(message: &str) -> String {
         "[REDACTED SCRIPT OUTPUT: sensitive material]".to_owned()
     } else {
         redacted
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{AppCommand, AppEvent};
-
-    #[test]
-    fn create_script_without_name_allocates_unique_default() {
-        let mut model = AppModel::empty();
-
-        model.apply_command(AppCommand::CreateScript);
-        model.apply_command(AppCommand::CreateScript);
-
-        let scripts = &model.snapshot().scripts;
-        assert_eq!(scripts.scripts[0].name, "new_script.js");
-        assert_eq!(scripts.scripts[1].name, "new_script_2.js");
-        assert_eq!(scripts.selected_script, "new_script_2.js");
-        assert!(scripts
-            .feedback
-            .as_ref()
-            .unwrap()
-            .message
-            .contains("Created"));
-    }
-
-    #[test]
-    fn script_edit_save_tracks_dirty_state() {
-        let mut model = AppModel::default();
-        let name = model.snapshot().scripts.selected_script.clone();
-
-        model.apply_command(AppCommand::UpdateScriptSource(
-            "logger.info('changed');".to_owned(),
-        ));
-
-        let script = model.snapshot().scripts.selected_script().unwrap();
-        assert_eq!(script.name, name);
-        assert!(script.is_dirty());
-        assert!(model.snapshot().scripts.can_save());
-
-        model.apply_command(AppCommand::SaveScript);
-
-        assert!(!model
-            .snapshot()
-            .scripts
-            .selected_script()
-            .unwrap()
-            .is_dirty());
-        assert!(!model.snapshot().scripts.can_save());
-    }
-
-    #[test]
-    fn run_and_cancel_script_updates_execution_state() {
-        let mut model = AppModel::default();
-
-        model.apply_command(AppCommand::RunScript);
-
-        assert!(model.snapshot().scripts.running);
-        assert_eq!(
-            model.snapshot().scripts.executions[0].status,
-            ScriptExecutionStatus::Running
-        );
-
-        model.apply_command(AppCommand::CancelScript);
-
-        assert!(!model.snapshot().scripts.running);
-        assert_eq!(
-            model.snapshot().scripts.executions[0].status,
-            ScriptExecutionStatus::Cancelled
-        );
-        assert_eq!(
-            model.snapshot().scripts.last_error.as_ref().unwrap().kind,
-            ScriptExecutionErrorKind::Cancellation
-        );
-    }
-
-    #[test]
-    fn script_log_events_are_redacted_before_snapshot_exposure() {
-        let mut model = AppModel::default();
-
-        model.apply_event(AppEvent::ScriptExecutionLogAppended {
-            execution_id: "exec-1".to_owned(),
-            level: ScriptLogLevel::Error,
-            message: "password=hunter2 key material follows".to_owned(),
-            timestamp: "now".to_owned(),
-        });
-
-        let message = &model.snapshot().scripts.log_lines.last().unwrap().message;
-        assert!(!message.contains("hunter2"));
-        assert!(!message.contains("key material"));
-        assert!(message.contains("[REDACTED"));
     }
 }

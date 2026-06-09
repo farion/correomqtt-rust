@@ -6,6 +6,9 @@ impl AppModel {
     pub(super) fn apply_scripting_command(&mut self, command: &AppCommand) -> bool {
         match command {
             AppCommand::SearchScripts(filter) => self.search_scripts(filter.clone()),
+            AppCommand::SelectScriptConnection(connection_id) => {
+                self.select_script_connection(connection_id);
+            }
             AppCommand::SelectScript(name) => self.select_script(name.clone()),
             AppCommand::UpdateNewScriptName(name) => self.update_new_script_name(name.clone()),
             AppCommand::CreateScript => self.create_script(),
@@ -21,6 +24,9 @@ impl AppModel {
             AppCommand::CancelDeleteScript => self.cancel_delete_script(),
             AppCommand::ConfirmDeleteScript => self.confirm_delete_script(),
             AppCommand::SelectScriptDetailTab(tab) => self.select_script_detail_tab(*tab),
+            AppCommand::SelectScriptExecution(execution_id) => {
+                self.select_script_execution(execution_id.clone());
+            }
             AppCommand::RunScript => self.run_script(),
             AppCommand::CancelScript => self.cancel_script(),
             _ => return false,

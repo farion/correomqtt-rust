@@ -6,6 +6,9 @@ mod model;
 mod mqtt;
 mod runtime;
 mod samples;
+mod scripting;
+#[cfg(test)]
+mod scripting_tests;
 mod settings_persistence;
 mod surfaces;
 mod types;
@@ -18,6 +21,7 @@ pub use model::AppModel;
 pub use mqtt::*;
 pub use runtime::{AppRuntime, PumpReport};
 pub use samples::sample_snapshot;
+pub use scripting::*;
 pub use settings_persistence::*;
 pub use surfaces::*;
 use thiserror::Error;
