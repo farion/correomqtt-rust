@@ -5,21 +5,28 @@ use correo_core::{
 };
 use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
 
+use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
 
-pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
+pub fn show(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
     let settings = &snapshot.global_settings;
     ui.horizontal(|ui| {
-        ui.heading("Global Settings");
+        ui.heading(i18n.text("settings-header"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(settings.dirty, Button::new("Save"))
+                .add_enabled(settings.dirty, Button::new(i18n.text("common-save")))
                 .clicked()
             {
                 send(commands, AppCommand::SaveGlobalSettings);
             }
             if ui
-                .add_enabled(settings.dirty, Button::new("Discard"))
+                .add_enabled(settings.dirty, Button::new(i18n.text("common-discard")))
                 .clicked()
             {
                 send(commands, AppCommand::DiscardGlobalSettings);
@@ -32,27 +39,62 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
         .id_salt("global-settings-scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            section(ui, "Appearance", tokens, |ui| {
-                appearance(ui, snapshot.theme_mode, commands);
-            });
-            section(ui, "Language", tokens, |ui| {
-                language(ui, settings, commands);
-            });
-            section(ui, "Search", tokens, |ui| {
-                search(ui, settings, commands);
-            });
-            section(ui, "Keyring", tokens, |ui| {
-                keyring(ui, settings, tokens, commands);
-            });
-            section(ui, "Updates", tokens, |ui| {
-                updates(ui, settings, commands);
-            });
-            section(ui, "Plugins", tokens, |ui| {
-                plugins(ui, settings, tokens, commands);
-            });
-            section(ui, "Data", tokens, |ui| {
-                data(ui, settings, tokens, commands);
-            });
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Appearance),
+                tokens,
+                |ui| {
+                    appearance(ui, snapshot.theme_mode, commands, i18n);
+                },
+            );
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Language),
+                tokens,
+                |ui| {
+                    language(ui, settings, commands, i18n);
+                },
+            );
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Search),
+                tokens,
+                |ui| {
+                    search(ui, settings, commands, i18n);
+                },
+            );
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Keyring),
+                tokens,
+                |ui| {
+                    keyring(ui, settings, tokens, commands, i18n);
+                },
+            );
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Updates),
+                tokens,
+                |ui| {
+                    updates(ui, settings, commands, i18n);
+                },
+            );
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Plugins),
+                tokens,
+                |ui| {
+                    plugins(ui, settings, tokens, commands, i18n);
+                },
+            );
+            section(
+                ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Data),
+                tokens,
+                |ui| {
+                    data(ui, settings, tokens, commands, i18n);
+                },
+            );
 
             if let Some(feedback) = &settings.feedback {
                 ui.separator();
@@ -63,7 +105,7 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
         });
 }
 
-fn section(ui: &mut Ui, title: &str, tokens: ThemeTokens, add: impl FnOnce(&mut Ui)) {
+fn section(ui: &mut Ui, title: String, tokens: ThemeTokens, add: impl FnOnce(&mut Ui)) {
     ui.add_space(6.0);
     ui.label(
         RichText::new(title)
@@ -77,15 +119,15 @@ fn section(ui: &mut Ui, title: &str, tokens: ThemeTokens, add: impl FnOnce(&mut 
     ui.separator();
 }
 
-fn appearance(ui: &mut Ui, theme_mode: ThemeMode, commands: &AppCommandSender) {
-    row(ui, "Theme", |ui| {
+fn appearance(ui: &mut Ui, theme_mode: ThemeMode, commands: &AppCommandSender, i18n: &I18n) {
+    row(ui, &i18n.text("settings-theme"), |ui| {
         let mut selected = theme_mode;
         ComboBox::from_id_salt("settings-theme")
-            .selected_text(theme_mode.label())
+            .selected_text(i18n.theme_label(theme_mode))
             .width(160.0)
             .show_ui(ui, |ui| {
                 for mode in ThemeMode::ALL {
-                    ui.selectable_value(&mut selected, mode, mode.label());
+                    ui.selectable_value(&mut selected, mode, i18n.theme_label(mode));
                 }
             });
         if selected != theme_mode {
@@ -94,8 +136,13 @@ fn appearance(ui: &mut Ui, theme_mode: ThemeMode, commands: &AppCommandSender) {
     });
 }
 
-fn language(ui: &mut Ui, settings: &GlobalSettingsSnapshot, commands: &AppCommandSender) {
-    row(ui, "Language", |ui| {
+fn language(
+    ui: &mut Ui,
+    settings: &GlobalSettingsSnapshot,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    row(ui, &i18n.text("settings-language"), |ui| {
         option_combo(
             ui,
             "settings-language",
@@ -106,21 +153,27 @@ fn language(ui: &mut Ui, settings: &GlobalSettingsSnapshot, commands: &AppComman
                 value,
             },
             commands,
+            i18n,
         );
     });
 }
 
-fn search(ui: &mut Ui, settings: &GlobalSettingsSnapshot, commands: &AppCommandSender) {
+fn search(
+    ui: &mut Ui,
+    settings: &GlobalSettingsSnapshot,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
     checkbox_flag(
         ui,
-        "Use regular expressions",
+        &i18n.text("settings-use-regex"),
         settings.search_use_regex,
         GlobalSettingFlag::UseRegexForSearch,
         commands,
     );
     checkbox_flag(
         ui,
-        "Ignore case",
+        &i18n.text("settings-ignore-case"),
         settings.search_ignore_case,
         GlobalSettingFlag::UseIgnoreCase,
         commands,
@@ -132,8 +185,9 @@ fn keyring(
     settings: &GlobalSettingsSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    row(ui, "Backend", |ui| {
+    row(ui, &i18n.text("settings-backend"), |ui| {
         option_combo(
             ui,
             "settings-keyring",
@@ -144,17 +198,26 @@ fn keyring(
                 value,
             },
             commands,
+            i18n,
         );
     });
     ui.add_space(8.0);
     ui.label(RichText::new(&settings.cleanup_status).color(tokens.text_secondary));
-    ui.add_enabled(false, Button::new("Delete sensitive data..."));
+    ui.add_enabled(
+        false,
+        Button::new(i18n.text("settings-delete-sensitive-data")),
+    );
 }
 
-fn updates(ui: &mut Ui, settings: &GlobalSettingsSnapshot, commands: &AppCommandSender) {
+fn updates(
+    ui: &mut Ui,
+    settings: &GlobalSettingsSnapshot,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
     checkbox_flag(
         ui,
-        "Check for updates",
+        &i18n.text("settings-updates"),
         settings.update_checks_enabled,
         GlobalSettingFlag::SearchUpdates,
         commands,
@@ -167,22 +230,23 @@ fn plugins(
     settings: &GlobalSettingsSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     checkbox_flag(
         ui,
-        "Use default repository",
+        &i18n.text("settings-use-default-repository"),
         settings.use_default_plugin_repository,
         GlobalSettingFlag::UseDefaultPluginRepository,
         commands,
     );
     checkbox_flag(
         ui,
-        "Install bundled plugins",
+        &i18n.text("settings-install-bundled-plugins"),
         settings.install_bundled_plugins,
         GlobalSettingFlag::InstallBundledPlugins,
         commands,
     );
-    row(ui, "Bundled URL", |ui| {
+    row(ui, &i18n.text("settings-bundled-url"), |ui| {
         let mut url = settings.bundled_plugins_url.clone();
         let response = ui.add_sized([420.0, 24.0], TextEdit::singleline(&mut url));
         if response.changed() {
@@ -196,9 +260,12 @@ fn plugins(
         }
     });
     ui.separator();
-    ui.label(RichText::new("Plugin repositories").strong());
+    ui.label(RichText::new(i18n.text("settings-plugin-repositories")).strong());
     if settings.plugin_repositories.is_empty() {
-        ui.label(RichText::new("No custom repositories").color(tokens.text_secondary));
+        ui.label(
+            RichText::new(i18n.text("settings-no-custom-repositories"))
+                .color(tokens.text_secondary),
+        );
     } else {
         for repository in &settings.plugin_repositories {
             ui.horizontal(|ui| {
@@ -214,16 +281,21 @@ fn data(
     settings: &GlobalSettingsSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    value_row(ui, "Config version", &settings.config_version);
-    value_row(ui, "Window", &settings.window_geometry);
     value_row(
         ui,
-        "First start",
+        &i18n.text("settings-config-version"),
+        &settings.config_version,
+    );
+    value_row(ui, &i18n.text("settings-window"), &settings.window_geometry);
+    value_row(
+        ui,
+        &i18n.text("settings-first-start"),
         if settings.first_start { "yes" } else { "no" },
     );
     ui.separator();
-    legacy_migration(ui, settings, tokens, commands);
+    legacy_migration(ui, settings, tokens, commands, i18n);
     ui.separator();
     ui.label(RichText::new(&settings.cleanup_status).color(tokens.text_secondary));
 }
@@ -233,28 +305,41 @@ fn legacy_migration(
     settings: &GlobalSettingsSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     let migration = &settings.legacy_migration;
-    ui.label(RichText::new("Legacy migration").strong());
-    value_row(ui, "Status", migration.status.label());
-    value_row(ui, "Last result", &migration.last_status);
+    ui.label(RichText::new(i18n.text("settings-legacy-migration")).strong());
+    value_row(
+        ui,
+        &i18n.text("settings-status"),
+        &i18n.legacy_migration_label(migration.status),
+    );
+    value_row(
+        ui,
+        &i18n.text("settings-last-result"),
+        &migration.last_status,
+    );
     if let Some(path) = &migration.legacy_path_hint {
-        value_row(ui, "Legacy path", path);
+        value_row(ui, &i18n.text("settings-legacy-path"), path);
     }
     if let Some(backup) = &migration.backup_name {
-        value_row(ui, "Backup", backup);
+        value_row(ui, &i18n.text("settings-backup"), backup);
     }
     if let Some(path) = &migration.backup_path_hint {
-        value_row(ui, "Backup path", path);
+        value_row(ui, &i18n.text("settings-backup-path"), path);
     }
     if migration.warning_count > 0 {
-        value_row(ui, "Warnings", &migration.warning_count.to_string());
+        value_row(
+            ui,
+            &i18n.text("settings-warnings"),
+            &migration.warning_count.to_string(),
+        );
     }
     ui.horizontal_wrapped(|ui| {
         if ui
             .add_enabled(
                 migration.diagnostics_available,
-                Button::new("View diagnostics"),
+                Button::new(i18n.text("settings-view-diagnostics")),
             )
             .clicked()
         {
@@ -266,7 +351,7 @@ fn legacy_migration(
         if ui
             .add_enabled(
                 migration.restore_available,
-                Button::new("Restore backup..."),
+                Button::new(i18n.text("settings-restore-backup")),
             )
             .clicked()
         {
@@ -277,7 +362,9 @@ fn legacy_migration(
         }
     });
     if migration.status == LegacyMigrationStatus::NotRun {
-        ui.label(RichText::new("No restore target is available.").color(tokens.text_secondary));
+        ui.label(
+            RichText::new(i18n.text("settings-no-restore-target")).color(tokens.text_secondary),
+        );
     }
 }
 
@@ -315,14 +402,16 @@ fn option_combo(
     options: &[SettingsOption],
     command: impl FnOnce(String) -> AppCommand,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     let mut selected = current.to_owned();
     ComboBox::from_id_salt(id)
-        .selected_text(option_label(current, options))
+        .selected_text(option_label(current, options, i18n))
         .width(180.0)
         .show_ui(ui, |ui| {
             for option in options {
-                ui.selectable_value(&mut selected, option.id.clone(), &option.label);
+                let label = i18n.language_option_label(&option.id, &option.label);
+                ui.selectable_value(&mut selected, option.id.clone(), label);
             }
         });
     if selected != current {
@@ -330,11 +419,11 @@ fn option_combo(
     }
 }
 
-fn option_label(current: &str, options: &[SettingsOption]) -> String {
+fn option_label(current: &str, options: &[SettingsOption], i18n: &I18n) -> String {
     options
         .iter()
         .find(|option| option.id == current)
-        .map(|option| option.label.clone())
+        .map(|option| i18n.language_option_label(&option.id, &option.label))
         .unwrap_or_else(|| current.to_owned())
 }
 

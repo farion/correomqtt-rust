@@ -3,13 +3,16 @@ use correo_core::{
 };
 use egui::{CentralPanel, Frame, SidePanel, Stroke, TopBottomPanel};
 
-use crate::{command_bar, connection_launcher, icons, migration_recovery, nav, theme, workspace};
+use crate::{
+    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, theme, workspace,
+};
 
 pub const THEME_KEY: &str = "correo.theme-mode";
 
 pub struct CorreoUi {
     command_sender: AppCommandSender,
     snapshot: AppSnapshot,
+    i18n: I18n,
     icons_installed: bool,
 }
 
@@ -21,6 +24,7 @@ impl CorreoUi {
         icons::install(&creation_context.egui_ctx);
         Self {
             command_sender: AppCommandSender::disconnected(),
+            i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: true,
         }
@@ -29,6 +33,7 @@ impl CorreoUi {
     pub fn for_snapshot(snapshot: AppSnapshot) -> Self {
         Self {
             command_sender: AppCommandSender::disconnected(),
+            i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: false,
         }
@@ -40,6 +45,7 @@ impl CorreoUi {
     ) -> Self {
         Self {
             command_sender,
+            i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: false,
         }
@@ -54,6 +60,7 @@ impl CorreoUi {
         icons::install(&creation_context.egui_ctx);
         Self {
             command_sender,
+            i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: true,
         }
@@ -64,6 +71,7 @@ impl CorreoUi {
     }
 
     pub fn set_snapshot(&mut self, snapshot: AppSnapshot) {
+        self.i18n.set_language(&snapshot.global_settings.language);
         self.snapshot = snapshot;
     }
 
@@ -77,6 +85,7 @@ impl CorreoUi {
         theme::apply_theme(context, snapshot.theme_mode);
         let tokens = theme::tokens(context, snapshot.theme_mode);
         let commands = &self.command_sender;
+        let i18n = &self.i18n;
 
         if snapshot.migration_recovery.blocks_normal_shell() {
             TopBottomPanel::top("correo-recovery-command")
@@ -107,7 +116,7 @@ impl CorreoUi {
             .exact_height(40.0)
             .frame(top_frame(tokens))
             .show(context, |ui| {
-                command_bar::command_bar(ui, &snapshot, tokens, commands);
+                command_bar::command_bar(ui, &snapshot, tokens, commands, i18n);
             });
 
         SidePanel::left("correo-rail")
@@ -115,7 +124,7 @@ impl CorreoUi {
             .resizable(false)
             .frame(rail_frame(tokens))
             .show(context, |ui| {
-                nav::rail(ui, snapshot.active_workspace, tokens, commands);
+                nav::rail(ui, snapshot.active_workspace, tokens, commands, i18n);
             });
 
         if context_panel_visible(&snapshot) {
@@ -129,7 +138,7 @@ impl CorreoUi {
                         connection_launcher::panel(ui, &snapshot, tokens, commands);
                     }
                     active_workspace => {
-                        workspace::sidebar(ui, &snapshot, active_workspace, tokens, commands);
+                        workspace::sidebar(ui, &snapshot, active_workspace, tokens, commands, i18n);
                     }
                 });
         }
@@ -137,7 +146,7 @@ impl CorreoUi {
         CentralPanel::default()
             .frame(central_frame(tokens))
             .show(context, |ui| {
-                workspace::show(ui, &snapshot, tokens, commands);
+                workspace::show(ui, &snapshot, tokens, commands, i18n);
             });
     }
 

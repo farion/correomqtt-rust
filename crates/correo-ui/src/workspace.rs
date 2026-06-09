@@ -5,7 +5,7 @@ use correo_core::{
 use egui::{Button, RichText, Ui};
 
 use crate::{
-    about, connection_settings, diagnostics, plugins, scripts, settings, skeletons,
+    about, connection_settings, diagnostics, i18n::I18n, plugins, scripts, settings, skeletons,
     theme::ThemeTokens, workbench,
 };
 
@@ -15,11 +15,12 @@ pub fn sidebar(
     workspace: Workspace,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    ui.heading(workspace.label());
+    ui.heading(i18n.workspace_label(workspace));
     ui.separator();
     match workspace {
-        Workspace::ImportExport => transfer_sidebar(ui, snapshot, tokens, commands),
+        Workspace::ImportExport => transfer_sidebar(ui, snapshot, tokens, commands, i18n),
         Workspace::Scripts => scripts::sidebar(ui, &snapshot.scripts, tokens, commands),
         Workspace::Plugins => plugins::sidebar(ui, &snapshot.plugins, tokens, commands),
         Workspace::Diagnostics => {}
@@ -29,15 +30,21 @@ pub fn sidebar(
     }
 }
 
-pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
+pub fn show(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
     match snapshot.active_workspace {
-        Workspace::Connections => connections(ui, snapshot, tokens, commands),
+        Workspace::Connections => connections(ui, snapshot, tokens, commands, i18n),
         Workspace::ImportExport => skeletons::import_export(ui, snapshot, tokens, commands),
         Workspace::Scripts => scripts::show(ui, snapshot, tokens, commands),
         Workspace::Plugins => plugins::show(ui, snapshot, tokens, commands),
-        Workspace::Diagnostics => diagnostics::workspace(ui, snapshot, tokens),
-        Workspace::Settings => settings::show(ui, snapshot, tokens, commands),
-        Workspace::About => about::show(ui, tokens),
+        Workspace::Diagnostics => diagnostics::workspace(ui, snapshot, tokens, i18n),
+        Workspace::Settings => settings::show(ui, snapshot, tokens, commands, i18n),
+        Workspace::About => about::show(ui, tokens, i18n),
     }
 }
 
@@ -46,11 +53,14 @@ fn connections(
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     match snapshot.connection_surface {
-        ConnectionSurface::Launcher => launcher_detail(ui, snapshot, tokens, commands),
+        ConnectionSurface::Launcher => launcher_detail(ui, snapshot, tokens, commands, i18n),
         ConnectionSurface::Workbench => workbench::show(ui, snapshot, tokens, commands),
-        ConnectionSurface::Settings => connection_settings::show(ui, snapshot, tokens, commands),
+        ConnectionSurface::Settings => {
+            connection_settings::show(ui, snapshot, tokens, commands, i18n)
+        }
         ConnectionSurface::Transfer => {
             skeletons::connection_transfer(ui, snapshot, tokens, commands)
         }
@@ -62,72 +72,98 @@ fn launcher_detail(
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
-    ui.heading("Connection Launcher");
+    ui.heading(i18n.text("connection-launcher"));
     ui.separator();
     if let Some(connection) = snapshot.selected_connection() {
         ui.label(RichText::new(&connection.name).strong().size(18.0));
         ui.label(RichText::new(&connection.endpoint).color(tokens.text_secondary));
         ui.add_space(8.0);
-        action_bar(ui, connection, commands);
+        action_bar(ui, connection, commands, i18n);
         if let Some(reason) = connection.disabled_reason {
             ui.label(
-                RichText::new(format!("Connect disabled: {}", reason.label()))
-                    .color(tokens.warning),
+                RichText::new(format!(
+                    "{}: {}",
+                    i18n.text("connection-connect-disabled"),
+                    i18n.disabled_reason_label(reason)
+                ))
+                .color(tokens.warning),
             );
         }
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(format!("State: {}", connection.state.label()));
-            ui.separator();
-            ui.label(format!("Protocol: {}", connection.mqtt_version));
+            ui.label(format!(
+                "{}: {}",
+                i18n.text("connection-state"),
+                i18n.connection_state_label(connection.state)
+            ));
             ui.separator();
             ui.label(format!(
-                "Subscriptions: {}",
+                "{}: {}",
+                i18n.text("connection-protocol"),
+                connection.mqtt_version
+            ));
+            ui.separator();
+            ui.label(format!(
+                "{}: {}",
+                i18n.text("connection-subscriptions"),
                 connection.recent_subscriptions
             ));
             ui.separator();
-            ui.label(format!("Messages: {}", connection.recent_messages));
+            ui.label(format!(
+                "{}: {}",
+                i18n.text("connection-messages"),
+                connection.recent_messages
+            ));
         });
         ui.label(RichText::new(&connection.last_activity).color(tokens.text_secondary));
     } else {
-        ui.label("No connection selected");
+        ui.label(i18n.text("connection-no-selected"));
     }
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
         ui.vertical(|ui| {
-            if ui.button("Add").clicked() {
+            if ui.button(i18n.text("common-add-connection")).clicked() {
                 send(commands, AppCommand::AddConnection);
             }
-            if ui.button("Import .cqc").clicked() {
+            if ui.button(i18n.text("common-import-cqc")).clicked() {
                 send(commands, AppCommand::ImportConnections);
             }
-            if ui.button("Export .cqc").clicked() {
+            if ui.button(i18n.text("common-export-cqc")).clicked() {
                 send(commands, AppCommand::ExportConnections);
             }
         });
     });
 }
 
-fn action_bar(ui: &mut Ui, connection: &ConnectionSummary, commands: &AppCommandSender) {
+fn action_bar(
+    ui: &mut Ui,
+    connection: &ConnectionSummary,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
     ui.horizontal(|ui| {
         if connection.state == correo_core::ConnectionState::Connected {
-            if ui.button("Open").clicked() {
+            if ui.button(i18n.text("common-open")).clicked() {
                 send(commands, AppCommand::OpenConnectionWorkbench(connection.id));
             }
         } else {
-            let connect = ui.add_enabled(connection.can_connect(), Button::new("Connect"));
+            let connect = ui.add_enabled(
+                connection.can_connect(),
+                Button::new(i18n.text("common-connect")),
+            );
             if connect.clicked() {
                 send(commands, AppCommand::Connect(connection.id));
             }
             if !connection.can_connect() {
-                connect.on_hover_text(disabled_reason(connection).label());
+                connect.on_hover_text(i18n.disabled_reason_label(disabled_reason(connection)));
             }
         }
-        if ui.button("Edit").clicked() {
+        if ui.button(i18n.text("common-edit")).clicked() {
             send(commands, AppCommand::OpenConnectionSettings(connection.id));
         }
-        if ui.button("Duplicate").clicked() {
+        if ui.button(i18n.text("common-duplicate")).clicked() {
             send(commands, AppCommand::DuplicateConnection(connection.id));
         }
     });
@@ -144,6 +180,7 @@ fn transfer_sidebar(
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
     for section in [
         correo_core::TransferSection::Import,
@@ -164,10 +201,10 @@ fn transfer_sidebar(
         .color(tokens.text_secondary),
     );
     ui.separator();
-    if ui.button("Import .cqc").clicked() {
+    if ui.button(i18n.text("common-import-cqc")).clicked() {
         send(commands, AppCommand::ImportConnections);
     }
-    if ui.button("Export .cqc").clicked() {
+    if ui.button(i18n.text("common-export-cqc")).clicked() {
         send(commands, AppCommand::ExportConnections);
     }
 }

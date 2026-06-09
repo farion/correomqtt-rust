@@ -3,6 +3,7 @@ mod command_bar;
 mod connection_launcher;
 mod connection_settings;
 mod diagnostics;
+mod i18n;
 mod icons;
 mod migration_recovery;
 mod nav;

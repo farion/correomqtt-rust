@@ -1,11 +1,12 @@
 use correo_core::{AppSnapshot, Diagnostic};
 use egui::{RichText, ScrollArea, Ui};
 
+use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
 
-pub fn workspace(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens) {
+pub fn workspace(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, i18n: &I18n) {
     if snapshot.diagnostics.is_empty() {
-        ui.label(RichText::new("No diagnostics").color(tokens.text_secondary));
+        ui.label(RichText::new(i18n.text("diagnostics-empty")).color(tokens.text_secondary));
         return;
     }
 
