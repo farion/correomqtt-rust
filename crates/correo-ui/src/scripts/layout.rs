@@ -1,5 +1,5 @@
 use egui::{
-    pos2, vec2, Align, Color32, CursorIcon, Frame, Id, Layout, Rect, Sense, Stroke, Ui, UiBuilder,
+    pos2, vec2, Align, Color32, CursorIcon, Id, Layout, Rect, Sense, Stroke, Ui, UiBuilder,
 };
 
 use crate::theme::ThemeTokens;
@@ -11,6 +11,7 @@ const FOOTER_HEIGHT: f32 = 28.0;
 const MIN_PANE_WIDTH: f32 = 180.0;
 const MIN_UPPER_HEIGHT: f32 = 220.0;
 const MIN_LOWER_HEIGHT: f32 = 160.0;
+const PANE_PADDING: f32 = 10.0;
 
 pub(super) fn four_pane(
     ui: &mut Ui,
@@ -111,32 +112,24 @@ fn horizontal_split(
     pane(
         ui,
         Rect::from_min_max(rect.left_top(), pos2(divider.left(), rect.bottom())),
-        tokens,
         left,
     );
     pane(
         ui,
         Rect::from_min_max(pos2(divider.right(), rect.top()), rect.right_bottom()),
-        tokens,
         right,
     );
 }
 
-fn pane(ui: &mut Ui, rect: Rect, tokens: ThemeTokens, add_contents: impl FnOnce(&mut Ui)) {
+fn pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
+    let content_rect = rect.shrink(PANE_PADDING);
     let mut child = ui.new_child(
         UiBuilder::new()
-            .max_rect(rect)
+            .max_rect(content_rect)
             .layout(Layout::top_down(Align::Min)),
     );
-    child.set_clip_rect(rect);
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
-        .show(&mut child, |ui| {
-            ui.set_min_size(rect.size());
-            add_contents(ui);
-        });
+    child.set_clip_rect(content_rect);
+    add_contents(&mut child);
 }
 
 fn footer_cell(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
