@@ -134,7 +134,7 @@ fn pane(ui: &mut Ui, rect: Rect, tokens: ThemeTokens, add_contents: impl FnOnce(
         .stroke(Stroke::new(1.0, tokens.border))
         .inner_margin(egui::Margin::same(10))
         .show(&mut child, |ui| {
-            ui.set_min_size(rect.size());
+            ui.set_min_size(ui.available_size());
             add_contents(ui);
         });
 }

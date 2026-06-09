@@ -11,6 +11,7 @@ use crate::widgets::padded_text_edit;
 mod layout;
 
 const SCRIPTING_HELP_URL: &str = "https://github.com/EXXETA/correomqtt/wiki/scripting";
+const FOCUS_RING_INSET: f32 = 2.0;
 
 pub fn sidebar(
     ui: &mut Ui,
@@ -21,7 +22,7 @@ pub fn sidebar(
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
+            [text_edit_width(ui), CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
         )
         .changed()
@@ -69,7 +70,7 @@ fn script_browser(
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
+            [text_edit_width(ui), CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
         )
         .changed()
@@ -221,10 +222,9 @@ fn selected_label(scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) -> RichT
 fn editor(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
     if let Some(script) = scripts.selected_script() {
         let mut source = script.source.clone();
-        let editor_height = ui.available_height().max(180.0);
         if ui
             .add_sized(
-                [ui.available_width(), editor_height],
+                [text_edit_width(ui), text_edit_height(ui)],
                 padded_text_edit(TextEdit::multiline(&mut source))
                     .font(egui::TextStyle::Monospace)
                     .desired_width(f32::INFINITY),
@@ -465,4 +465,12 @@ fn feedback_color(severity: ScriptFeedbackSeverity, tokens: ThemeTokens) -> egui
 
 fn send(commands: &AppCommandSender, command: AppCommand) {
     let _ = commands.send(command);
+}
+
+fn text_edit_width(ui: &Ui) -> f32 {
+    (ui.available_width() - FOCUS_RING_INSET).max(1.0)
+}
+
+fn text_edit_height(ui: &Ui) -> f32 {
+    (ui.available_height() - FOCUS_RING_INSET).max(1.0)
 }
