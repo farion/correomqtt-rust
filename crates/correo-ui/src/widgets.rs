@@ -1,13 +1,26 @@
 use egui::{
-    pos2, vec2, Response, Sense, TextEdit, TextStyle, Ui, Vec2, Widget, WidgetInfo, WidgetText,
-    WidgetType,
+    pos2, vec2, FontId, Response, Sense, TextEdit, TextStyle, Ui, Vec2, Widget, WidgetInfo,
+    WidgetText, WidgetType,
 };
 use egui_phosphor::regular;
 
 use crate::theme::control_margin;
 
+const CHECKBOX_ICON_SCALE: f32 = 2.0;
+
 pub(crate) fn padded_text_edit<'a>(text_edit: TextEdit<'a>) -> TextEdit<'a> {
     text_edit.margin(control_margin())
+}
+
+pub(crate) fn with_icon_button_padding<R>(
+    ui: &mut Ui,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = crate::theme::control_padding();
+        add_contents(ui)
+    })
+    .inner
 }
 
 pub(crate) fn checkbox(ui: &mut Ui, checked: &mut bool, text: impl Into<WidgetText>) -> Response {
@@ -20,6 +33,11 @@ pub(crate) fn checkbox_icon(checked: bool) -> &'static str {
     } else {
         regular::SQUARE
     }
+}
+
+fn checkbox_icon_font(mut font: FontId) -> FontId {
+    font.size *= CHECKBOX_ICON_SCALE;
+    font
 }
 
 struct IconCheckbox<'a> {
@@ -44,10 +62,11 @@ impl Widget for IconCheckbox<'_> {
         let icon_spacing = spacing.icon_spacing;
         let has_text = !text.is_empty();
 
+        let icon_font = checkbox_icon_font(TextStyle::Button.resolve(ui.style()));
         let icon_galley = ui.painter().layout_no_wrap(
             checkbox_icon(*checked).to_owned(),
-            TextStyle::Button.resolve(ui.style()),
-            ui.visuals().text_color(),
+            icon_font,
+            egui::Color32::PLACEHOLDER,
         );
         let galley = if has_text {
             let wrap_width = (ui.available_width() - icon_side - icon_spacing).max(0.0);
@@ -82,6 +101,15 @@ impl Widget for IconCheckbox<'_> {
 
         if ui.is_rect_visible(rect) {
             let visuals = ui.style().interact(&response);
+            if response.hovered() || response.has_focus() || response.is_pointer_button_down_on() {
+                ui.painter().rect(
+                    rect,
+                    visuals.corner_radius,
+                    visuals.bg_fill,
+                    visuals.bg_stroke,
+                    egui::StrokeKind::Inside,
+                );
+            }
             let icon_color = if *checked {
                 ui.visuals().selection.stroke.color
             } else {
@@ -114,5 +142,11 @@ mod tests {
     fn checkbox_icons_match_styling_spec() {
         assert_eq!(checkbox_icon(false), regular::SQUARE);
         assert_eq!(checkbox_icon(true), regular::CHECK_SQUARE);
+    }
+
+    #[test]
+    fn checkbox_icon_font_doubles_button_font_size() {
+        let font = FontId::proportional(13.0);
+        assert_eq!(checkbox_icon_font(font).size, 26.0);
     }
 }

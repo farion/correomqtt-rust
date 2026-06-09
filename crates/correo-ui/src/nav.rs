@@ -4,6 +4,7 @@ use egui::{Align, Button, CornerRadius, Layout, RichText, Stroke, Ui};
 use crate::i18n::I18n;
 use crate::icons;
 use crate::theme::ThemeTokens;
+use crate::widgets::with_icon_button_padding;
 
 const TOP_WORKSPACES: [Workspace; 2] = [Workspace::Connections, Workspace::Scripts];
 const BOTTOM_WORKSPACES: [Workspace; 4] = [
@@ -71,15 +72,16 @@ fn nav_button(
     } else {
         tokens.panel_bg
     };
-    let response = ui
-        .add_sized(
+    let response = with_icon_button_padding(ui, |ui| {
+        ui.add_sized(
             [32.0, 32.0],
             Button::new(RichText::new(icons::workspace_icon(workspace)).size(18.0))
                 .fill(fill)
                 .stroke(Stroke::new(1.0, tokens.border))
                 .corner_radius(CornerRadius::same(4)),
         )
-        .on_hover_text(i18n.workspace_label(workspace));
+    })
+    .on_hover_text(i18n.workspace_label(workspace));
     if selected {
         let rect = response.rect;
         let accent = egui::Rect::from_min_size(rect.left_top(), egui::vec2(3.0, rect.height()));

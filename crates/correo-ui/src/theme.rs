@@ -2,6 +2,7 @@ use correo_core::{DiagnosticSeverity, ThemeMode};
 use egui::{Color32, CornerRadius, Stroke, Theme, ThemePreference, Visuals};
 
 pub const CONTROL_PADDING: i8 = 8;
+pub const BUTTON_HORIZONTAL_PADDING: f32 = 16.0;
 pub const CONTROL_HEIGHT: f32 = 34.0;
 
 #[derive(Debug, Clone, Copy)]
@@ -37,7 +38,7 @@ pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
     ctx.set_visuals_of(Theme::Light, visuals_for(light_tokens(), false));
     ctx.all_styles_mut(|style| {
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = control_padding();
+        style.spacing.button_padding = button_padding();
         style.spacing.interact_size.y = style.spacing.interact_size.y.max(CONTROL_HEIGHT);
         style.spacing.menu_margin = control_margin();
         style.visuals.window_corner_radius = CornerRadius::same(4);
@@ -64,6 +65,10 @@ pub fn control_margin() -> egui::Margin {
 
 pub fn control_padding() -> egui::Vec2 {
     egui::vec2(CONTROL_PADDING as f32, CONTROL_PADDING as f32)
+}
+
+pub fn button_padding() -> egui::Vec2 {
+    egui::vec2(BUTTON_HORIZONTAL_PADDING, CONTROL_PADDING as f32)
 }
 
 pub fn tokens(ctx: &egui::Context, mode: ThemeMode) -> ThemeTokens {
@@ -192,8 +197,9 @@ mod tests {
     }
 
     #[test]
-    fn global_control_padding_is_eight_pixels() {
+    fn control_spacing_matches_styling_spec() {
         assert_eq!(control_margin(), egui::Margin::same(8));
         assert_eq!(control_padding(), egui::vec2(8.0, 8.0));
+        assert_eq!(button_padding(), egui::vec2(16.0, 8.0));
     }
 }

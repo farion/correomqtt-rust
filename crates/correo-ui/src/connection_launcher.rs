@@ -9,6 +9,7 @@ use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
+use crate::widgets::with_icon_button_padding;
 
 const ROW_HEIGHT: f32 = 96.0;
 const ROW_GAP: f32 = 6.0;
@@ -232,12 +233,14 @@ fn connection_info(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTok
 }
 
 fn edit_button(ui: &mut Ui, i18n: &I18n) -> egui::Response {
-    ui.add(
-        Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(
-            crate::theme::CONTROL_HEIGHT,
-            crate::theme::CONTROL_HEIGHT,
-        )),
-    )
+    with_icon_button_padding(ui, |ui| {
+        ui.add(
+            Button::new(RichText::new(regular::GEAR).size(16.0)).min_size(egui::vec2(
+                crate::theme::CONTROL_HEIGHT,
+                crate::theme::CONTROL_HEIGHT,
+            )),
+        )
+    })
     .on_hover_text(i18n.text("connection-edit-tooltip"))
 }
 
