@@ -1,9 +1,11 @@
 use correo_core::{DiagnosticSeverity, ThemeMode};
 use egui::{Color32, CornerRadius, Stroke, Theme, ThemePreference, Visuals};
+use std::collections::BTreeMap;
 
 pub const CONTROL_PADDING: i8 = 8;
 pub const BUTTON_HORIZONTAL_PADDING: f32 = 16.0;
 pub const CONTROL_HEIGHT: f32 = 34.0;
+pub const FONT_SIZE_SCALE: f32 = 1.15;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ThemeTokens {
@@ -37,6 +39,7 @@ pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
     ctx.set_visuals_of(Theme::Dark, visuals_for(dark_tokens(), true));
     ctx.set_visuals_of(Theme::Light, visuals_for(light_tokens(), false));
     ctx.all_styles_mut(|style| {
+        style.text_styles = scaled_text_styles();
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
         style.spacing.button_padding = button_padding();
         style.spacing.interact_size.y = style.spacing.interact_size.y.max(CONTROL_HEIGHT);
@@ -57,6 +60,14 @@ pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
         ThemeMode::Light => ThemePreference::Light,
         ThemeMode::Dark => ThemePreference::Dark,
     });
+}
+
+fn scaled_text_styles() -> BTreeMap<egui::TextStyle, egui::FontId> {
+    let mut text_styles = egui::Style::default().text_styles;
+    for font in text_styles.values_mut() {
+        font.size *= FONT_SIZE_SCALE;
+    }
+    text_styles
 }
 
 pub fn control_margin() -> egui::Margin {
@@ -201,5 +212,19 @@ mod tests {
         assert_eq!(control_margin(), egui::Margin::same(8));
         assert_eq!(control_padding(), egui::vec2(8.0, 8.0));
         assert_eq!(button_padding(), egui::vec2(16.0, 8.0));
+    }
+
+    #[test]
+    fn text_styles_are_scaled_from_egui_defaults() {
+        let defaults = egui::Style::default().text_styles;
+        let scaled = scaled_text_styles();
+
+        for (style, default_font) in defaults {
+            let scaled_font = scaled
+                .get(&style)
+                .expect("scaled text styles should preserve default styles");
+            assert_eq!(scaled_font.family, default_font.family);
+            assert!((scaled_font.size - default_font.size * FONT_SIZE_SCALE).abs() < f32::EPSILON);
+        }
     }
 }
