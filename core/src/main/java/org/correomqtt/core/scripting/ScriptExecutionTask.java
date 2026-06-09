@@ -114,6 +114,7 @@ public class ScriptExecutionTask extends FullTask<ExecutionDTO, ExecutionDTO, Ex
             LOGGER.info(marker(), "Exception during Script execution", e);
             dto.updateExecutionTime();
             dto.setError(new ScriptExecutionError(HOST, e.getMessage()));
+            scriptLogger.error(marker(), "Script failed after {}ms by {}.\n{}", dto.getExecutionTime(), HOST, e.getMessage());
             soyEvents.fire(new ScriptExecutionFailedEvent(dto));
         }
     }

@@ -28,7 +28,7 @@
         </IconButton>
 
         <IconButton fx:id="scriptingSaveButton" disable="true" icon="mdi-content-save" mnemonicParsing="false"
-                    onAction="#onSaveClicked">
+                    onAction="#onSaveClicked" text="%scripting.button.save">
             <tooltip>
                 <Tooltip text="%scriptingViewSaveButtonTooltip"/>
             </tooltip>
@@ -38,7 +38,7 @@
         </IconButton>
 
         <IconButton fx:id="scriptingRevertButton" disable="true" icon="mdi-file-undo" mnemonicParsing="false"
-                    onAction="#onRevertClicked">
+                    onAction="#onRevertClicked" text="%commonDiscardButton">
             <tooltip>
                 <Tooltip text="%scriptingViewResetButtonTooltip"/>
             </tooltip>
@@ -47,7 +47,7 @@
             </HBox.margin>
         </IconButton>
 
-        <IconButton fx:id="scriptingRenameButton" icon="mdi-rename" mnemonicParsing="false" onAction="#onRenameClicked">
+        <IconButton fx:id="scriptingRenameButton" icon="mdi-rename" mnemonicParsing="false" onAction="#onRenameClicked" text="%scripting.button.rename">
             <tooltip>
                 <Tooltip text="%scriptingViewRenameButtonTooltip"/>
             </tooltip>
@@ -58,7 +58,7 @@
 
 
         <IconButton fx:id="scriptingDeleteButton" icon="mdi-trash-can" mnemonicParsing="false"
-                    onAction="#onDeleteClicked">
+                    onAction="#onDeleteClicked" text="%commonDeleteButton">
             <tooltip>
                 <Tooltip text="%scriptingViewDeleteButtonTooltip"/>
             </tooltip>

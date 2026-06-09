@@ -10,6 +10,22 @@
     -fx-padding: 0 0 0 0;
 }
 
+.plainToolbar {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.executionTile {
+    -fx-background-color: transparent;
+    -fx-padding: 4 6 4 6;
+}
+
+.executionTile .tag {
+    -fx-background-color: derive(-fx-base, -12%);
+    -fx-background-radius: 3;
+    -fx-padding: 2 6 2 6;
+}
+
 .settingsLabel {
     -fx-padding: 0 0 0 0;
     -fx-font-weight: bold;

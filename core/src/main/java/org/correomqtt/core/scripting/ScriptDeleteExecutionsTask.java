@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.List;
 
 import static org.correomqtt.core.scripting.ScriptLoadTask.Error.IOERROR;
 
@@ -42,8 +43,8 @@ public class ScriptDeleteExecutionsTask extends SimpleErrorTask<ScriptDeleteExec
     @Override
     protected void execute() {
         try {
-            ScriptingBackend.removeExecutionsForScript(filename);
-            scriptingProvider.deleteExecutions(filename);
+            List<String> executionIds = ScriptingBackend.removeFinishedExecutionsForScript(filename);
+            scriptingProvider.deleteExecutions(filename, executionIds);
             soyEvents.fireAsync(new ScriptExecutionsDeletedEvent(filename));
         } catch (IOException e) {
             LOGGER.error("Exception removing executions for {}.", filename, e);

@@ -37,6 +37,8 @@ public class ExecutionCell extends ListCell<ExecutionPropertiesDTO> {
     @FXML
     private Label nameLabel;
     @FXML
+    private Label stateLabel;
+    @FXML
     private Label descriptionLabel;
 
     @FXML
@@ -132,17 +134,30 @@ public class ExecutionCell extends ListCell<ExecutionPropertiesDTO> {
         }
 
         fontIcon.setIconLiteral(state.getIcon());
+        stateLabel.setText(stateLabelText(state));
 
         if (state.isFinalState()) {
             Long time = dto.getExecutionTime();
             executionTimeLabel.textProperty().set(time == null ? "" : "(" + time + "ms)");
+        } else {
+            executionTimeLabel.textProperty().set("");
         }
 
         if (state == ScriptState.NOTSTARTED) {
-            descriptionLabel.textProperty().set("Not started yet.");
+            descriptionLabel.textProperty().set(resources.getString("scriptingExecutionNotStarted"));
         } else {
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss.SSS"); //TODO utility
             descriptionLabel.textProperty().set(dtf.format(dto.getStartTimeProperty().get()));
         }
+    }
+
+    private String stateLabelText(ScriptState state) {
+        return switch (state) {
+            case FAILED -> resources.getString("scriptingExecutionStateFailed");
+            case RUNNING -> resources.getString("scriptingExecutionStateRunning");
+            case CANCELLED -> resources.getString("scriptingExecutionStateCancelled");
+            case SUCCEEDED -> resources.getString("scriptingExecutionStateSucceeded");
+            case NOTSTARTED -> resources.getString("scriptingExecutionStateNotStarted");
+        };
     }
 }

@@ -162,6 +162,13 @@ public class ScriptingProvider extends BaseUserFileProvider {
         FileUtils.deleteDirectory(new File(getScriptExecutionsDirectory(filename)));
     }
 
+    public void deleteExecutions(String filename, List<String> executionIds) throws IOException {
+        for (String executionId : executionIds) {
+            FileUtils.deleteQuietly(new File(getSingleScriptLogPath(filename, executionId)));
+            FileUtils.deleteQuietly(new File(getScriptExecutionsDirectory(filename) + File.separator + executionId + ".json"));
+        }
+    }
+
     public String getScriptLogFolder(String filename) {
         return getFromCache(SCRIPT_LOG_FOLDER_NAME + File.separator + filename);
 

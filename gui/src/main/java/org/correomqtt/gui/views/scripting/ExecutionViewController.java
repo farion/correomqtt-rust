@@ -108,9 +108,13 @@ public class ExecutionViewController extends BaseControllerImpl {
 
     @FxThread
     @SuppressWarnings("unused")
-    @Observes(ScriptExecutionsDeletedEvent.class)
-    public void onExecutionsDeleted() {
-        executionList.clear();
+    public void onExecutionsDeleted(@Observes ScriptExecutionsDeletedEvent event) {
+        executionList.removeIf(e -> e.getState().isFinalState()
+                && e.getScriptFilePropertiesDTO().getName().equals(event.getFilename()));
+        if (event.getFilename().equals(currentName)) {
+            executionListView.getSelectionModel().selectFirst();
+            updateExistence();
+        }
     }
 
     @FxThread
@@ -143,7 +147,7 @@ public class ExecutionViewController extends BaseControllerImpl {
             splitPane.getItems().remove(executionHolder);
         } else {
 
-            splitPane.setDividerPositions(0.3, 0.7); //TODO persist and remember user choice instead of forcing
+            splitPane.setDividerPositions(0.35); //TODO persist and remember user choice instead of forcing
 
             splitPane.getItems().remove(emptyExecution);
             if (!splitPane.getItems().contains(executionSidebar)) {
@@ -168,22 +172,20 @@ public class ExecutionViewController extends BaseControllerImpl {
         executionListView.setItems(filteredList);
 
         executionListView.setCellFactory(this::createExcecutionCell);
+        executionListView.getSelectionModel().selectedItemProperty()
+                .addListener((observable, oldValue, newValue) -> {
+                    if (newValue == null) {
+                        clearExecution();
+                    } else {
+                        onSelectExecution(newValue);
+                    }
+                });
         executionListView.getSelectionModel().selectFirst();
 
     }
 
     private ListCell<ExecutionPropertiesDTO> createExcecutionCell(ListView<ExecutionPropertiesDTO> executionListView) {
-        ExecutionCell cell = executionCellFactory.create(executionListView);
-        cell.selectedProperty().addListener((observable, oldValue, newValue) -> {
-            if (Boolean.TRUE.equals(newValue)) {
-                onSelectExecution(cell.getItem());
-            } else {
-                if (executionListView.getSelectionModel().getSelectedIndices().isEmpty()) {
-                    clearExecution();
-                }
-            }
-        });
-        return cell;
+        return executionCellFactory.create(executionListView);
     }
 
     private void onSelectExecution(ExecutionPropertiesDTO selectedItem) {

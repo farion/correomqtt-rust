@@ -177,19 +177,17 @@ public class ScriptingViewController extends BaseControllerImpl implements Scrip
         scriptList = FXCollections.observableArrayList(scriptsList);
         scriptList.addListener(this::onScriptListChanged);
         scriptListView.setItems(scriptList);
-        onScriptListChanged(null);
+        scriptListView.getSelectionModel().selectedItemProperty()
+                .addListener((observable, oldValue, newValue) -> onSelectScript(newValue));
         LoaderResult<ExecutionViewController> result = executionViewControllerFactory.create().load();
         executionController = result.getController();
         executionHolder.getChildren().add(result.getMainRegion());
+        onScriptListChanged(null);
         updateStatusLabel();
     }
 
     private ListCell<ScriptFilePropertiesDTO> createScriptCell(ListView<ScriptFilePropertiesDTO> scriptListView) {
         ScriptCell cell = scriptCellFactory.create(scriptListView);
-        cell.selectedProperty().addListener((observable, oldValue, newValue) -> {
-            ScriptFilePropertiesDTO selectedItem = scriptListView.getSelectionModel().getSelectedItem();
-            onSelectScript(selectedItem);
-        });
         ScriptContextMenu contextMenu = scriptContextMenuFactory.create(this);
         cell.setContextMenu(contextMenu);
         cell.itemProperty().addListener((observable, oldValue, newValue) -> contextMenu.setObject(newValue));
@@ -217,7 +215,9 @@ public class ScriptingViewController extends BaseControllerImpl implements Scrip
             scriptSplitPane.getItems().remove(emptyView);
             addSafeToSplitPane(scriptSplitPane, scriptListSidebar);
             addSafeToSplitPane(scriptSplitPane, editorPane);
+            scriptSplitPane.setDividerPositions(0.35);
             addSafeToSplitPane(mainSplitPane, executionHolder);
+            mainSplitPane.setDividerPositions(0.65);
         }
         if (scriptListView.getSelectionModel().getSelectedIndices().isEmpty()) {
             scriptListView.getSelectionModel().selectFirst();

@@ -33,6 +33,18 @@ public class ScriptingBackend {
 
     }
 
+    public static List<String> removeFinishedExecutionsForScript(String filename) {
+        List<String> finishedExecutionIds = EXECUTIONS_DTOS.values()
+                .stream()
+                .filter(exec -> exec.getScriptFile().getName().equals(filename))
+                .filter(exec -> exec.getExecutionTime() != null)
+                .map(ExecutionDTO::getExecutionId)
+                .toList();
+        EXECUTION_TASKS.entrySet().removeIf(task -> finishedExecutionIds.contains(task.getKey()));
+        EXECUTIONS_DTOS.entrySet().removeIf(exec -> finishedExecutionIds.contains(exec.getKey()));
+        return finishedExecutionIds;
+    }
+
     public static ScriptExecutionTask getExecutionTask(String executionId) {
         return EXECUTION_TASKS.get(executionId);
     }

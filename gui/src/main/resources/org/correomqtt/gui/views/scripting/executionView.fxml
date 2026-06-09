@@ -5,10 +5,10 @@
 <?import javafx.scene.layout.*?>
 <?import org.correomqtt.gui.controls.*?>
 
-<SplitPane fx:id="splitPane" dividerPositions="0.3, 0.7" stylesheets="@../../css/scriptingView.css" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS" xmlns="http://javafx.com/javafx/11.0.14-internal" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.correomqtt.gui.views.scripting.ExecutionViewController">
+<SplitPane fx:id="splitPane" dividerPositions="0.35" stylesheets="@../../css/scriptingView.css" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS" xmlns="http://javafx.com/javafx/11.0.14-internal" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.correomqtt.gui.views.scripting.ExecutionViewController">
     <AnchorPane fx:id="executionSidebar" minHeight="100.0" minWidth="100.0">
         <VBox prefHeight="200.0" prefWidth="100.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
-            <HBox alignment="BOTTOM_LEFT" maxHeight="40.0" minHeight="40.0" VBox.vgrow="ALWAYS">
+            <HBox alignment="CENTER_LEFT" maxHeight="40.0" minHeight="40.0" VBox.vgrow="ALWAYS">
                 <styleClass>
                     <String fx:value="toolbar" />
                     <String fx:value="bottom" />
@@ -16,7 +16,7 @@
             <children>
                <Label fx:id="headerLabel" text="%scripting.executions" />
                <Pane HBox.hgrow="ALWAYS" />
-                <IconButton icon="mdi-notification-clear-all" onAction="#onClearExecutionsClicked">
+                <IconButton icon="mdi-notification-clear-all" onAction="#onClearExecutionsClicked" text="%scripting.button.clearExecutionLog">
                 <tooltip>
                     <Tooltip text="%scriptingViewClearExecutionsButtonTooltip"/>
                 </tooltip>
