@@ -11,6 +11,10 @@ use correo_plugins_json_format::{
     format_json_bytes, JsonDetailFormat, JsonFormatDiagnostic, JsonFormatDiagnosticSeverity,
     JsonFormatOutput,
 };
+use correo_plugins_systopic::{
+    format_sys_topic_detail, SysTopicDetailFormat, SysTopicFormatDiagnostic,
+    SysTopicFormatDiagnosticSeverity, SysTopicFormatOutput,
+};
 
 pub(super) fn format_json(
     request: DetailFormatterRequest,
@@ -36,6 +40,11 @@ pub(super) fn format_xml(
             hook: HookKind::DetailFormatter,
             source: source.into_source(),
         })
+}
+
+pub(super) fn format_system_topic(request: DetailFormatterRequest) -> DetailFormatterResponse {
+    let topic = request.context.subscription_topic.as_deref();
+    sys_topic_output(format_sys_topic_detail(topic, request.bytes))
 }
 
 fn formatted_detail(
@@ -100,6 +109,34 @@ fn xml_diagnostic(diagnostic: XmlFormatDiagnostic) -> HookDiagnosticDto {
     HookDiagnosticDto {
         severity: match diagnostic.severity {
             XmlFormatDiagnosticSeverity::Warning => HookDiagnosticSeverityDto::Warning,
+        },
+        message: diagnostic.message,
+    }
+}
+
+fn sys_topic_output(output: SysTopicFormatOutput) -> DetailFormatterResponse {
+    formatted_detail(
+        sys_topic_format(output.format),
+        output.text,
+        output
+            .diagnostics
+            .into_iter()
+            .map(sys_topic_diagnostic)
+            .collect(),
+    )
+}
+
+fn sys_topic_format(format: SysTopicDetailFormat) -> DetailFormatDto {
+    match format {
+        SysTopicDetailFormat::PlainText => DetailFormatDto::PlainText,
+    }
+}
+
+fn sys_topic_diagnostic(diagnostic: SysTopicFormatDiagnostic) -> HookDiagnosticDto {
+    HookDiagnosticDto {
+        severity: match diagnostic.severity {
+            SysTopicFormatDiagnosticSeverity::Info => HookDiagnosticSeverityDto::Info,
+            SysTopicFormatDiagnosticSeverity::Warning => HookDiagnosticSeverityDto::Warning,
         },
         message: diagnostic.message,
     }

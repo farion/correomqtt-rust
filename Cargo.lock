@@ -1306,12 +1306,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "correo-plugin-zip-manipulator"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "correo-plugins"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "correo-plugin-xml-format",
+ "correo-plugin-zip-manipulator",
+ "correo-plugins-advanced-validator",
  "correo-plugins-json-format",
+ "correo-plugins-systopic",
+ "correo-plugins-xml-xsd-validator",
  "semver",
  "serde",
  "serde_json",
@@ -1320,6 +1334,15 @@ dependencies = [
  "toml",
  "wasmtime",
  "wat",
+]
+
+[[package]]
+name = "correo-plugins-advanced-validator"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1336,6 +1359,23 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "correo-plugins-systopic"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "correo-plugins-xml-xsd-validator"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uppsala",
 ]
 
 [[package]]
@@ -6557,6 +6597,12 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
+name = "uppsala"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d87ccb81b1e9ddc119871ecbd40a5e93f173f0777838db1e8c0dec223ae3c49"
 
 [[package]]
 name = "url"

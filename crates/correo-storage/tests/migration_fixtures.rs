@@ -123,7 +123,8 @@ fn loads_legacy_profile_fixtures_and_reinitializes_plugins() {
             "builtin.base64",
             "builtin.json-format",
             "builtin.xml-format",
-            "builtin.contains-string-validator"
+            "builtin.contains-string-validator",
+            "builtin.advanced-validator"
         ]
     );
     assert!(preview

@@ -5,13 +5,17 @@ members = [
     "crates/correo-diagnostics",
     "crates/correo-mqtt",
     "crates/correo-plugin-base64",
+    "crates/correo-plugin-zip-manipulator",
     "crates/correo-plugins",
     "crates/correo-scripting",
     "crates/correo-storage",
     "crates/correo-ui",
     "plugins/correo-plugins-json-format",
     "plugins/xml-format",
+    "plugins/correo-plugins-advanced-validator",
     "plugins/correo-plugins-contains-string-validator",
+    "plugins/correo-plugins-systopic",
+    "plugins/correo-plugins-xml-xsd-validator",
     "plugins/save-manipulator",
     "xtask",
 ]
@@ -40,6 +44,7 @@ egui-phosphor = { version = "0.9", default-features = false, features = ["regula
 egui_extras = "0.31"
 egui_kittest = { version = "0.31", features = ["snapshot", "wgpu"] }
 flume = "0.11"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 fluent-bundle = "0.16"
 futures = "0.3"
 image = "0.25"
@@ -68,6 +73,7 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 unic-langid = "0.9"
+uppsala = "0.4"
 uuid = { version = "1", features = ["serde", "v4"] }
 wasmtime = "31"
 zeroize = "1"
