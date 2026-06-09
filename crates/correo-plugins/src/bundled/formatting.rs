@@ -7,25 +7,22 @@ use correo_plugin_xml_format::{
     format_xml_bytes, XmlDetailFormat, XmlFormatDiagnostic, XmlFormatDiagnosticSeverity,
     XmlFormatOutput,
 };
-use serde_json::Value;
+use correo_plugins_json_format::{
+    format_json_bytes, JsonDetailFormat, JsonFormatDiagnostic, JsonFormatDiagnosticSeverity,
+    JsonFormatOutput,
+};
 
 pub(super) fn format_json(
     request: DetailFormatterRequest,
     plugin_id: &str,
 ) -> Result<DetailFormatterResponse, BundledPluginError> {
-    let text = utf8_payload(request.bytes, plugin_id, HookKind::DetailFormatter)?;
-    match serde_json::from_str::<Value>(&text) {
-        Ok(value) => Ok(formatted_detail(
-            DetailFormatDto::Json,
-            serde_json::to_string_pretty(&value).expect("serde_json::Value serializes"),
-            Vec::new(),
-        )),
-        Err(_) => Ok(formatted_detail(
-            DetailFormatDto::PlainText,
-            text,
-            vec![warning("Input is not valid JSON; returned unchanged.")],
-        )),
-    }
+    format_json_bytes(request.bytes)
+        .map(json_output)
+        .map_err(|source| BundledPluginError::InvalidUtf8 {
+            plugin_id: plugin_id.to_owned(),
+            hook: HookKind::DetailFormatter,
+            source: source.into_source(),
+        })
 }
 
 pub(super) fn format_xml(
@@ -56,16 +53,32 @@ fn formatted_detail(
     }
 }
 
-fn utf8_payload(
-    bytes: Vec<u8>,
-    plugin_id: &str,
-    hook: HookKind,
-) -> Result<String, BundledPluginError> {
-    String::from_utf8(bytes).map_err(|source| BundledPluginError::InvalidUtf8 {
-        plugin_id: plugin_id.to_owned(),
-        hook,
-        source,
-    })
+fn json_output(output: JsonFormatOutput) -> DetailFormatterResponse {
+    formatted_detail(
+        json_format(output.format),
+        output.text,
+        output
+            .diagnostics
+            .into_iter()
+            .map(json_diagnostic)
+            .collect(),
+    )
+}
+
+fn json_format(format: JsonDetailFormat) -> DetailFormatDto {
+    match format {
+        JsonDetailFormat::Json => DetailFormatDto::Json,
+        JsonDetailFormat::PlainText => DetailFormatDto::PlainText,
+    }
+}
+
+fn json_diagnostic(diagnostic: JsonFormatDiagnostic) -> HookDiagnosticDto {
+    HookDiagnosticDto {
+        severity: match diagnostic.severity {
+            JsonFormatDiagnosticSeverity::Warning => HookDiagnosticSeverityDto::Warning,
+        },
+        message: diagnostic.message,
+    }
 }
 
 fn xml_output(output: XmlFormatOutput) -> DetailFormatterResponse {
@@ -89,12 +102,5 @@ fn xml_diagnostic(diagnostic: XmlFormatDiagnostic) -> HookDiagnosticDto {
             XmlFormatDiagnosticSeverity::Warning => HookDiagnosticSeverityDto::Warning,
         },
         message: diagnostic.message,
-    }
-}
-
-fn warning(message: &str) -> HookDiagnosticDto {
-    HookDiagnosticDto {
-        severity: HookDiagnosticSeverityDto::Warning,
-        message: message.to_owned(),
     }
 }
