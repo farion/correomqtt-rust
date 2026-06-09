@@ -3,7 +3,7 @@ use crate::{
     MigrationDiagnosticCategory, MigrationPasswordError, MigrationRecoveryCommand,
     MigrationRecoveryCompletion, MigrationRecoveryDiagnostic, MigrationRecoveryEvent,
     MigrationRecoveryFailure, MigrationRecoverySnapshot, MigrationRecoveryState, SettingsSection,
-    Workspace,
+    StartupState, Workspace,
 };
 
 use super::AppModel;
@@ -106,8 +106,13 @@ impl AppModel {
                 self.snapshot.migration_recovery.counts.skipped_secrets = skipped_count;
                 self.skip_secrets();
             }
-            MigrationRecoveryEvent::ReviewReady { rows, warnings } => {
+            MigrationRecoveryEvent::ReviewReady {
+                counts,
+                rows,
+                warnings,
+            } => {
                 self.snapshot.migration_recovery.state = MigrationRecoveryState::Reviewing;
+                self.snapshot.migration_recovery.counts = counts;
                 self.snapshot.migration_recovery.rows = rows;
                 self.snapshot.migration_recovery.counts.warnings = warnings.len();
                 self.snapshot.migration_recovery.warnings = warnings;
@@ -219,6 +224,22 @@ impl AppModel {
             MigrationRecoveryCompletion::RestoreSuccess => LegacyMigrationStatus::Restored,
         };
         self.refresh_legacy_settings(status);
+    }
+
+    pub(super) fn apply_migrated_startup_state(
+        &mut self,
+        state: StartupState,
+        completion: MigrationRecoveryCompletion,
+        diagnostics: Vec<MigrationRecoveryDiagnostic>,
+    ) {
+        let recovery = self.snapshot.migration_recovery.clone();
+        self.snapshot = state.snapshot;
+        self.connection_settings = state.connection_settings;
+        self.storage_connection_ids = state.storage_connection_ids;
+        self.saved_global_settings = self.snapshot.global_settings.clone();
+        self.saved_theme_mode = self.snapshot.theme_mode;
+        self.snapshot.migration_recovery = recovery;
+        self.apply_completed(completion, diagnostics);
     }
 
     fn apply_failed(&mut self, failure: MigrationRecoveryFailure) {

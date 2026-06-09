@@ -8,8 +8,8 @@ use crate::{
     MigrationRecoveryCompletion, MigrationRecoveryCounts, MigrationRecoveryDiagnostic,
     MigrationRecoveryFailure, MigrationRecoveryRow, MigrationRecoveryWarning, MqttCommand,
     MqttEvent, PluginHookKind, PluginSurfaceTab, PluginWorkflowEvent, QosLevel, ScriptDetailTab,
-    ScriptExecutionError, ScriptExecutionStatus, ScriptLogLevel, SettingsSection, ThemeMode,
-    TransferSection, TransferStep, WorkbenchTab, Workspace,
+    ScriptExecutionError, ScriptExecutionStatus, ScriptLogLevel, SettingsSection, StartupState,
+    ThemeMode, TransferSection, TransferStep, WorkbenchTab, Workspace,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,6 +202,11 @@ pub enum AppEvent {
     ThemeModeChanged {
         mode: ThemeMode,
     },
+    MigrationApplied {
+        state: Box<StartupState>,
+        completion: MigrationRecoveryCompletion,
+        diagnostics: Vec<MigrationRecoveryDiagnostic>,
+    },
     DiagnosticRaised(Diagnostic),
     ScriptExecutionLogAppended {
         execution_id: String,
@@ -249,6 +254,7 @@ pub enum MigrationRecoveryEvent {
         skipped_count: usize,
     },
     ReviewReady {
+        counts: MigrationRecoveryCounts,
         rows: Vec<MigrationRecoveryRow>,
         warnings: Vec<MigrationRecoveryWarning>,
     },

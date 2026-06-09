@@ -257,6 +257,11 @@ impl AppModel {
             }
             AppEvent::GlobalSettingsLoaded { settings } => self.load_global_settings(settings),
             AppEvent::ThemeModeChanged { mode } => self.snapshot.theme_mode = mode,
+            AppEvent::MigrationApplied {
+                state,
+                completion,
+                diagnostics,
+            } => self.apply_migrated_startup_state(*state, completion, diagnostics),
             AppEvent::DiagnosticRaised(diagnostic) => self.push_diagnostic(diagnostic),
             AppEvent::ScriptExecutionLogAppended {
                 execution_id,

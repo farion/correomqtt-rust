@@ -14,7 +14,7 @@ use crate::{
     QosLevel, SubscribePaneSnapshot, SubscriptionRow, ThemeMode,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupState {
     pub snapshot: AppSnapshot,
     pub connection_settings: HashMap<ConnectionId, ConnectionSettingsSnapshot>,

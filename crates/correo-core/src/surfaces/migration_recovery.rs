@@ -26,7 +26,7 @@ impl MigrationRecoverySnapshot {
             legacy_path: Some(path.into()),
             backup_status: "Backup not created yet".to_owned(),
             counts: MigrationRecoveryCounts::default(),
-            rows: default_review_rows(),
+            rows: Self::review_rows(),
             warnings: default_detection_warnings(),
             diagnostics: vec![MigrationRecoveryDiagnostic::info(
                 MigrationDiagnosticCategory::Backup,
@@ -76,6 +76,10 @@ impl MigrationRecoverySnapshot {
 
     pub fn plugin_diagnostic() -> &'static str {
         "Legacy Java plugin state was left in the backup and Rust/WASM plugin manifests were initialized."
+    }
+
+    pub fn review_rows() -> Vec<MigrationRecoveryRow> {
+        default_review_rows()
     }
 }
 

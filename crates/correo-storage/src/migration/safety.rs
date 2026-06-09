@@ -72,14 +72,22 @@ impl MigrationApplier {
 
     pub fn apply_preview(&self, preview: &MigrationPreview) -> Result<MigrationApplyOutcome> {
         let backup = self.create_backup()?;
-        let result = self.apply_with_backup(preview, &backup);
-        match result {
-            Ok(diagnostics) => Ok(MigrationApplyOutcome {
-                backup,
-                diagnostics,
-            }),
+        let diagnostics = self.apply_preview_with_backup(preview, &backup)?;
+        Ok(MigrationApplyOutcome {
+            backup,
+            diagnostics,
+        })
+    }
+
+    pub fn apply_preview_with_backup(
+        &self,
+        preview: &MigrationPreview,
+        backup: &MigrationBackup,
+    ) -> Result<MigrationDiagnostics> {
+        match self.apply_with_backup(preview, backup) {
+            Ok(diagnostics) => Ok(diagnostics),
             Err(error) => {
-                self.restore_backup_contents(&backup)?;
+                self.restore_backup_contents(backup)?;
                 Err(error)
             }
         }
@@ -156,7 +164,7 @@ impl MigrationApplier {
         ScriptStore::new(&self.target_root).replace_all(&preview.scripts)
     }
 
-    fn create_backup(&self) -> Result<MigrationBackup> {
+    pub fn create_backup(&self) -> Result<MigrationBackup> {
         let id = timestamped_backup_id();
         let backup_path = self.backup_root.join(&id);
         ensure_copy_target_outside_source(&self.target_root, &backup_path)?;

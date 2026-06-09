@@ -1,6 +1,7 @@
 mod bootstrap;
 mod commands;
 mod history;
+mod migration;
 mod model;
 mod mqtt;
 mod runtime;
@@ -12,6 +13,7 @@ mod types;
 pub use commands::*;
 pub use correo_diagnostics::{redact_sensitive, Diagnostic, DiagnosticSeverity};
 pub use history::*;
+pub use migration::*;
 pub use model::AppModel;
 pub use mqtt::*;
 pub use runtime::{AppRuntime, PumpReport};
