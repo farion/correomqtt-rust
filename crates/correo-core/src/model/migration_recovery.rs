@@ -38,7 +38,6 @@ impl AppModel {
             MigrationRecoveryCommand::ConfirmRestoreBackup => self.start_restore(),
             MigrationRecoveryCommand::OpenDiagnostics => {
                 self.snapshot.active_workspace = Workspace::Diagnostics;
-                self.snapshot.diagnostics_expanded = true;
             }
             MigrationRecoveryCommand::OpenSettingsData => {
                 self.snapshot.active_workspace = Workspace::Settings;
@@ -217,7 +216,6 @@ impl AppModel {
         recovery.completion = Some(completion);
         recovery.current_stage = Some(MigrationApplyStage::DiagnosticsRecorded);
         recovery.diagnostics.extend(diagnostics);
-        self.snapshot.diagnostics_expanded = recovery.warning_count() > 0;
         let status = match completion {
             MigrationRecoveryCompletion::Success => LegacyMigrationStatus::Complete,
             MigrationRecoveryCompletion::PartialSuccess => LegacyMigrationStatus::PartialSuccess,

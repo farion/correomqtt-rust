@@ -181,33 +181,32 @@ fn sample_workbench() -> WorkbenchSnapshot {
 
 fn sample_connection_settings() -> ConnectionSettingsSnapshot {
     ConnectionSettingsSnapshot {
+        internal_id: "local-broker-01".to_owned(),
         profile_name: "Local Broker".to_owned(),
         host: "local...".to_owned(),
         port: "1883".to_owned(),
         mqtt_version: "MQTT 3.1.1".to_owned(),
+        clean_session: true,
         client_id: "correomqtt-desktop".to_owned(),
-        auth_mode: "Username/password in keyring".to_owned(),
-        username_status: "Username configured; password stored in keyring".to_owned(),
-        tls_mode: "Disabled".to_owned(),
-        tls_store: "No certificate store selected".to_owned(),
-        proxy_mode: "Disabled".to_owned(),
-        proxy_endpoint: "No tunnel configured".to_owned(),
+        username: "local-user".to_owned(),
+        password_status: "MQTT password managed by keyring".to_owned(),
+        tls_mode: "No TLS/SSL".to_owned(),
+        tls_password_status: "No SSL password configured".to_owned(),
+        tls_host_verification: true,
+        proxy_mode: "No proxy/tunnel".to_owned(),
+        ssh_port: "22".to_owned(),
+        local_mqtt_port: "1883".to_owned(),
+        auth_mode: "No Auth".to_owned(),
+        ssh_password_status: "No SSH password configured".to_owned(),
         lwt_enabled: true,
         lwt_topic: "status/correomqtt".to_owned(),
+        lwt_retained: false,
         lwt_payload: "{\"online\":false}".to_owned(),
-        advanced_options: vec![
-            "Clean session enabled".to_owned(),
-            "Keep alive 60 s".to_owned(),
-            "Reconnect backoff 2 s to 30 s".to_owned(),
-        ],
         dirty: true,
         valid: false,
         save_disabled_reason: "Resolve validation errors before saving".to_owned(),
         keyring_state: KeyringState::Available,
-        validation_errors: vec![
-            "Client id cannot contain spaces in imported profiles".to_owned(),
-            "TLS key file missing for QA TLS profile".to_owned(),
-        ],
+        validation_errors: vec!["Client id cannot contain spaces in imported profiles".to_owned()],
         ..ConnectionSettingsSnapshot::default()
     }
 }

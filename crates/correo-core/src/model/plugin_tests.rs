@@ -192,6 +192,52 @@ fn wasm_load_error_plugin_cannot_be_enabled() {
 }
 
 #[test]
+fn marketplace_install_and_uninstall_updates_manager_state() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::SelectPluginSurfaceTab(
+        crate::PluginSurfaceTab::Marketplace,
+    ));
+    model.apply_command(AppCommand::SelectMarketplacePlugin(
+        "marketplace.schema-validator".to_owned(),
+    ));
+    model.apply_command(AppCommand::InstallMarketplacePlugin {
+        marketplace_plugin_id: "marketplace.schema-validator".to_owned(),
+    });
+
+    let installed = plugin(&model, "marketplace.schema-validator");
+    assert!(installed.enabled);
+    assert_eq!(installed.status, crate::PluginStatus::Active);
+    assert_eq!(
+        model
+            .snapshot()
+            .plugins
+            .selected_marketplace_plugin()
+            .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+        Some("marketplace.schema-validator")
+    );
+
+    model.apply_command(AppCommand::UninstallPlugin {
+        plugin_id: "marketplace.schema-validator".to_owned(),
+    });
+
+    assert!(model
+        .snapshot()
+        .plugins
+        .plugins
+        .iter()
+        .all(|plugin| plugin.id != "marketplace.schema-validator"));
+    assert_eq!(
+        model
+            .snapshot()
+            .plugins
+            .selected_marketplace_plugin()
+            .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+        None
+    );
+}
+
+#[test]
 fn plugin_denials_legacy_plugins_and_diagnostics_stay_visible() {
     let mut model = AppModel::default();
 

@@ -1,10 +1,17 @@
 use correo_core::{
-    AppCommand, AppCommandSender, AppSnapshot, ConnectionSettingField, ConnectionSettingsSnapshot,
-    ConnectionSettingsTab, KeyringState,
+    AppCommand, AppCommandSender, AppSnapshot, ConnectionSecretField, ConnectionSettingField,
+    ConnectionSettingFlag, ConnectionSettingsSnapshot, ConnectionSettingsTab, KeyringState,
 };
-use egui::{Button, Frame, RichText, Stroke, TextEdit, Ui, Window};
+use egui::{Button, RichText, TextEdit, Ui, Window};
 
 use crate::theme::ThemeTokens;
+
+#[path = "connection_settings_controls.rs"]
+mod controls;
+use controls::{
+    combo, field, field_with_button, file_field, flag, panel, readonly, secret_field,
+    secret_field_enabled, send,
+};
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     let settings = &snapshot.connection_settings;
@@ -18,7 +25,6 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
         ConnectionSettingsTab::Tls => tls_tab(ui, settings, tokens, commands),
         ConnectionSettingsTab::Proxy => proxy_tab(ui, settings, tokens, commands),
         ConnectionSettingsTab::Lwt => lwt_tab(ui, settings, tokens, commands),
-        ConnectionSettingsTab::Advanced => advanced_tab(ui, settings, tokens),
     });
 
     ui.add_space(8.0);
@@ -58,6 +64,7 @@ fn mqtt_tab(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
+    readonly(ui, "Internal id", &settings.internal_id);
     field(
         ui,
         "Name",
@@ -79,28 +86,46 @@ fn mqtt_tab(
         ConnectionSettingField::Port,
         commands,
     );
-    field(
+    combo(
         ui,
         "MQTT version",
         &settings.mqtt_version,
         ConnectionSettingField::MqttVersion,
+        &["MQTT 3.1.1", "MQTT v5"],
         commands,
     );
-    field(
+    flag(
+        ui,
+        "Clean session",
+        settings.clean_session,
+        ConnectionSettingFlag::CleanSession,
+        commands,
+    );
+    field_with_button(
         ui,
         "Client id",
         &settings.client_id,
         ConnectionSettingField::ClientId,
+        "Generate",
+        AppCommand::GenerateClientId,
         commands,
     );
     field(
         ui,
-        "Auth mode",
-        &settings.auth_mode,
-        ConnectionSettingField::AuthMode,
+        "Username",
+        &settings.username,
+        ConnectionSettingField::Username,
         commands,
     );
-    ui.label(RichText::new(&settings.username_status).color(tokens.text_secondary));
+    secret_field(
+        ui,
+        "Password",
+        &settings.password,
+        &settings.password_status,
+        ConnectionSecretField::MqttPassword,
+        tokens,
+        commands,
+    );
 }
 
 fn tls_tab(
@@ -109,26 +134,37 @@ fn tls_tab(
     _tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    field(
+    combo(
         ui,
-        "TLS mode",
+        "TLS/SSL",
         &settings.tls_mode,
         ConnectionSettingField::TlsMode,
+        &["No TLS/SSL", "Keystore"],
         commands,
     );
-    field(
+    file_field(
         ui,
-        "Certificate store",
+        "SSL keystore",
         &settings.tls_store,
         ConnectionSettingField::TlsStore,
+        true,
         commands,
     );
-    let mut verify_hostname = true;
-    let mut client_certificate = false;
-    ui.checkbox(&mut verify_hostname, "Verify broker hostname");
-    ui.checkbox(
-        &mut client_certificate,
-        "Use client certificate from keyring-backed profile",
+    secret_field(
+        ui,
+        "SSL password",
+        &settings.tls_keystore_password,
+        &settings.tls_password_status,
+        ConnectionSecretField::TlsKeystorePassword,
+        _tokens,
+        commands,
+    );
+    flag(
+        ui,
+        "Verify broker hostname",
+        settings.tls_host_verification,
+        ConnectionSettingFlag::TlsHostVerification,
+        commands,
     );
 }
 
@@ -138,21 +174,70 @@ fn proxy_tab(
     _tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    field(
+    combo(
         ui,
         "Proxy mode",
         &settings.proxy_mode,
         ConnectionSettingField::ProxyMode,
+        &["No proxy/tunnel", "SSH"],
         commands,
     );
-    field(
-        ui,
-        "Tunnel endpoint",
-        &settings.proxy_endpoint,
-        ConnectionSettingField::ProxyEndpoint,
-        commands,
-    );
-    ui.label("SSH local port conflict check: clear");
+    ui.add_enabled_ui(settings.proxy_mode == "SSH", |ui| {
+        field(
+            ui,
+            "SSH Host",
+            &settings.ssh_host,
+            ConnectionSettingField::SshHost,
+            commands,
+        );
+        field(
+            ui,
+            "SSH Port",
+            &settings.ssh_port,
+            ConnectionSettingField::SshPort,
+            commands,
+        );
+        field(
+            ui,
+            "Local MQTT port",
+            &settings.local_mqtt_port,
+            ConnectionSettingField::LocalMqttPort,
+            commands,
+        );
+        combo(
+            ui,
+            "Authentication",
+            &settings.auth_mode,
+            ConnectionSettingField::AuthMode,
+            &["No Auth", "Keyfile", "Password"],
+            commands,
+        );
+        field(
+            ui,
+            "SSH username",
+            &settings.auth_username,
+            ConnectionSettingField::AuthUsername,
+            commands,
+        );
+        secret_field_enabled(
+            ui,
+            "SSH password",
+            &settings.ssh_password,
+            &settings.ssh_password_status,
+            ConnectionSecretField::SshPassword,
+            settings.auth_mode == "Password",
+            _tokens,
+            commands,
+        );
+        file_field(
+            ui,
+            "SSH key file",
+            &settings.ssh_key_file,
+            ConnectionSettingField::SshKeyFile,
+            settings.auth_mode == "Keyfile",
+            commands,
+        );
+    });
 }
 
 fn lwt_tab(
@@ -171,6 +256,13 @@ fn lwt_tab(
             "LWT topic",
             &settings.lwt_topic,
             ConnectionSettingField::LwtTopic,
+            commands,
+        );
+        flag(
+            ui,
+            "LWT retained",
+            settings.lwt_retained,
+            ConnectionSettingFlag::LwtRetained,
             commands,
         );
         let mut payload = settings.lwt_payload.clone();
@@ -195,17 +287,6 @@ fn lwt_tab(
     if !settings.lwt_enabled {
         ui.label(RichText::new("Last will payload is inactive.").color(tokens.text_disabled));
     }
-}
-
-fn advanced_tab(ui: &mut Ui, settings: &ConnectionSettingsSnapshot, tokens: ThemeTokens) {
-    for option in &settings.advanced_options {
-        ui.label(RichText::new(option).color(tokens.text_primary));
-    }
-    ui.separator();
-    ui.label(
-        RichText::new("Protocol and reconnect defaults are ready for core binding.")
-            .color(tokens.text_secondary),
-    );
 }
 
 fn validation(ui: &mut Ui, settings: &ConnectionSettingsSnapshot, tokens: ThemeTokens) {
@@ -269,44 +350,4 @@ fn delete_confirmation(
                 }
             });
         });
-}
-
-fn field(
-    ui: &mut Ui,
-    label: &str,
-    value: &str,
-    field: ConnectionSettingField,
-    commands: &AppCommandSender,
-) {
-    ui.horizontal(|ui| {
-        ui.set_min_height(30.0);
-        ui.label(label);
-        let mut edited = value.to_owned();
-        if ui
-            .add_sized(
-                [(ui.available_width() - 8.0).max(160.0), 26.0],
-                TextEdit::singleline(&mut edited),
-            )
-            .changed()
-        {
-            send(
-                commands,
-                AppCommand::UpdateConnectionSetting {
-                    field,
-                    value: edited,
-                },
-            );
-        }
-    });
-}
-
-fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
-}
-
-fn send(commands: &AppCommandSender, command: AppCommand) {
-    let _ = commands.send(command);
 }

@@ -2,10 +2,14 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionState, MessageRow, QosLevel, WorkbenchTab,
     WorkflowFeedback, WorkflowFeedbackSeverity,
 };
-use egui::{Button, ComboBox, Frame, RichText, ScrollArea, Stroke, TextEdit, Ui};
+use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
 use egui_extras::{Column, TableBuilder};
 
-use crate::{theme::ThemeTokens, workbench_detail, workbench_dialogs, workbench_header};
+use crate::{
+    theme::ThemeTokens,
+    workbench_detail, workbench_dialogs, workbench_header,
+    workbench_helpers::{panel, send},
+};
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     let Some(connection) = snapshot.selected_connection() else {
@@ -119,6 +123,13 @@ fn publish_pane(
             commands,
             AppCommand::UpdatePublishTopic,
         );
+        if ui
+            .button("Load .cqm...")
+            .on_hover_text("Load a message file into the publish editor")
+            .clicked()
+        {
+            send(commands, AppCommand::ImportMessages);
+        }
 
         let mut payload = snapshot.workbench.publish.payload.clone();
         let payload_response = ui.add(
@@ -150,7 +161,7 @@ fn publish_pane(
         {
             send(commands, AppCommand::SearchPublishHistory(filter));
         }
-        publish_history(ui, snapshot, tokens);
+        publish_history(ui, snapshot, tokens, commands);
     });
 }
 
@@ -241,7 +252,12 @@ fn subscribe_pane(
     });
 }
 
-fn publish_history(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens) {
+fn publish_history(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     let filter = snapshot
         .workbench
         .publish
@@ -278,7 +294,15 @@ fn publish_history(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens) {
             {
                 body.row(28.0, |mut row_ui| {
                     row_ui.col(|ui| {
-                        ui.label(&row.topic);
+                        ui.label(&row.topic).context_menu(|ui| {
+                            if ui.button("Export .cqm").clicked() {
+                                send(
+                                    commands,
+                                    AppCommand::ExportPublishHistoryMessage(row.topic.clone()),
+                                );
+                                ui.close_menu();
+                            }
+                        });
                     });
                     row_ui.col(|ui| {
                         ui.label(RichText::new(&row.timestamp).color(tokens.text_secondary));
@@ -342,10 +366,16 @@ fn message_table(
                 body.row(52.0, |mut row| {
                     row.col(|ui| {
                         let selected = snapshot.workbench.selected_message_id == Some(message.id);
-                        if ui
-                            .selectable_label(selected, RichText::new(&message.topic).strong())
-                            .clicked()
-                        {
+                        let response =
+                            ui.selectable_label(selected, RichText::new(&message.topic).strong());
+                        let clicked = response.clicked();
+                        response.context_menu(|ui| {
+                            if ui.button("Export .cqm").clicked() {
+                                send(commands, AppCommand::ExportIncomingMessage(message.id));
+                                ui.close_menu();
+                            }
+                        });
+                        if clicked {
                             send(commands, AppCommand::SelectMessage(message.id));
                         }
                         ui.label(
@@ -460,15 +490,4 @@ fn message_matches_filter(message: &MessageRow, filter: &str) -> bool {
             .badges
             .iter()
             .any(|badge| badge.to_ascii_lowercase().contains(filter))
-}
-
-fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
-}
-
-fn send(commands: &AppCommandSender, command: AppCommand) {
-    let _ = commands.send(command);
 }

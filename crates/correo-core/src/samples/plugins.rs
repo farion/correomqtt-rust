@@ -1,7 +1,7 @@
 use crate::{
     PluginCapabilityRow, PluginConfigField, PluginDiagnosticRow, PluginDiagnosticSeverity,
-    PluginHookAssignment, PluginHookKind, PluginHookStatus, PluginLoadState, PluginRow,
-    PluginSource, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
+    PluginHookAssignment, PluginHookKind, PluginHookStatus, PluginLoadState, PluginMarketplaceRow,
+    PluginRow, PluginSource, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
 };
 
 pub(super) fn sample_plugins() -> PluginSurfaceSnapshot {
@@ -11,10 +11,16 @@ pub(super) fn sample_plugins() -> PluginSurfaceSnapshot {
         plugin_filter: String::new(),
         diagnostic_filter: String::new(),
         selected_plugin_id: "builtin.json-formatter".to_owned(),
+        selected_marketplace_plugin_id: "builtin.json-formatter".to_owned(),
         selected_diagnostic_id: Some("diag-json-ready".to_owned()),
         feedback: None,
         disable_confirmation: None,
         hook_editor: None,
+        marketplace_plugins: vec![
+            marketplace_json_formatter(),
+            marketplace_base64_transform(),
+            marketplace_validator_pack(),
+        ],
         plugins: vec![
             json_formatter(),
             base64_transform(),
@@ -317,6 +323,59 @@ fn legacy_save_plugin() -> PluginRow {
             "Java/PF4J plugins are not migrated in CorreoMQTT Beta. Old .jar files, PF4J metadata, plugin config, hook config, and protocol.xml were left in the backup."
                 .to_owned(),
         ),
+    }
+}
+
+fn marketplace_json_formatter() -> PluginMarketplaceRow {
+    PluginMarketplaceRow {
+        id: "builtin.json-formatter".to_owned(),
+        name: "JSON Formatter".to_owned(),
+        version: "1.0.0".to_owned(),
+        provider: "CorreoMQTT".to_owned(),
+        repository: "Bundled replacements".to_owned(),
+        description: "Formats JSON payloads and normalizes detail bytes.".to_owned(),
+        capabilities: vec![
+            cap("Detail formatter", true, "Formats JSON payload details"),
+            cap(
+                "Detail transform",
+                true,
+                "Normalizes JSON bytes before display",
+            ),
+        ],
+        installed_plugin_id: Some("builtin.json-formatter".to_owned()),
+    }
+}
+
+fn marketplace_base64_transform() -> PluginMarketplaceRow {
+    PluginMarketplaceRow {
+        id: "builtin.base64-transform".to_owned(),
+        name: "Base64 Transform".to_owned(),
+        version: "1.0.0".to_owned(),
+        provider: "CorreoMQTT".to_owned(),
+        repository: "Bundled replacements".to_owned(),
+        description: "Decodes inbound payload previews and encodes outbound payloads.".to_owned(),
+        capabilities: vec![
+            cap(
+                "Incoming transform",
+                true,
+                "Decodes inbound payload previews",
+            ),
+            cap("Outgoing transform", true, "Encodes outbound payloads"),
+        ],
+        installed_plugin_id: Some("builtin.base64-transform".to_owned()),
+    }
+}
+
+fn marketplace_validator_pack() -> PluginMarketplaceRow {
+    PluginMarketplaceRow {
+        id: "marketplace.schema-validator".to_owned(),
+        name: "Schema Validator Pack".to_owned(),
+        version: "0.2.0".to_owned(),
+        provider: "CorreoMQTT Marketplace".to_owned(),
+        repository: "https://example.invalid/plugins.json".to_owned(),
+        description: "Adds validator hooks for common MQTT JSON schema checks.".to_owned(),
+        capabilities: vec![cap("Validator", true, "Validates message payloads")],
+        installed_plugin_id: None,
     }
 }
 

@@ -131,7 +131,7 @@ impl Default for GlobalSettingsSnapshot {
             language: "system".to_owned(),
             language_options: default_language_options(),
             keyring_backend: "os".to_owned(),
-            keyring_options: default_keyring_options(),
+            keyring_options: available_keyring_options(),
             search_use_regex: false,
             search_ignore_case: false,
             update_checks_enabled: false,
@@ -148,6 +148,18 @@ impl Default for GlobalSettingsSnapshot {
             dirty: false,
             feedback: None,
         }
+    }
+}
+
+pub fn normalize_keyring_backend(value: impl AsRef<str>) -> String {
+    let value = value.as_ref();
+    if available_keyring_options()
+        .iter()
+        .any(|option| option.id == value)
+    {
+        value.to_owned()
+    } else {
+        "os".to_owned()
     }
 }
 
@@ -211,15 +223,31 @@ fn default_language_options() -> Vec<SettingsOption> {
     ])
 }
 
-fn default_keyring_options() -> Vec<SettingsOption> {
-    options(&[
-        ("os", "OS keyring"),
-        ("WinDPAPI", "Windows DPAPI"),
-        ("OSXKeychain", "macOS Keychain"),
-        ("LibSecret", "LibSecret"),
-        ("KWallet5", "KWallet 5"),
-        ("UserInput", "Prompt on startup"),
-    ])
+pub fn available_keyring_options() -> Vec<SettingsOption> {
+    let mut values = vec![("os", "OS keyring")];
+    values.extend_from_slice(platform_keyring_options());
+    values.push(("UserInput", "Prompt on startup"));
+    options(&values)
+}
+
+#[cfg(target_os = "windows")]
+fn platform_keyring_options() -> &'static [(&'static str, &'static str)] {
+    &[("WinDPAPI", "Windows DPAPI")]
+}
+
+#[cfg(target_os = "macos")]
+fn platform_keyring_options() -> &'static [(&'static str, &'static str)] {
+    &[("OSXKeychain", "macOS Keychain")]
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_keyring_options() -> &'static [(&'static str, &'static str)] {
+    &[("LibSecret", "LibSecret"), ("KWallet5", "KWallet 5")]
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+fn platform_keyring_options() -> &'static [(&'static str, &'static str)] {
+    &[]
 }
 
 fn options(values: &[(&str, &str)]) -> Vec<SettingsOption> {
@@ -230,4 +258,53 @@ fn options(values: &[(&str, &str)]) -> Vec<SettingsOption> {
             label: (*label).to_owned(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{available_keyring_options, normalize_keyring_backend};
+
+    #[test]
+    fn keyring_options_are_filtered_for_the_current_platform() {
+        let options = available_keyring_options();
+        let ids: Vec<_> = options.iter().map(|option| option.id.as_str()).collect();
+        assert!(ids.contains(&"os"));
+        assert!(ids.contains(&"UserInput"));
+
+        #[cfg(target_os = "windows")]
+        {
+            assert!(ids.contains(&"WinDPAPI"));
+            assert!(!ids.contains(&"OSXKeychain"));
+            assert!(!ids.contains(&"LibSecret"));
+            assert!(!ids.contains(&"KWallet5"));
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            assert!(ids.contains(&"OSXKeychain"));
+            assert!(!ids.contains(&"WinDPAPI"));
+            assert!(!ids.contains(&"LibSecret"));
+            assert!(!ids.contains(&"KWallet5"));
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            assert!(ids.contains(&"LibSecret"));
+            assert!(ids.contains(&"KWallet5"));
+            assert!(!ids.contains(&"WinDPAPI"));
+            assert!(!ids.contains(&"OSXKeychain"));
+        }
+    }
+
+    #[test]
+    fn unavailable_keyring_backend_normalizes_to_os_default() {
+        let unavailable = if cfg!(target_os = "windows") {
+            "OSXKeychain"
+        } else {
+            "WinDPAPI"
+        };
+
+        assert_eq!(normalize_keyring_backend(unavailable), "os");
+        assert_eq!(normalize_keyring_backend("UserInput"), "UserInput");
+    }
 }

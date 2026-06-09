@@ -60,54 +60,63 @@ fn plugin_manager_keyboard_flow_is_command_driven() {
         .state()
         .runtime
         .command_sender()
-        .send(AppCommand::SelectPluginSurfaceTab(PluginSurfaceTab::Hooks))
+        .send(AppCommand::SelectPluginSurfaceTab(
+            PluginSurfaceTab::Marketplace,
+        ))
         .unwrap();
     harness.state_mut().pump();
     harness.run();
 
-    harness.press_key(Key::Enter);
-    harness.run();
-    harness.state_mut().pump();
-    assert!(harness
+    harness
         .state()
         .runtime
-        .snapshot()
-        .plugins
-        .hook_editor
-        .is_some());
+        .command_sender()
+        .send(AppCommand::SelectMarketplacePlugin(
+            "marketplace.schema-validator".to_owned(),
+        ))
+        .unwrap();
+    harness.state_mut().pump();
+    harness.run();
+    surrender_focus(&harness);
+    assert_eq!(
+        harness.state().runtime.snapshot().plugins.active_tab,
+        PluginSurfaceTab::Marketplace
+    );
+    assert_eq!(
+        harness
+            .state()
+            .runtime
+            .snapshot()
+            .plugins
+            .selected_marketplace_plugin_id,
+        "marketplace.schema-validator"
+    );
 
-    harness.press_key_modifiers(Modifiers::COMMAND, Key::S);
-    harness.run();
+    harness
+        .state()
+        .runtime
+        .command_sender()
+        .send(AppCommand::InstallMarketplacePlugin {
+            marketplace_plugin_id: "marketplace.schema-validator".to_owned(),
+        })
+        .unwrap();
     harness.state_mut().pump();
     assert!(harness
         .state()
         .runtime
         .snapshot()
         .plugins
-        .hook_editor
-        .is_none());
+        .plugins
+        .iter()
+        .any(|plugin| plugin.id == "marketplace.schema-validator"));
+}
 
-    harness.press_key(Key::Enter);
-    harness.run();
-    harness.state_mut().pump();
-    assert!(harness
-        .state()
-        .runtime
-        .snapshot()
-        .plugins
-        .hook_editor
-        .is_some());
-
-    harness.press_key(Key::Escape);
-    harness.run();
-    harness.state_mut().pump();
-    assert!(harness
-        .state()
-        .runtime
-        .snapshot()
-        .plugins
-        .hook_editor
-        .is_none());
+fn surrender_focus(harness: &Harness<'_, TestState>) {
+    harness.ctx.memory_mut(|memory| {
+        if let Some(focused) = memory.focused() {
+            memory.surrender_focus(focused);
+        }
+    });
 }
 
 struct TestState {

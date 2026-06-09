@@ -1,7 +1,9 @@
+mod about;
 mod command_bar;
 mod connection_launcher;
 mod connection_settings;
 mod diagnostics;
+mod icons;
 mod migration_recovery;
 mod nav;
 mod plugins;
@@ -14,6 +16,7 @@ mod workbench;
 mod workbench_detail;
 mod workbench_dialogs;
 mod workbench_header;
+mod workbench_helpers;
 mod workspace;
 
 pub use shell::{stored_theme, CorreoUi, THEME_KEY};

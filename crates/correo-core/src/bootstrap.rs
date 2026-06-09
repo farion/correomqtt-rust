@@ -8,10 +8,11 @@ use correo_storage::current::{
 use correo_storage::migration::MigrationPreview;
 
 use crate::{
-    AppSnapshot, ConnectDisabledReason, ConnectionBadge, ConnectionSettingsSnapshot,
-    ConnectionState, ConnectionSummary, Diagnostic, GlobalSettingsSnapshot, KeyringState,
-    LegacyMigrationStatus, MigrationRecoverySnapshot, PluginRepositoryRow, PublishHistoryRow,
-    QosLevel, SubscribePaneSnapshot, SubscriptionRow, ThemeMode,
+    normalize_keyring_backend, AppSnapshot, ConnectDisabledReason, ConnectionBadge,
+    ConnectionSettingsSnapshot, ConnectionState, ConnectionSummary, Diagnostic,
+    GlobalSettingsSnapshot, KeyringState, LegacyMigrationStatus, MigrationRecoverySnapshot,
+    PluginRepositoryRow, PublishHistoryRow, QosLevel, SubscribePaneSnapshot, SubscriptionRow,
+    ThemeMode,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,21 +161,34 @@ fn settings_snapshot(
 ) -> ConnectionSettingsSnapshot {
     let valid = !connection.name.trim().is_empty() && !connection.url.trim().is_empty();
     ConnectionSettingsSnapshot {
+        internal_id: connection.id.clone(),
         profile_name: connection.name.clone(),
         host: connection.url.clone(),
         port: connection.port.to_string(),
         mqtt_version: mqtt_label(connection.mqtt_version).to_owned(),
+        clean_session: connection.clean_session,
         client_id: connection.client_id.clone().unwrap_or_default(),
+        username: connection.username.clone().unwrap_or_default(),
+        password_status: password_status(connection).to_owned(),
         auth_mode: auth_label(connection).to_owned(),
-        username_status: username_status(connection).to_owned(),
         tls_mode: tls_label(connection).to_owned(),
-        tls_store: tls_store_label(connection).to_owned(),
+        tls_store: connection.ssl_keystore.clone().unwrap_or_default(),
+        tls_password_status: tls_password_status(connection).to_owned(),
+        tls_host_verification: connection.ssl_host_verification,
         proxy_mode: proxy_label(connection).to_owned(),
-        proxy_endpoint: proxy_endpoint(connection),
+        ssh_host: connection.ssh_host.clone().unwrap_or_default(),
+        ssh_port: connection.ssh_port.to_string(),
+        local_mqtt_port: connection
+            .local_port
+            .map(|port| port.to_string())
+            .unwrap_or_default(),
+        auth_username: connection.auth_username.clone().unwrap_or_default(),
+        ssh_password_status: ssh_password_status(connection).to_owned(),
+        ssh_key_file: connection.auth_keyfile.clone().unwrap_or_default(),
         lwt_enabled: connection.lwt == Lwt::On,
         lwt_topic: connection.lwt_topic.clone().unwrap_or_default(),
+        lwt_retained: connection.lwt_retained,
         lwt_payload: connection.lwt_payload.clone().unwrap_or_default(),
-        advanced_options: advanced_options(connection),
         dirty: false,
         valid,
         save_disabled_reason: "No changes to save".to_owned(),
@@ -232,10 +246,9 @@ fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
             .clone()
             .or_else(|| settings.current_locale.clone())
             .unwrap_or_else(|| "system".to_owned()),
-        keyring_backend: settings
-            .keyring_identifier
-            .clone()
-            .unwrap_or_else(|| "os".to_owned()),
+        keyring_backend: normalize_keyring_backend(
+            settings.keyring_identifier.as_deref().unwrap_or("os"),
+        ),
         update_checks_enabled: settings.search_updates,
         last_update_check: "Not checked this session".to_owned(),
         cleanup_status: "Sensitive values remain outside the UI snapshot".to_owned(),
@@ -329,78 +342,47 @@ fn history_activity(history: &ConnectionHistorySnapshot) -> String {
 }
 
 fn auth_label(connection: &ConnectionConfig) -> &'static str {
-    if connection.username.is_some() {
-        "Username/password in keyring"
-    } else {
-        match connection.auth {
-            Auth::Off => "Disabled",
-            Auth::Password => "SSH password in keyring",
-            Auth::Keyfile => "SSH key file configured",
-        }
+    match connection.auth {
+        Auth::Off => "No Auth",
+        Auth::Password => "Password",
+        Auth::Keyfile => "Keyfile",
     }
 }
 
-fn username_status(connection: &ConnectionConfig) -> &'static str {
+fn password_status(connection: &ConnectionConfig) -> &'static str {
     if connection.username.is_some() {
-        "Username configured; password stays in keyring"
+        "MQTT password managed by keyring"
     } else {
-        "No MQTT username configured"
+        "No MQTT password configured"
     }
 }
 
 fn tls_label(connection: &ConnectionConfig) -> &'static str {
     match connection.ssl {
-        TlsSsl::Off => "Disabled",
-        TlsSsl::Keystore => "TLS enabled",
+        TlsSsl::Off => "No TLS/SSL",
+        TlsSsl::Keystore => "Keystore",
     }
 }
 
-fn tls_store_label(connection: &ConnectionConfig) -> &'static str {
+fn tls_password_status(connection: &ConnectionConfig) -> &'static str {
     if connection.ssl_keystore.is_some() {
-        "Keystore path configured"
+        "SSL password managed by keyring"
     } else {
-        "No certificate store selected"
+        "No SSL password configured"
     }
 }
 
 fn proxy_label(connection: &ConnectionConfig) -> &'static str {
     match connection.proxy {
-        Proxy::Off => "Disabled",
-        Proxy::Ssh => "SSH tunnel",
+        Proxy::Off => "No proxy/tunnel",
+        Proxy::Ssh => "SSH",
     }
 }
 
-fn proxy_endpoint(connection: &ConnectionConfig) -> String {
-    match (&connection.ssh_host, connection.local_port) {
-        (Some(host), Some(local_port)) => {
-            format!("{host}:{} via localhost:{local_port}", connection.ssh_port)
-        }
-        (Some(host), None) => format!("{host}:{}", connection.ssh_port),
-        _ => "No tunnel configured".to_owned(),
+fn ssh_password_status(connection: &ConnectionConfig) -> &'static str {
+    if connection.auth == Auth::Password {
+        "SSH password managed by keyring"
+    } else {
+        "No SSH password configured"
     }
-}
-
-fn advanced_options(connection: &ConnectionConfig) -> Vec<String> {
-    vec![
-        format!(
-            "Clean session {}",
-            if connection.clean_session {
-                "enabled"
-            } else {
-                "disabled"
-            }
-        ),
-        format!(
-            "TLS hostname verification {}",
-            if connection.ssl_host_verification {
-                "enabled"
-            } else {
-                "disabled"
-            }
-        ),
-        format!(
-            "Last will retained {}",
-            if connection.lwt_retained { "yes" } else { "no" }
-        ),
-    ]
 }

@@ -5,8 +5,8 @@ use correo_core::{
 use egui::{Button, RichText, Ui};
 
 use crate::{
-    connection_settings, diagnostics, plugins, scripts, settings, skeletons, theme::ThemeTokens,
-    workbench,
+    about, connection_settings, diagnostics, plugins, scripts, settings, skeletons,
+    theme::ThemeTokens, workbench,
 };
 
 pub fn sidebar(
@@ -22,8 +22,9 @@ pub fn sidebar(
         Workspace::ImportExport => transfer_sidebar(ui, snapshot, tokens, commands),
         Workspace::Scripts => scripts::sidebar(ui, &snapshot.scripts, tokens, commands),
         Workspace::Plugins => plugins::sidebar(ui, &snapshot.plugins, tokens, commands),
-        Workspace::Diagnostics => diagnostics_sidebar(ui, tokens, commands),
-        Workspace::Settings => settings::sidebar(ui, snapshot, tokens, commands),
+        Workspace::Diagnostics => {}
+        Workspace::Settings => {}
+        Workspace::About => {}
         Workspace::Connections => {}
     }
 }
@@ -36,6 +37,7 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
         Workspace::Plugins => plugins::show(ui, snapshot, tokens, commands),
         Workspace::Diagnostics => diagnostics::workspace(ui, snapshot, tokens),
         Workspace::Settings => settings::show(ui, snapshot, tokens, commands),
+        Workspace::About => about::show(ui, tokens),
     }
 }
 
@@ -49,6 +51,9 @@ fn connections(
         ConnectionSurface::Launcher => launcher_detail(ui, snapshot, tokens, commands),
         ConnectionSurface::Workbench => workbench::show(ui, snapshot, tokens, commands),
         ConnectionSurface::Settings => connection_settings::show(ui, snapshot, tokens, commands),
+        ConnectionSurface::Transfer => {
+            skeletons::connection_transfer(ui, snapshot, tokens, commands)
+        }
     }
 }
 
@@ -90,12 +95,17 @@ fn launcher_detail(
     }
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-        if ui.button("Import").clicked() {
-            send(commands, AppCommand::ImportConnections);
-        }
-        if ui.button("Add").clicked() {
-            send(commands, AppCommand::AddConnection);
-        }
+        ui.vertical(|ui| {
+            if ui.button("Add").clicked() {
+                send(commands, AppCommand::AddConnection);
+            }
+            if ui.button("Import .cqc").clicked() {
+                send(commands, AppCommand::ImportConnections);
+            }
+            if ui.button("Export .cqc").clicked() {
+                send(commands, AppCommand::ExportConnections);
+            }
+        });
     });
 }
 
@@ -135,7 +145,10 @@ fn transfer_sidebar(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    for section in correo_core::TransferSection::ALL {
+    for section in [
+        correo_core::TransferSection::Import,
+        correo_core::TransferSection::Export,
+    ] {
         let selected = snapshot.transfer.active_section == section;
         if ui.selectable_label(selected, section.label()).clicked() {
             send(commands, AppCommand::SelectTransferSection(section));
@@ -150,35 +163,12 @@ fn transfer_sidebar(
         ))
         .color(tokens.text_secondary),
     );
-    ui.label(
-        RichText::new(format!(
-            "{} messages selected",
-            snapshot.transfer.messages.selected_messages
-        ))
-        .color(tokens.text_secondary),
-    );
     ui.separator();
     if ui.button("Import .cqc").clicked() {
         send(commands, AppCommand::ImportConnections);
     }
     if ui.button("Export .cqc").clicked() {
         send(commands, AppCommand::ExportConnections);
-    }
-    if ui.button("Import messages").clicked() {
-        send(commands, AppCommand::ImportMessages);
-    }
-    if ui.button("Export messages").clicked() {
-        send(commands, AppCommand::ExportMessages);
-    }
-}
-
-fn diagnostics_sidebar(ui: &mut Ui, tokens: ThemeTokens, commands: &AppCommandSender) {
-    if ui.button("Toggle strip").clicked() {
-        send(commands, AppCommand::ToggleDiagnostics);
-    }
-    ui.add_space(8.0);
-    for item in ["MQTT", "Migration", "Scripts", "Plugins"] {
-        ui.label(RichText::new(item).color(tokens.text_secondary));
     }
 }
 

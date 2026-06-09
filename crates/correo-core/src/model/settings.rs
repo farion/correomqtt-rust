@@ -1,6 +1,6 @@
 use crate::{
-    AppModel, Diagnostic, GlobalSettingField, GlobalSettingFlag, GlobalSettingsSnapshot,
-    SettingsFeedback, SettingsSection, ThemeMode,
+    normalize_keyring_backend, AppModel, Diagnostic, GlobalSettingField, GlobalSettingFlag,
+    GlobalSettingsSnapshot, SettingsFeedback, SettingsSection, ThemeMode,
 };
 
 impl AppModel {
@@ -24,7 +24,9 @@ impl AppModel {
         let settings = &mut self.snapshot.global_settings;
         match field {
             GlobalSettingField::Language => settings.language = value,
-            GlobalSettingField::KeyringBackend => settings.keyring_backend = value,
+            GlobalSettingField::KeyringBackend => {
+                settings.keyring_backend = normalize_keyring_backend(value);
+            }
             GlobalSettingField::BundledPluginsUrl => settings.bundled_plugins_url = value,
         }
         self.mark_global_settings_dirty();

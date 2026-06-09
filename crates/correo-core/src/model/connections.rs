@@ -1,9 +1,10 @@
 use correo_mqtt::ConnectionId;
 
 use crate::{
-    AppModel, ConnectDisabledReason, ConnectionBadge, ConnectionSettingField,
-    ConnectionSettingsSnapshot, ConnectionSettingsTab, ConnectionState, ConnectionSummary,
-    Diagnostic, KeyringState,
+    AppModel, ConnectDisabledReason, ConnectionBadge, ConnectionSecretField,
+    ConnectionSettingField, ConnectionSettingFlag, ConnectionSettingsSnapshot,
+    ConnectionSettingsTab, ConnectionState, ConnectionSummary, Diagnostic, KeyringState,
+    SecretInput,
 };
 
 impl AppModel {
@@ -75,6 +76,9 @@ impl AppModel {
         settings.save_disabled_reason = "No changes to save".to_owned();
 
         if let Some(id) = self.snapshot.selected_connection {
+            if settings.internal_id.trim().is_empty() {
+                settings.internal_id = id.to_string();
+            }
             self.connection_settings.insert(id, settings.clone());
             self.snapshot.connection_settings = settings.clone();
             self.update_connection_summary(id, &settings);
@@ -83,6 +87,7 @@ impl AppModel {
         }
 
         let id = ConnectionId::new();
+        settings.internal_id = id.to_string();
         self.connection_settings.insert(id, settings.clone());
         self.storage_connection_ids.insert(id, id.to_string());
         self.snapshot
@@ -124,16 +129,61 @@ impl AppModel {
             ConnectionSettingField::Port => settings.port = value,
             ConnectionSettingField::MqttVersion => settings.mqtt_version = value,
             ConnectionSettingField::ClientId => settings.client_id = value,
-            ConnectionSettingField::AuthMode => settings.auth_mode = value,
+            ConnectionSettingField::Username => settings.username = value,
             ConnectionSettingField::TlsMode => settings.tls_mode = value,
             ConnectionSettingField::TlsStore => settings.tls_store = value,
             ConnectionSettingField::ProxyMode => settings.proxy_mode = value,
-            ConnectionSettingField::ProxyEndpoint => settings.proxy_endpoint = value,
+            ConnectionSettingField::SshHost => settings.ssh_host = value,
+            ConnectionSettingField::SshPort => settings.ssh_port = value,
+            ConnectionSettingField::LocalMqttPort => settings.local_mqtt_port = value,
+            ConnectionSettingField::AuthMode => settings.auth_mode = value,
+            ConnectionSettingField::AuthUsername => settings.auth_username = value,
+            ConnectionSettingField::SshKeyFile => settings.ssh_key_file = value,
             ConnectionSettingField::LwtTopic => settings.lwt_topic = value,
             ConnectionSettingField::LwtPayload => settings.lwt_payload = value,
         }
         settings.dirty = true;
         refresh_connection_settings_validation(settings);
+    }
+
+    pub(super) fn update_connection_secret(
+        &mut self,
+        field: ConnectionSecretField,
+        value: SecretInput,
+    ) {
+        let settings = &mut self.snapshot.connection_settings;
+        match field {
+            ConnectionSecretField::MqttPassword => settings.password = value,
+            ConnectionSecretField::TlsKeystorePassword => settings.tls_keystore_password = value,
+            ConnectionSecretField::SshPassword => settings.ssh_password = value,
+        }
+        settings.dirty = true;
+    }
+
+    pub(super) fn set_connection_setting_flag(
+        &mut self,
+        flag: ConnectionSettingFlag,
+        enabled: bool,
+    ) {
+        let settings = &mut self.snapshot.connection_settings;
+        match flag {
+            ConnectionSettingFlag::CleanSession => settings.clean_session = enabled,
+            ConnectionSettingFlag::TlsHostVerification => settings.tls_host_verification = enabled,
+            ConnectionSettingFlag::LwtRetained => settings.lwt_retained = enabled,
+        }
+        settings.dirty = true;
+        refresh_connection_settings_validation(settings);
+    }
+
+    pub(super) fn generate_client_id(&mut self) {
+        self.snapshot.connection_settings.client_id =
+            format!("correomqtt-{}", uuid::Uuid::new_v4().simple());
+        self.snapshot.connection_settings.dirty = true;
+        refresh_connection_settings_validation(&mut self.snapshot.connection_settings);
+    }
+
+    pub(super) fn refresh_connection_settings_validation(&mut self) {
+        refresh_connection_settings_validation(&mut self.snapshot.connection_settings);
     }
 
     pub(super) fn record_action(&mut self, id: ConnectionId, action: &'static str) {
@@ -202,20 +252,21 @@ impl AppModel {
 fn new_connection_settings() -> ConnectionSettingsSnapshot {
     let mut settings = ConnectionSettingsSnapshot {
         selected_tab: ConnectionSettingsTab::Mqtt,
+        internal_id: "Generated on save".to_owned(),
         profile_name: "New connection".to_owned(),
         port: "1883".to_owned(),
         mqtt_version: "MQTT v5".to_owned(),
-        auth_mode: "Disabled".to_owned(),
-        username_status: "No MQTT username configured".to_owned(),
-        tls_mode: "Disabled".to_owned(),
-        tls_store: "No certificate store selected".to_owned(),
-        proxy_mode: "Disabled".to_owned(),
-        proxy_endpoint: "No tunnel configured".to_owned(),
-        advanced_options: vec![
-            "Clean session enabled".to_owned(),
-            "TLS hostname verification enabled".to_owned(),
-            "Last will retained no".to_owned(),
-        ],
+        clean_session: true,
+        password_status: "No MQTT password configured".to_owned(),
+        tls_mode: "No TLS/SSL".to_owned(),
+        tls_password_status: "No SSL password configured".to_owned(),
+        tls_host_verification: true,
+        proxy_mode: "No proxy/tunnel".to_owned(),
+        ssh_port: "22".to_owned(),
+        local_mqtt_port: "1883".to_owned(),
+        auth_mode: "No Auth".to_owned(),
+        ssh_password_status: "No SSH password configured".to_owned(),
+        lwt_retained: false,
         dirty: true,
         keyring_state: KeyringState::Available,
         ..ConnectionSettingsSnapshot::default()
@@ -236,6 +287,27 @@ fn refresh_connection_settings_validation(settings: &mut ConnectionSettingsSnaps
         Ok(0) | Err(_) => errors.push("Port must be between 1 and 65535".to_owned()),
         Ok(_) => {}
     }
+    if settings.tls_mode == "Keystore" && settings.tls_store.trim().is_empty() {
+        errors.push("SSL keystore is required when TLS/SSL uses Keystore".to_owned());
+    }
+    if settings.proxy_mode == "SSH" {
+        if settings.ssh_host.trim().is_empty() {
+            errors.push("SSH host is required".to_owned());
+        }
+        validate_optional_port(&settings.ssh_port, "SSH port", true, &mut errors);
+        validate_optional_port(
+            &settings.local_mqtt_port,
+            "Local MQTT port",
+            false,
+            &mut errors,
+        );
+        if settings.auth_mode != "No Auth" && settings.auth_username.trim().is_empty() {
+            errors.push("SSH username is required".to_owned());
+        }
+        if settings.auth_mode == "Keyfile" && settings.ssh_key_file.trim().is_empty() {
+            errors.push("SSH key file is required".to_owned());
+        }
+    }
 
     settings.valid = errors.is_empty();
     settings.save_disabled_reason = if settings.valid {
@@ -244,6 +316,20 @@ fn refresh_connection_settings_validation(settings: &mut ConnectionSettingsSnaps
         "Resolve validation errors before saving".to_owned()
     };
     settings.validation_errors = errors;
+}
+
+fn validate_optional_port(value: &str, label: &str, required: bool, errors: &mut Vec<String>) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        if required {
+            errors.push(format!("{label} is required"));
+        }
+        return;
+    }
+    match trimmed.parse::<u16>() {
+        Ok(0) | Err(_) => errors.push(format!("{label} must be between 1 and 65535")),
+        Ok(_) => {}
+    }
 }
 
 fn connection_summary(
@@ -270,10 +356,10 @@ fn connection_summary(
 
 fn connection_badges(settings: &ConnectionSettingsSnapshot) -> Vec<ConnectionBadge> {
     let mut badges = Vec::new();
-    if settings.tls_mode != "Disabled" {
+    if settings.tls_mode != "No TLS/SSL" {
         badges.push(ConnectionBadge::Tls);
     }
-    if settings.proxy_mode != "Disabled" {
+    if settings.proxy_mode != "No proxy/tunnel" {
         badges.push(ConnectionBadge::Proxy);
     }
     if settings.lwt_enabled {

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use correo_mqtt::{
-    ConnectionId, LastWill, MqttConnectionOptions, MqttEndpoint, MqttError, MqttProtocolVersion,
-    PublishRequest, Qos, Subscription, TlsConfig, TlsOptions, UnsubscribeRequest,
+    ConnectionId, LastWill, MqttAuth, MqttConnectionOptions, MqttEndpoint, MqttError,
+    MqttProtocolVersion, PublishRequest, Qos, SecretString, SshAuth, SshHostKeyPolicy,
+    SshTunnelOptions, Subscription, TlsConfig, TlsHostVerification, TlsOptions, UnsubscribeRequest,
 };
 use thiserror::Error;
 
@@ -219,9 +220,21 @@ fn connection_options(
                 operation: MqttOperation::Connect,
                 source,
             })?;
-        if settings.tls_mode != "Disabled" {
-            options.tls = TlsConfig::Enabled(TlsOptions::default());
+        options.clean_start = settings.clean_session;
+        if !settings.username.trim().is_empty() || !settings.password.is_empty() {
+            options.auth = MqttAuth::UsernamePassword {
+                username: non_empty(settings.username.trim()),
+                password: SecretString::new(settings.password.expose_for_ui().to_owned()),
+            };
         }
+        if settings.tls_mode != "No TLS/SSL" {
+            let mut tls = TlsOptions::default();
+            if !settings.tls_host_verification {
+                tls.host_verification = TlsHostVerification::DisabledInsecure;
+            }
+            options.tls = TlsConfig::Enabled(tls);
+        }
+        options.ssh_tunnel = ssh_tunnel_options(connection_id, settings)?;
         options.last_will = last_will(settings)?;
     } else {
         options.protocol_version = MqttProtocolVersion::try_from(connection.mqtt_version.as_str())
@@ -283,9 +296,61 @@ fn last_will(
         })?,
         payload: settings.lwt_payload.as_bytes().to_vec(),
         qos: Qos::AtLeastOnce,
-        retain: false,
+        retain: settings.lwt_retained,
     };
     Ok(Some(will))
+}
+
+fn ssh_tunnel_options(
+    connection_id: ConnectionId,
+    settings: &ConnectionSettingsSnapshot,
+) -> Result<Option<SshTunnelOptions>, MqttCommandBuildError> {
+    if settings.proxy_mode != "SSH"
+        || settings.ssh_host.trim().is_empty()
+        || settings.auth_username.trim().is_empty()
+        || settings.auth_mode == "No Auth"
+    {
+        return Ok(None);
+    }
+    let port = settings
+        .ssh_port
+        .trim()
+        .parse::<u16>()
+        .map_err(|_| MqttCommandBuildError::InvalidPort { connection_id })?;
+    let local_bind_port = optional_port(connection_id, &settings.local_mqtt_port)?;
+    let auth = if settings.auth_mode == "Keyfile" {
+        SshAuth::PrivateKey {
+            path: non_empty(settings.ssh_key_file.trim()),
+            private_key: None,
+            passphrase: None,
+        }
+    } else {
+        SshAuth::Password(SecretString::new(
+            settings.ssh_password.expose_for_ui().to_owned(),
+        ))
+    };
+    Ok(Some(SshTunnelOptions {
+        host: settings.ssh_host.trim().to_owned(),
+        port,
+        username: settings.auth_username.trim().to_owned(),
+        auth,
+        host_key_policy: SshHostKeyPolicy::AcceptAnyInsecure,
+        local_bind_port,
+    }))
+}
+
+fn optional_port(
+    connection_id: ConnectionId,
+    value: &str,
+) -> Result<Option<u16>, MqttCommandBuildError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    value
+        .parse::<u16>()
+        .map(Some)
+        .map_err(|_| MqttCommandBuildError::InvalidPort { connection_id })
 }
 
 fn connected_connection_id(

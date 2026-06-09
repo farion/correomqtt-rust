@@ -1,12 +1,11 @@
 use correo_core::{AppCommand, AppCommandSender, PluginRow, PluginSurfaceSnapshot};
 use egui::{RichText, ScrollArea, Ui};
-use egui_extras::{Column, TableBuilder};
 
 use crate::theme::ThemeTokens;
 
-use super::{capability_chips, enabled_checkbox, send, status_color};
+use super::{capability_chips, plugin_detail, send, status_color};
 
-const COMPACT_WIDTH: f32 = 720.0;
+const SPLIT_WIDTH: f32 = 760.0;
 
 pub(super) fn tab(
     ui: &mut Ui,
@@ -16,128 +15,79 @@ pub(super) fn tab(
 ) {
     let filtered = plugins.filtered_plugins();
     if filtered.is_empty() {
-        ui.label(RichText::new("No plugins match this search.").color(tokens.text_secondary));
+        ui.label(
+            RichText::new("No installed plugins match this search.").color(tokens.text_secondary),
+        );
         return;
     }
 
-    if ui.available_width() < COMPACT_WIDTH {
-        compact_list(ui, plugins, filtered, tokens, commands);
+    if ui.available_width() < SPLIT_WIDTH {
+        plugin_list(ui, plugins, &filtered, tokens, commands);
+        ui.separator();
+        selected_detail(ui, plugins, tokens, commands);
     } else {
-        table(ui, plugins, filtered, tokens, commands);
+        ui.columns(2, |columns| {
+            plugin_list(&mut columns[0], plugins, &filtered, tokens, commands);
+            selected_detail(&mut columns[1], plugins, tokens, commands);
+        });
     }
 }
 
-fn compact_list(
+fn plugin_list(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
-    filtered: Vec<&PluginRow>,
+    filtered: &[&PluginRow],
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
+    ui.heading("Installed");
+    ui.add_space(4.0);
     ScrollArea::vertical()
-        .id_salt("plugin-installed-compact")
+        .id_salt("plugin-installed-list")
         .show(ui, |ui| {
             for plugin in filtered {
-                compact_row(ui, plugins, plugin, tokens, commands);
+                plugin_row(ui, plugins, plugin, tokens, commands);
                 ui.separator();
             }
         });
 }
 
-fn compact_row(
+fn plugin_row(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
     plugin: &PluginRow,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    ui.horizontal_wrapped(|ui| {
-        enabled_checkbox(ui, plugin, commands);
-        if ui
-            .selectable_label(
-                plugins.selected_plugin_id == plugin.id,
-                RichText::new(&plugin.name).strong(),
-            )
-            .clicked()
-        {
-            send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
-        }
-        ui.label(RichText::new(&plugin.version).color(tokens.text_secondary));
-    });
+    if ui
+        .selectable_label(
+            plugins.selected_plugin_id == plugin.id,
+            RichText::new(&plugin.name).strong(),
+        )
+        .clicked()
+    {
+        send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
+    }
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(plugin.status.label()).color(status_color(plugin.status, tokens)));
+        ui.label(RichText::new(&plugin.version).color(tokens.text_secondary));
         ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
-        ui.label(RichText::new(format!("{} diagnostics", plugin.diagnostic_count())).small());
     });
     if !plugin.capabilities.is_empty() {
         capability_chips(ui, plugin, tokens);
     }
-    if let Some(note) = &plugin.legacy_note {
-        ui.label(RichText::new(note).color(tokens.warning));
-    }
 }
 
-fn table(
+fn selected_detail(
     ui: &mut Ui,
     plugins: &PluginSurfaceSnapshot,
-    filtered: Vec<&PluginRow>,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    TableBuilder::new(ui)
-        .striped(true)
-        .column(Column::exact(64.0))
-        .column(Column::remainder())
-        .column(Column::exact(74.0))
-        .column(Column::exact(120.0))
-        .column(Column::remainder())
-        .column(Column::exact(78.0))
-        .header(22.0, |mut header| {
-            for title in [
-                "Enabled",
-                "Plugin",
-                "Version",
-                "Status",
-                "Capabilities",
-                "Diagnostics",
-            ] {
-                header.col(|ui| {
-                    ui.strong(title);
-                });
-            }
-        })
-        .body(|mut body| {
-            for plugin in filtered {
-                body.row(48.0, |mut row| {
-                    row.col(|ui| {
-                        enabled_checkbox(ui, plugin, commands);
-                    });
-                    row.col(|ui| {
-                        if ui
-                            .selectable_label(
-                                plugins.selected_plugin_id == plugin.id,
-                                RichText::new(&plugin.name).strong(),
-                            )
-                            .clicked()
-                        {
-                            send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
-                        }
-                        ui.label(RichText::new(plugin.source.label()).color(tokens.text_secondary));
-                    });
-                    row.col(|ui| {
-                        ui.label(&plugin.version);
-                    });
-                    row.col(|ui| {
-                        ui.label(
-                            RichText::new(plugin.status.label())
-                                .color(status_color(plugin.status, tokens)),
-                        );
-                    });
-                    row.col(|ui| capability_chips(ui, plugin, tokens));
-                    row.col(|ui| {
-                        ui.label(plugin.diagnostic_count().to_string());
-                    });
-                });
-            }
-        });
+    let Some(plugin) = plugins.selected_plugin() else {
+        ui.heading("Plugin Details");
+        ui.label(RichText::new("No installed plugin selected").color(tokens.text_secondary));
+        return;
+    };
+    plugin_detail(ui, plugin, tokens, commands);
 }

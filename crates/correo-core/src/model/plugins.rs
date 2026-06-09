@@ -7,6 +7,8 @@ use super::AppModel;
 
 #[path = "plugins/helpers.rs"]
 mod helpers;
+#[path = "plugins/manager.rs"]
+mod manager;
 use helpers::*;
 
 impl AppModel {
@@ -14,7 +16,14 @@ impl AppModel {
         match command {
             AppCommand::SearchPlugins(filter) => self.search_plugins(filter.clone()),
             AppCommand::SelectPlugin(plugin_id) => self.select_plugin(plugin_id.clone()),
+            AppCommand::SelectMarketplacePlugin(plugin_id) => {
+                self.select_marketplace_plugin(plugin_id.clone())
+            }
             AppCommand::SelectPluginSurfaceTab(tab) => self.select_plugin_surface_tab(*tab),
+            AppCommand::InstallMarketplacePlugin {
+                marketplace_plugin_id,
+            } => self.install_marketplace_plugin(marketplace_plugin_id.clone()),
+            AppCommand::UninstallPlugin { plugin_id } => self.uninstall_plugin(plugin_id.clone()),
             AppCommand::SetPluginEnabled { plugin_id, enabled } => {
                 self.set_plugin_enabled(plugin_id.clone(), *enabled);
             }

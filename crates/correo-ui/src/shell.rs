@@ -1,15 +1,16 @@
-use correo_core::{sample_snapshot, AppCommandSender, AppSnapshot, ThemeMode, Workspace};
+use correo_core::{
+    sample_snapshot, AppCommandSender, AppSnapshot, ConnectionSurface, ThemeMode, Workspace,
+};
 use egui::{CentralPanel, Frame, SidePanel, Stroke, TopBottomPanel};
 
-use crate::{
-    command_bar, connection_launcher, diagnostics, migration_recovery, nav, theme, workspace,
-};
+use crate::{command_bar, connection_launcher, icons, migration_recovery, nav, theme, workspace};
 
 pub const THEME_KEY: &str = "correo.theme-mode";
 
 pub struct CorreoUi {
     command_sender: AppCommandSender,
     snapshot: AppSnapshot,
+    icons_installed: bool,
 }
 
 impl CorreoUi {
@@ -17,13 +18,19 @@ impl CorreoUi {
         let theme_mode = stored_theme(creation_context);
         let snapshot = sample_snapshot(theme_mode);
         theme::apply_theme(&creation_context.egui_ctx, theme_mode);
-        Self::for_snapshot(snapshot)
+        icons::install(&creation_context.egui_ctx);
+        Self {
+            command_sender: AppCommandSender::disconnected(),
+            snapshot,
+            icons_installed: true,
+        }
     }
 
     pub fn for_snapshot(snapshot: AppSnapshot) -> Self {
         Self {
             command_sender: AppCommandSender::disconnected(),
             snapshot,
+            icons_installed: false,
         }
     }
 
@@ -34,6 +41,7 @@ impl CorreoUi {
         Self {
             command_sender,
             snapshot,
+            icons_installed: false,
         }
     }
 
@@ -43,9 +51,11 @@ impl CorreoUi {
         command_sender: AppCommandSender,
     ) -> Self {
         theme::apply_theme(&creation_context.egui_ctx, snapshot.theme_mode);
+        icons::install(&creation_context.egui_ctx);
         Self {
             command_sender,
             snapshot,
+            icons_installed: true,
         }
     }
 
@@ -62,6 +72,7 @@ impl CorreoUi {
     }
 
     pub fn draw(&mut self, context: &egui::Context) {
+        self.ensure_icons_installed(context);
         let snapshot = self.snapshot.clone();
         theme::apply_theme(context, snapshot.theme_mode);
         let tokens = theme::tokens(context, snapshot.theme_mode);
@@ -72,13 +83,7 @@ impl CorreoUi {
                 .exact_height(40.0)
                 .frame(top_frame(tokens))
                 .show(context, |ui| {
-                    migration_recovery::top_bar(ui, &snapshot.migration_recovery, commands);
-                });
-
-            diagnostics_panel(&snapshot)
-                .frame(top_frame(tokens))
-                .show(context, |ui| {
-                    diagnostics::strip(ui, &snapshot, tokens, commands);
+                    migration_recovery::top_bar(ui, &snapshot.migration_recovery);
                 });
 
             SidePanel::left("correo-recovery-context")
@@ -98,24 +103,11 @@ impl CorreoUi {
             return;
         }
 
-        TopBottomPanel::top("correo-menu")
-            .exact_height(28.0)
-            .frame(top_frame(tokens))
-            .show(context, |ui| {
-                command_bar::menu_bar(ui, commands);
-            });
-
         TopBottomPanel::top("correo-command")
             .exact_height(40.0)
             .frame(top_frame(tokens))
             .show(context, |ui| {
                 command_bar::command_bar(ui, &snapshot, tokens, commands);
-            });
-
-        diagnostics_panel(&snapshot)
-            .frame(top_frame(tokens))
-            .show(context, |ui| {
-                diagnostics::strip(ui, &snapshot, tokens, commands);
             });
 
         SidePanel::left("correo-rail")
@@ -126,19 +118,21 @@ impl CorreoUi {
                 nav::rail(ui, snapshot.active_workspace, tokens, commands);
             });
 
-        SidePanel::left("correo-context")
-            .default_width(260.0)
-            .width_range(220.0..=360.0)
-            .resizable(true)
-            .frame(sidebar_frame(tokens))
-            .show(context, |ui| match snapshot.active_workspace {
-                Workspace::Connections => {
-                    connection_launcher::panel(ui, &snapshot, tokens, commands);
-                }
-                active_workspace => {
-                    workspace::sidebar(ui, &snapshot, active_workspace, tokens, commands);
-                }
-            });
+        if context_panel_visible(&snapshot) {
+            SidePanel::left("correo-context")
+                .default_width(260.0)
+                .width_range(220.0..=360.0)
+                .resizable(true)
+                .frame(sidebar_frame(tokens))
+                .show(context, |ui| match snapshot.active_workspace {
+                    Workspace::Connections => {
+                        connection_launcher::panel(ui, &snapshot, tokens, commands);
+                    }
+                    active_workspace => {
+                        workspace::sidebar(ui, &snapshot, active_workspace, tokens, commands);
+                    }
+                });
+        }
 
         CentralPanel::default()
             .frame(central_frame(tokens))
@@ -146,6 +140,23 @@ impl CorreoUi {
                 workspace::show(ui, &snapshot, tokens, commands);
             });
     }
+
+    fn ensure_icons_installed(&mut self, context: &egui::Context) {
+        if !self.icons_installed {
+            icons::install(context);
+            self.icons_installed = true;
+        }
+    }
+}
+
+fn context_panel_visible(snapshot: &AppSnapshot) -> bool {
+    !matches!(
+        snapshot.active_workspace,
+        Workspace::Diagnostics | Workspace::Settings | Workspace::About
+    ) && !matches!(
+        (snapshot.active_workspace, snapshot.connection_surface),
+        (Workspace::Connections, ConnectionSurface::Transfer)
+    )
 }
 
 impl Default for CorreoUi {
@@ -169,18 +180,6 @@ pub fn stored_theme(creation_context: &eframe::CreationContext<'_>) -> ThemeMode
         .storage
         .and_then(|storage| eframe::get_value::<ThemeMode>(storage, THEME_KEY))
         .unwrap_or_default()
-}
-
-fn diagnostics_panel(snapshot: &AppSnapshot) -> TopBottomPanel {
-    let panel = TopBottomPanel::bottom("correo-diagnostics");
-    if snapshot.diagnostics_expanded {
-        panel
-            .default_height(220.0)
-            .height_range(180.0..=320.0)
-            .resizable(true)
-    } else {
-        panel.exact_height(28.0).resizable(false)
-    }
 }
 
 fn top_frame(tokens: theme::ThemeTokens) -> Frame {

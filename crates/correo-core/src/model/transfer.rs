@@ -1,11 +1,13 @@
 use crate::{
-    AppModel, Diagnostic, ExportPasswordConfirmation, ExportPathState, ImportPasswordState,
-    TransferFeedback, TransferOutcome, TransferSection, TransferStep, Workspace,
+    AppModel, ConnectionSurface, Diagnostic, ExportPasswordConfirmation, ExportPathState,
+    ImportPasswordState, TransferFeedback, TransferOutcome, TransferSection, TransferStep,
+    WorkflowFeedback, Workspace,
 };
 
 impl AppModel {
     pub(super) fn import_connections(&mut self) {
-        self.snapshot.active_workspace = Workspace::ImportExport;
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Transfer;
         self.snapshot.transfer.active_section = TransferSection::Import;
         self.snapshot.transfer.active_step = TransferStep::ChooseFile;
         self.push_diagnostic(Diagnostic::info(
@@ -14,7 +16,8 @@ impl AppModel {
     }
 
     pub(super) fn open_connection_export(&mut self) {
-        self.snapshot.active_workspace = Workspace::ImportExport;
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Transfer;
         self.snapshot.transfer.active_section = TransferSection::Export;
         self.snapshot.transfer.export.feedback = Some(TransferFeedback::info(
             "Connection export is ready. Plain exports omit sensitive auth values.",
@@ -23,7 +26,8 @@ impl AppModel {
     }
 
     pub(super) fn choose_connection_import_file(&mut self) {
-        self.snapshot.active_workspace = Workspace::ImportExport;
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Transfer;
         self.snapshot.transfer.active_section = TransferSection::Import;
         self.snapshot.transfer.active_step = if self.snapshot.transfer.import.encrypted {
             TransferStep::Password
@@ -157,23 +161,48 @@ impl AppModel {
     }
 
     pub(super) fn import_messages(&mut self) {
-        self.snapshot.active_workspace = Workspace::ImportExport;
-        self.snapshot.transfer.active_section = TransferSection::Messages;
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Workbench;
+        self.snapshot.workbench.narrow_tab = crate::WorkbenchTab::Publish;
+        self.snapshot.workbench.publish.feedback = Some(WorkflowFeedback::info(
+            "Choose a .cqm message file to load into the publish editor.",
+        ));
         self.snapshot.transfer.messages.feedback = Some(TransferFeedback::info(
-            "Message import command queued for a JSON message archive.",
+            "Message import command queued for a .cqm file.",
         ));
         self.push_diagnostic(Diagnostic::info("Message import command queued."));
     }
 
     pub(super) fn export_messages(&mut self) {
-        self.snapshot.active_workspace = Workspace::ImportExport;
-        self.snapshot.transfer.active_section = TransferSection::Messages;
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Workbench;
         let count = self.snapshot.transfer.messages.selected_messages;
         self.snapshot.transfer.messages.outcome = Some(TransferOutcome::success(
             "Message export ready",
-            format!("{count} retained message snapshots queued for export."),
+            format!("{count} message snapshots queued for .cqm export."),
         ));
         self.push_diagnostic(Diagnostic::info("Message export command queued."));
+    }
+
+    pub(super) fn export_publish_history_message(&mut self, topic: String) {
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Workbench;
+        self.snapshot.workbench.narrow_tab = crate::WorkbenchTab::Publish;
+        self.snapshot.workbench.publish.feedback = Some(WorkflowFeedback::info(format!(
+            "Queued outgoing message on {topic} for .cqm export."
+        )));
+        self.push_diagnostic(Diagnostic::info("Outgoing message export command queued."));
+    }
+
+    pub(super) fn export_incoming_message(&mut self, message_id: u32) {
+        self.snapshot.active_workspace = Workspace::Connections;
+        self.snapshot.connection_surface = ConnectionSurface::Workbench;
+        self.snapshot.workbench.narrow_tab = crate::WorkbenchTab::Subscribe;
+        self.snapshot.workbench.selected_message_id = Some(message_id);
+        self.snapshot.workbench.subscribe.feedback = Some(WorkflowFeedback::info(
+            "Queued selected incoming message for .cqm export.",
+        ));
+        self.push_diagnostic(Diagnostic::info("Incoming message export command queued."));
     }
 }
 

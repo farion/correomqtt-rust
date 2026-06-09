@@ -192,8 +192,8 @@ fn write_manifest(artifacts: &[ScreenshotArtifact]) {
         "- Launcher and active workbench cover light/dark at 1280x800, 1024x768, and 900x640.\n",
     );
     manifest.push_str(
-        "- Import/export covers .cqc import choose/password/review/outcome states, export \
-         plain/encrypted/path/outcome states, and message import/export entry points.\n",
+        "- Connection transfer covers .cqc import choose/password/review/outcome states and export \
+         plain/encrypted/path/outcome states; CQM message actions are covered in the workbench.\n",
     );
     manifest
         .push_str("- Global settings covers Appearance, Language, Search, and Keyring sections.\n");

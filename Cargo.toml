@@ -31,6 +31,7 @@ color-eyre = "0.6"
 directories = "6"
 eframe = { version = "0.31", default-features = false, features = ["accesskit", "default_fonts", "glow", "persistence", "wayland", "x11"] }
 egui = "0.31"
+egui-phosphor = { version = "0.9", default-features = false, features = ["regular"] }
 egui_extras = "0.31"
 egui_kittest = { version = "0.31", features = ["snapshot", "wgpu"] }
 flume = "0.11"

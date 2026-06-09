@@ -264,18 +264,30 @@ fn transfer_commands_focus_the_requested_section() {
     let mut model = AppModel::default();
 
     model.apply_command(AppCommand::ExportConnections);
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Transfer
+    );
     assert_eq!(
         model.snapshot().transfer.active_section,
         TransferSection::Export
     );
 
     model.apply_command(AppCommand::ImportMessages);
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
     assert_eq!(
-        model.snapshot().transfer.active_section,
-        TransferSection::Messages
+        model.snapshot().connection_surface,
+        ConnectionSurface::Workbench
     );
+    assert!(model.snapshot().workbench.publish.feedback.is_some());
 
     model.apply_command(AppCommand::ImportConnections);
+    assert_eq!(model.snapshot().active_workspace, Workspace::Connections);
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Transfer
+    );
     assert_eq!(
         model.snapshot().transfer.active_section,
         TransferSection::Import
@@ -338,7 +350,7 @@ fn migrated_fixture_opens_launcher_and_settings_without_secret_values() {
     assert_eq!(settings.host, "localhost");
     assert_eq!(settings.port, "1883");
     assert_eq!(settings.mqtt_version, "MQTT v5");
-    assert_eq!(settings.proxy_mode, "SSH tunnel");
+    assert_eq!(settings.proxy_mode, "SSH");
     assert!(settings.lwt_enabled);
     assert_eq!(settings.lwt_topic, "status/local-broker-01");
     assert_eq!(settings.keyring_state, KeyringState::MigrationRequired);

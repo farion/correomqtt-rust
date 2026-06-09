@@ -23,11 +23,16 @@ impl AppModel {
     }
 
     pub(super) fn create_script(&mut self) {
-        let name = match normalize_script_path(&self.snapshot.scripts.new_script_name) {
-            Ok(name) => name,
-            Err(message) => {
-                self.snapshot.scripts.feedback = Some(ScriptFeedback::error(message));
-                return;
+        let draft_name = self.snapshot.scripts.new_script_name.trim();
+        let name = if draft_name.is_empty() {
+            self.next_default_script_name()
+        } else {
+            match normalize_script_path(draft_name) {
+                Ok(name) => name,
+                Err(message) => {
+                    self.snapshot.scripts.feedback = Some(ScriptFeedback::error(message));
+                    return;
+                }
             }
         };
         if self.script_index(&name).is_some() {
@@ -49,6 +54,20 @@ impl AppModel {
         self.snapshot.scripts.selected_script = name.clone();
         self.snapshot.scripts.new_script_name.clear();
         self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!("Created {name}.")));
+    }
+
+    fn next_default_script_name(&self) -> String {
+        for index in 1.. {
+            let candidate = if index == 1 {
+                "new_script.js".to_owned()
+            } else {
+                format!("new_script_{index}.js")
+            };
+            if self.script_index(&candidate).is_none() {
+                return candidate;
+            }
+        }
+        unreachable!("unbounded default script name search should always find a candidate")
     }
 
     pub(super) fn update_script_source(&mut self, source: String) {
@@ -380,6 +399,25 @@ fn redact_script_output(message: &str) -> String {
 mod tests {
     use super::*;
     use crate::{AppCommand, AppEvent};
+
+    #[test]
+    fn create_script_without_name_allocates_unique_default() {
+        let mut model = AppModel::empty();
+
+        model.apply_command(AppCommand::CreateScript);
+        model.apply_command(AppCommand::CreateScript);
+
+        let scripts = &model.snapshot().scripts;
+        assert_eq!(scripts.scripts[0].name, "new_script.js");
+        assert_eq!(scripts.scripts[1].name, "new_script_2.js");
+        assert_eq!(scripts.selected_script, "new_script_2.js");
+        assert!(scripts
+            .feedback
+            .as_ref()
+            .unwrap()
+            .message
+            .contains("Created"));
+    }
 
     #[test]
     fn script_edit_save_tracks_dirty_state() {

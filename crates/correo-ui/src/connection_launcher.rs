@@ -15,12 +15,25 @@ pub fn panel(
     ui.horizontal(|ui| {
         ui.heading("Connections");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Import").on_hover_text("Import .cqc").clicked() {
-                send(commands, AppCommand::ImportConnections);
-            }
-            if ui.button("Add").on_hover_text("Add connection").clicked() {
-                send(commands, AppCommand::AddConnection);
-            }
+            ui.vertical(|ui| {
+                if ui.button("Add").on_hover_text("Add connection").clicked() {
+                    send(commands, AppCommand::AddConnection);
+                }
+                if ui
+                    .button("Import .cqc")
+                    .on_hover_text("Import connection profiles")
+                    .clicked()
+                {
+                    send(commands, AppCommand::ImportConnections);
+                }
+                if ui
+                    .button("Export .cqc")
+                    .on_hover_text("Export connection profiles")
+                    .clicked()
+                {
+                    send(commands, AppCommand::ExportConnections);
+                }
+            });
         });
     });
     ui.separator();

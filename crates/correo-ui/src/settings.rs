@@ -1,43 +1,25 @@
 use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, GlobalSettingField, GlobalSettingFlag,
     GlobalSettingsSnapshot, LegacyMigrationStatus, MigrationRecoveryCommand, SettingsFeedbackKind,
-    SettingsOption, SettingsSection, ThemeMode,
+    SettingsOption, ThemeMode,
 };
-use egui::{Button, ComboBox, RichText, TextEdit, Ui};
+use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
 
 use crate::theme::ThemeTokens;
 
-pub fn sidebar(
-    ui: &mut Ui,
-    snapshot: &AppSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    for section in SettingsSection::ALL {
-        let selected = snapshot.global_settings.selected_section == section;
-        let label = if selected {
-            RichText::new(section.label()).strong().color(tokens.accent)
-        } else {
-            RichText::new(section.label()).color(tokens.text_secondary)
-        };
-        if ui.add(Button::new(label).selected(selected)).clicked() {
-            send(commands, AppCommand::SelectGlobalSettingsSection(section));
-        }
-    }
-}
-
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
+    let settings = &snapshot.global_settings;
     ui.horizontal(|ui| {
         ui.heading("Global Settings");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(snapshot.global_settings.dirty, Button::new("Save"))
+                .add_enabled(settings.dirty, Button::new("Save"))
                 .clicked()
             {
                 send(commands, AppCommand::SaveGlobalSettings);
             }
             if ui
-                .add_enabled(snapshot.global_settings.dirty, Button::new("Discard"))
+                .add_enabled(settings.dirty, Button::new("Discard"))
                 .clicked()
             {
                 send(commands, AppCommand::DiscardGlobalSettings);
@@ -46,20 +28,53 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
     });
     ui.separator();
 
-    match snapshot.global_settings.selected_section {
-        SettingsSection::Appearance => appearance(ui, snapshot.theme_mode, commands),
-        SettingsSection::Language => language(ui, &snapshot.global_settings, commands),
-        SettingsSection::Search => search(ui, &snapshot.global_settings, commands),
-        SettingsSection::Keyring => keyring(ui, &snapshot.global_settings, tokens, commands),
-        SettingsSection::Updates => updates(ui, &snapshot.global_settings, commands),
-        SettingsSection::Plugins => plugins(ui, &snapshot.global_settings, tokens, commands),
-        SettingsSection::Data => data(ui, &snapshot.global_settings, tokens, commands),
-    }
+    ScrollArea::vertical()
+        .id_salt("global-settings-scroll")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            section(ui, "Appearance", tokens, |ui| {
+                appearance(ui, snapshot.theme_mode, commands);
+            });
+            section(ui, "Language", tokens, |ui| {
+                language(ui, settings, commands);
+            });
+            section(ui, "Search", tokens, |ui| {
+                search(ui, settings, commands);
+            });
+            section(ui, "Keyring", tokens, |ui| {
+                keyring(ui, settings, tokens, commands);
+            });
+            section(ui, "Updates", tokens, |ui| {
+                updates(ui, settings, commands);
+            });
+            section(ui, "Plugins", tokens, |ui| {
+                plugins(ui, settings, tokens, commands);
+            });
+            section(ui, "Data", tokens, |ui| {
+                data(ui, settings, tokens, commands);
+            });
 
-    if let Some(feedback) = &snapshot.global_settings.feedback {
-        ui.separator();
-        ui.label(RichText::new(&feedback.message).color(feedback_color(feedback.kind, tokens)));
-    }
+            if let Some(feedback) = &settings.feedback {
+                ui.separator();
+                ui.label(
+                    RichText::new(&feedback.message).color(feedback_color(feedback.kind, tokens)),
+                );
+            }
+        });
+}
+
+fn section(ui: &mut Ui, title: &str, tokens: ThemeTokens, add: impl FnOnce(&mut Ui)) {
+    ui.add_space(6.0);
+    ui.label(
+        RichText::new(title)
+            .strong()
+            .size(15.0)
+            .color(tokens.text_primary),
+    );
+    ui.add_space(6.0);
+    add(ui);
+    ui.add_space(12.0);
+    ui.separator();
 }
 
 fn appearance(ui: &mut Ui, theme_mode: ThemeMode, commands: &AppCommandSender) {

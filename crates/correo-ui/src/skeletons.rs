@@ -1,8 +1,8 @@
 use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionExportSnapshot, ConnectionImportSnapshot,
-    ExportPathState, ImportPasswordState, MessageTransferSnapshot, TransferConnectionRow,
-    TransferConnectionStatus, TransferFeedback, TransferOutcome, TransferSection, TransferSeverity,
-    TransferStep, TransferSurfaceSnapshot,
+    ExportPathState, ImportPasswordState, TransferConnectionRow, TransferConnectionStatus,
+    TransferFeedback, TransferOutcome, TransferSection, TransferSeverity, TransferStep,
+    TransferSurfaceSnapshot,
 };
 use egui::{Frame, Grid, RichText, ScrollArea, Stroke, TextEdit, Ui};
 
@@ -14,31 +14,36 @@ pub fn import_export(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
+    connection_transfer(ui, snapshot, tokens, commands);
+}
+
+pub fn connection_transfer(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     ui.horizontal(|ui| {
-        ui.heading("Import/Export");
+        ui.heading("Connection Import/Export");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Export messages...").clicked() {
-                send(commands, AppCommand::ExportMessages);
-            }
-            if ui.button("Import messages...").clicked() {
-                send(commands, AppCommand::ImportMessages);
+            if ui.button("Cancel").clicked() {
+                send(commands, AppCommand::OpenConnectionLauncher);
             }
         });
     });
     ui.separator();
-    section_tabs(ui, snapshot.transfer.active_section, tokens, commands);
+    connection_section_tabs(ui, snapshot.transfer.active_section, tokens, commands);
     ui.add_space(8.0);
 
     ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             match snapshot.transfer.active_section {
-                TransferSection::Import => import_panel(ui, &snapshot.transfer, tokens, commands),
                 TransferSection::Export => {
                     export_panel(ui, &snapshot.transfer.export, tokens, commands)
                 }
-                TransferSection::Messages => {
-                    message_panel(ui, &snapshot.transfer.messages, tokens, commands)
+                TransferSection::Import | TransferSection::Messages => {
+                    import_panel(ui, &snapshot.transfer, tokens, commands)
                 }
             }
             if !snapshot.transfer.warnings.is_empty() {
@@ -48,14 +53,14 @@ pub fn import_export(
         });
 }
 
-fn section_tabs(
+fn connection_section_tabs(
     ui: &mut Ui,
     active: TransferSection,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
     ui.horizontal_wrapped(|ui| {
-        for section in TransferSection::ALL {
+        for section in [TransferSection::Import, TransferSection::Export] {
             let selected = active == section;
             let label = if selected {
                 RichText::new(section.label()).strong().color(tokens.accent)
@@ -261,38 +266,6 @@ fn export_password_fields(ui: &mut Ui) {
                 .password(true)
                 .hint_text("Confirm password"),
         );
-    });
-}
-
-fn message_panel(
-    ui: &mut Ui,
-    messages: &MessageTransferSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    panel(tokens).show(ui, |ui| {
-        section_header(ui, "Messages", "Import/export history archives", tokens);
-        if let Some(file) = &messages.import_file {
-            file_summary(ui, file, tokens);
-        }
-        ui.horizontal(|ui| {
-            ui.label(format!(
-                "{} of {} messages selected",
-                messages.selected_messages, messages.available_messages
-            ));
-            ui.separator();
-            ui.label(format!("Export target: {}", messages.export_path));
-        });
-        ui.horizontal(|ui| {
-            if ui.button("Import message archive...").clicked() {
-                send(commands, AppCommand::ImportMessages);
-            }
-            if ui.button("Export selected messages...").clicked() {
-                send(commands, AppCommand::ExportMessages);
-            }
-        });
-        feedback(ui, messages.feedback.as_ref(), tokens);
-        outcome(ui, messages.outcome.as_ref(), tokens);
     });
 }
 

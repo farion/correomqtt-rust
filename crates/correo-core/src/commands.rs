@@ -2,21 +2,21 @@ use correo_mqtt::ConnectionId;
 use thiserror::Error;
 
 use crate::{
-    ConnectDisabledReason, ConnectionSettingField, ConnectionSettingsSnapshot,
-    ConnectionSettingsTab, ConnectionState, ConnectionSummary, Diagnostic, GlobalSettingField,
-    GlobalSettingFlag, GlobalSettingsSnapshot, MessageInspectorTab, MigrationApplyStage,
-    MigrationRecoveryCompletion, MigrationRecoveryCounts, MigrationRecoveryDiagnostic,
-    MigrationRecoveryFailure, MigrationRecoveryRow, MigrationRecoveryWarning, MqttCommand,
-    MqttEvent, PluginHookKind, PluginSurfaceTab, PluginWorkflowEvent, QosLevel, ScriptDetailTab,
-    ScriptExecutionError, ScriptExecutionStatus, ScriptLogLevel, SettingsSection, StartupState,
-    ThemeMode, TransferSection, TransferStep, WorkbenchTab, Workspace,
+    ConnectDisabledReason, ConnectionSecretField, ConnectionSettingField, ConnectionSettingFlag,
+    ConnectionSettingsSnapshot, ConnectionSettingsTab, ConnectionState, ConnectionSummary,
+    Diagnostic, GlobalSettingField, GlobalSettingFlag, GlobalSettingsSnapshot, MessageInspectorTab,
+    MigrationApplyStage, MigrationRecoveryCompletion, MigrationRecoveryCounts,
+    MigrationRecoveryDiagnostic, MigrationRecoveryFailure, MigrationRecoveryRow,
+    MigrationRecoveryWarning, MqttCommand, MqttEvent, PluginHookKind, PluginSurfaceTab,
+    PluginWorkflowEvent, QosLevel, ScriptDetailTab, ScriptExecutionError, ScriptExecutionStatus,
+    ScriptLogLevel, SecretInput, SettingsSection, StartupState, ThemeMode, TransferSection,
+    TransferStep, WorkbenchTab, Workspace,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppCommand {
     SelectWorkspace(Workspace),
     SetThemeMode(ThemeMode),
-    ToggleDiagnostics,
     SearchConnections(String),
     SelectConnection(ConnectionId),
     OpenConnectionLauncher,
@@ -47,6 +47,8 @@ pub enum AppCommand {
     StartConnectionExport,
     ImportMessages,
     ExportMessages,
+    ExportPublishHistoryMessage(String),
+    ExportIncomingMessage(u32),
     MigrationRecovery(MigrationRecoveryCommand),
     SelectWorkbenchTab(WorkbenchTab),
     UpdatePublishTopic(String),
@@ -73,6 +75,15 @@ pub enum AppCommand {
         field: ConnectionSettingField,
         value: String,
     },
+    UpdateConnectionSecret {
+        field: ConnectionSecretField,
+        value: SecretInput,
+    },
+    SetConnectionSettingFlag {
+        flag: ConnectionSettingFlag,
+        enabled: bool,
+    },
+    GenerateClientId,
     SetLwtEnabled(bool),
     SaveConnectionSettings,
     DiscardConnectionSettings,
@@ -110,7 +121,14 @@ pub enum AppCommand {
     CancelScript,
     SearchPlugins(String),
     SelectPlugin(String),
+    SelectMarketplacePlugin(String),
     SelectPluginSurfaceTab(PluginSurfaceTab),
+    InstallMarketplacePlugin {
+        marketplace_plugin_id: String,
+    },
+    UninstallPlugin {
+        plugin_id: String,
+    },
     SetPluginEnabled {
         plugin_id: String,
         enabled: bool,

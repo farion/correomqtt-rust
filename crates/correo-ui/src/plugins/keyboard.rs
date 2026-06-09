@@ -43,7 +43,7 @@ pub(super) fn handle(
         return;
     }
 
-    if context.memory(|memory| memory.focused().is_some()) {
+    if context.memory(|memory| memory.focused() == Some(plugin_search_id())) {
         return;
     }
 

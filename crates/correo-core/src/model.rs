@@ -87,9 +87,6 @@ impl AppModel {
         match command {
             AppCommand::SelectWorkspace(workspace) => self.snapshot.active_workspace = workspace,
             AppCommand::SetThemeMode(mode) => self.set_theme_mode(mode),
-            AppCommand::ToggleDiagnostics => {
-                self.snapshot.diagnostics_expanded = !self.snapshot.diagnostics_expanded;
-            }
             AppCommand::SearchConnections(filter) => self.snapshot.connection_filter = filter,
             AppCommand::SelectConnection(id) => self.snapshot.selected_connection = Some(id),
             AppCommand::OpenConnectionLauncher => {
@@ -130,6 +127,10 @@ impl AppModel {
             AppCommand::StartConnectionExport => self.start_connection_export(),
             AppCommand::ImportMessages => self.import_messages(),
             AppCommand::ExportMessages => self.export_messages(),
+            AppCommand::ExportPublishHistoryMessage(topic) => {
+                self.export_publish_history_message(topic)
+            }
+            AppCommand::ExportIncomingMessage(id) => self.export_incoming_message(id),
             AppCommand::SelectWorkbenchTab(tab) => self.snapshot.workbench.narrow_tab = tab,
             AppCommand::UpdatePublishTopic(topic) => self.update_publish_topic(topic),
             AppCommand::UpdatePublishPayload(payload) => self.update_publish_payload(payload),
@@ -162,9 +163,17 @@ impl AppModel {
             AppCommand::UpdateConnectionSetting { field, value } => {
                 self.update_connection_setting(field, value);
             }
+            AppCommand::UpdateConnectionSecret { field, value } => {
+                self.update_connection_secret(field, value);
+            }
+            AppCommand::SetConnectionSettingFlag { flag, enabled } => {
+                self.set_connection_setting_flag(flag, enabled);
+            }
+            AppCommand::GenerateClientId => self.generate_client_id(),
             AppCommand::SetLwtEnabled(enabled) => {
                 self.snapshot.connection_settings.lwt_enabled = enabled;
                 self.snapshot.connection_settings.dirty = true;
+                self.refresh_connection_settings_validation();
             }
             AppCommand::SaveConnectionSettings => self.save_connection_settings(),
             AppCommand::DiscardConnectionSettings => self.discard_connection_settings(),
@@ -366,6 +375,9 @@ impl Default for AppModel {
     }
 }
 
+#[cfg(test)]
+#[path = "model/connection_settings_tests.rs"]
+mod connection_settings_tests;
 #[cfg(test)]
 #[path = "model/plugin_tests.rs"]
 mod plugin_tests;

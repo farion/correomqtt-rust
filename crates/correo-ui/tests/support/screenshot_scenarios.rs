@@ -138,7 +138,7 @@ impl Scenario {
             Self::ExportInvalidPath => "export-cqc-invalid-path",
             Self::ExportSuccess => "export-cqc-success",
             Self::ExportFailure => "export-cqc-failure",
-            Self::MessageTransfer => "message-import-export",
+            Self::MessageTransfer => "message-cqm-actions",
             Self::GlobalSettingsLanguage => "global-settings-language",
             Self::GlobalSettingsSearch => "global-settings-search",
             Self::GlobalSettingsKeyring => "global-settings-keyring",
@@ -173,7 +173,7 @@ impl Scenario {
             Self::ExportInvalidPath => ".cqc export invalid path",
             Self::ExportSuccess => ".cqc export success outcome",
             Self::ExportFailure => ".cqc export failure outcome",
-            Self::MessageTransfer => "message import/export entry points",
+            Self::MessageTransfer => "message .cqm entry points",
             Self::GlobalSettingsLanguage => "global settings language",
             Self::GlobalSettingsSearch => "global settings search",
             Self::GlobalSettingsKeyring => "global settings keyring",
@@ -259,9 +259,12 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
 pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
     let mut snapshot = sample_snapshot(capture.mode);
     snapshot.active_workspace = workspace_for(capture.scenario);
+    let connection_transfer = transfer_section_for(capture.scenario, TransferSection::Messages)
+        != TransferSection::Messages;
     snapshot.connection_surface = match capture.scenario {
         Scenario::Launcher => ConnectionSurface::Launcher,
         Scenario::Settings => ConnectionSurface::Settings,
+        _ if connection_transfer => ConnectionSurface::Transfer,
         _ => ConnectionSurface::Workbench,
     };
     if matches!(capture.scenario, Scenario::Workbench) && capture.size.0 <= 1024 {
@@ -283,22 +286,11 @@ pub(super) fn mode_slug(mode: ThemeMode) -> &'static str {
 
 fn workspace_for(scenario: Scenario) -> Workspace {
     match scenario {
-        Scenario::Launcher | Scenario::Workbench | Scenario::Settings => Workspace::Connections,
+        Scenario::Launcher
+        | Scenario::Workbench
+        | Scenario::Settings
+        | Scenario::MessageTransfer => Workspace::Connections,
         Scenario::Scripts => Workspace::Scripts,
-        Scenario::ImportExport
-        | Scenario::ImportChooseFile
-        | Scenario::ImportPasswordNeeded
-        | Scenario::ImportPasswordError
-        | Scenario::ImportReviewWarnings
-        | Scenario::ImportCompleteSuccess
-        | Scenario::ImportCompleteFailure
-        | Scenario::ExportPlain
-        | Scenario::ExportEncrypted
-        | Scenario::ExportMissingExtension
-        | Scenario::ExportInvalidPath
-        | Scenario::ExportSuccess
-        | Scenario::ExportFailure
-        | Scenario::MessageTransfer => Workspace::ImportExport,
         Scenario::Plugins
         | Scenario::PluginsLoading
         | Scenario::PluginsEmpty
@@ -311,6 +303,7 @@ fn workspace_for(scenario: Scenario) -> Workspace {
         | Scenario::GlobalSettingsLanguage
         | Scenario::GlobalSettingsSearch
         | Scenario::GlobalSettingsKeyring => Workspace::Settings,
+        _ => Workspace::Connections,
     }
 }
 
@@ -397,7 +390,7 @@ fn apply_transfer_scenario(scenario: Scenario, snapshot: &mut correo_core::AppSn
         }
         Scenario::MessageTransfer => {
             snapshot.transfer.messages.feedback = Some(TransferFeedback::info(
-                "Message import/export uses JSON archives and keeps connection secrets out.",
+                "Message .cqm files load into publish and export from message rows.",
             ));
         }
         _ => {}

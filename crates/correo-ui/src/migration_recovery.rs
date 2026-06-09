@@ -11,7 +11,7 @@ use crate::theme::ThemeTokens;
 mod actions;
 use actions::{action_bar, button, handle_keyboard, send};
 
-pub fn top_bar(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &AppCommandSender) {
+pub fn top_bar(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot) {
     ui.horizontal_centered(|ui| {
         ui.label(
             RichText::new("CorreoMQTT Beta Migration Recovery")
@@ -20,11 +20,6 @@ pub fn top_bar(ui: &mut Ui, snapshot: &MigrationRecoverySnapshot, commands: &App
         );
         ui.separator();
         ui.label(state_label(snapshot.state));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Diagnostics").clicked() {
-                send(commands, MigrationRecoveryCommand::OpenDiagnostics);
-            }
-        });
     });
 }
 

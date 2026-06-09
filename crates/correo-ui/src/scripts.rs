@@ -25,68 +25,26 @@ pub fn sidebar(
         send(commands, AppCommand::SearchScripts(filter));
     }
     ui.add_space(8.0);
-    create_row(ui, scripts, commands);
+    if ui
+        .add_sized([ui.available_width(), 28.0], Button::new("+ New Script"))
+        .clicked()
+    {
+        send(commands, AppCommand::CreateScript);
+    }
     ui.separator();
     script_list(ui, scripts, tokens, commands);
 }
 
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
-    ui.heading("Scripts");
+    ui.heading("Scripting");
     ui.add_space(8.0);
     panel(tokens).show(ui, |ui| {
         toolbar(ui, &snapshot.scripts, tokens, commands);
         ui.separator();
-        ui.columns(2, |columns| {
-            script_browser(&mut columns[0], &snapshot.scripts, tokens, commands);
-            script_detail(&mut columns[1], &snapshot.scripts, tokens, commands);
-        });
+        script_detail(ui, &snapshot.scripts, tokens, commands);
     });
     rename_dialog(ui, &snapshot.scripts, commands);
     delete_dialog(ui, &snapshot.scripts, commands);
-}
-
-fn create_row(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
-    let mut name = scripts.new_script_name.clone();
-    ui.horizontal(|ui| {
-        let input_width = (ui.available_width() - 64.0).max(96.0);
-        if ui
-            .add_sized(
-                [input_width, 26.0],
-                TextEdit::singleline(&mut name).hint_text("new_script.js"),
-            )
-            .changed()
-        {
-            send(commands, AppCommand::UpdateNewScriptName(name));
-        }
-        if ui.add_sized([56.0, 26.0], Button::new("New")).clicked() {
-            send(commands, AppCommand::CreateScript);
-        }
-    });
-}
-
-fn script_browser(
-    ui: &mut Ui,
-    scripts: &ScriptSurfaceSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    ui.heading("Files");
-    ui.add_space(4.0);
-    let mut filter = scripts.script_filter.clone();
-    if ui
-        .add_sized(
-            [ui.available_width(), 26.0],
-            TextEdit::singleline(&mut filter).hint_text("Filter files"),
-        )
-        .changed()
-    {
-        send(commands, AppCommand::SearchScripts(filter));
-    }
-    ui.add_space(6.0);
-    ScrollArea::vertical()
-        .id_salt("script-browser")
-        .max_height(320.0)
-        .show(ui, |ui| script_list(ui, scripts, tokens, commands));
 }
 
 fn script_list(
@@ -95,7 +53,12 @@ fn script_list(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    for script in scripts.filtered_scripts() {
+    let filtered_scripts = scripts.filtered_scripts();
+    if filtered_scripts.is_empty() {
+        ui.label(RichText::new("No scripts").color(tokens.text_secondary));
+        return;
+    }
+    for script in filtered_scripts {
         let selected = scripts.selected_script == script.name;
         let title = if script.is_dirty() {
             format!("{} *", script.name)
@@ -134,6 +97,10 @@ fn toolbar(
     commands: &AppCommandSender,
 ) {
     ui.horizontal_wrapped(|ui| {
+        if ui.button("+ New Script").clicked() {
+            send(commands, AppCommand::CreateScript);
+        }
+        ui.separator();
         ui.label(RichText::new(format!("Connection: {}", scripts.selected_connection)).strong());
         ui.separator();
         ui.label(selected_label(scripts, tokens));
@@ -215,14 +182,14 @@ fn tab_bar(ui: &mut Ui, selected: ScriptDetailTab, commands: &AppCommandSender) 
 }
 
 fn editor(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
-    ui.heading("Editor");
     if let Some(script) = scripts.selected_script() {
         let mut source = script.source.clone();
+        let editor_height = (ui.available_height() - 180.0).max(220.0);
         if ui
-            .add(
+            .add_sized(
+                [ui.available_width(), editor_height],
                 TextEdit::multiline(&mut source)
                     .font(egui::TextStyle::Monospace)
-                    .desired_rows(16)
                     .desired_width(f32::INFINITY),
             )
             .changed()
