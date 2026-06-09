@@ -4,6 +4,7 @@ members = [
     "crates/correo-core",
     "crates/correo-diagnostics",
     "crates/correo-mqtt",
+    "crates/correo-plugin-base64",
     "crates/correo-plugins",
     "crates/correo-scripting",
     "crates/correo-storage",
