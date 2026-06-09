@@ -19,6 +19,9 @@ use crate::{
 #[path = "bootstrap_scripts.rs"]
 mod bootstrap_scripts;
 use bootstrap_scripts::{apply_default_script_connection, script_surface};
+#[path = "bootstrap_plugins.rs"]
+mod bootstrap_plugins;
+use bootstrap_plugins::plugin_surface;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupState {
@@ -89,6 +92,7 @@ pub fn startup_state_from_current(
     snapshot.connections = mapped;
     snapshot.theme_mode = theme_mode;
     snapshot.global_settings = global_settings(&config.settings);
+    snapshot.plugins = plugin_surface(config.settings.install_bundled_plugins);
     snapshot.scripts = script_surface(&scripts);
     snapshot.diagnostics = warnings
         .into_iter()
@@ -393,5 +397,68 @@ fn ssh_password_status(connection: &ConnectionConfig) -> &'static str {
         "SSH password managed by keyring"
     } else {
         "No SSH password configured"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PluginLoadState, PluginSource, PluginStatus};
+
+    #[test]
+    fn current_startup_populates_marketplace_and_installs_bundled_plugins() {
+        let state = startup_state_from_current(
+            AppConfig::default(),
+            HistoryPersistenceSnapshot::default(),
+            ScriptPersistenceSnapshot::default(),
+            Vec::new(),
+            ThemeMode::System,
+        );
+        let plugins = &state.snapshot.plugins;
+
+        assert_eq!(plugins.load_state, PluginLoadState::Ready);
+        assert_eq!(plugins.marketplace_plugins.len(), 9);
+        assert_eq!(plugins.plugins.len(), 8);
+        assert!(!plugins.selected_plugin_id.is_empty());
+        assert!(!plugins.selected_marketplace_plugin_id.is_empty());
+        assert!(plugins.plugins.iter().all(|plugin| {
+            plugin.source == PluginSource::Bundled && plugin.status == PluginStatus::Active
+        }));
+        assert!(plugins
+            .marketplace_plugins
+            .iter()
+            .filter(|plugin| plugin.install_source.is_bundled())
+            .all(|plugin| plugin.installed_plugin_id.as_deref() == Some(plugin.id.as_str())));
+        assert_eq!(
+            plugins
+                .marketplace_plugins
+                .iter()
+                .find(|plugin| plugin.id == "org.correomqtt.plugins.save-manipulator")
+                .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
+            None
+        );
+    }
+
+    #[test]
+    fn current_startup_keeps_bundled_plugins_uninstalled_when_setting_is_off() {
+        let mut config = AppConfig::default();
+        config.settings.install_bundled_plugins = false;
+
+        let state = startup_state_from_current(
+            config,
+            HistoryPersistenceSnapshot::default(),
+            ScriptPersistenceSnapshot::default(),
+            Vec::new(),
+            ThemeMode::System,
+        );
+        let plugins = &state.snapshot.plugins;
+
+        assert_eq!(plugins.load_state, PluginLoadState::Ready);
+        assert_eq!(plugins.marketplace_plugins.len(), 9);
+        assert!(plugins.plugins.is_empty());
+        assert!(plugins
+            .marketplace_plugins
+            .iter()
+            .all(|plugin| plugin.installed_plugin_id.is_none()));
     }
 }

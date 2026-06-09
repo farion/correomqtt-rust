@@ -247,6 +247,17 @@ fn marketplace_installs_every_plugin_from_local_repository_fixture() {
         .iter()
         .map(|plugin| plugin.id.clone())
         .collect::<Vec<_>>();
+    assert_eq!(
+        marketplace_plugins
+            .iter()
+            .filter(|plugin| plugin.install_source.is_bundled())
+            .count(),
+        8
+    );
+    assert!(marketplace_plugins
+        .iter()
+        .find(|plugin| plugin.id == "org.correomqtt.plugins.save-manipulator")
+        .is_some_and(|plugin| !plugin.install_source.is_bundled()));
     let mut model = AppModel::default();
     model.snapshot.plugins.marketplace_plugins = marketplace_plugins;
 

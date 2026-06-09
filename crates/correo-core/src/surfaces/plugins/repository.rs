@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::{PluginCapabilityRow, PluginMarketplaceRow};
+use super::{PluginCapabilityRow, PluginMarketplaceRow, PluginMarketplaceSource};
 
 const SUPPORTED_REPOSITORY_FORMAT_VERSION: u16 = 1;
 
@@ -26,6 +26,7 @@ pub fn marketplace_rows_from_repository_json(
             repository: repository.name.clone(),
             description: entry.manifest.description,
             capabilities: capability_rows(entry.manifest.capabilities),
+            install_source: entry.install_source,
             installed_plugin_id: None,
         })
         .collect())
@@ -55,6 +56,8 @@ struct PluginRepositoryDto {
 #[derive(Debug, Deserialize)]
 struct PluginRepositoryEntryDto {
     manifest: RepositoryManifestDto,
+    #[serde(default)]
+    install_source: PluginMarketplaceSource,
 }
 
 #[derive(Debug, Deserialize)]

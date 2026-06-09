@@ -170,7 +170,23 @@ pub struct PluginMarketplaceRow {
     pub repository: String,
     pub description: String,
     pub capabilities: Vec<PluginCapabilityRow>,
+    #[serde(default)]
+    pub install_source: PluginMarketplaceSource,
     pub installed_plugin_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PluginMarketplaceSource {
+    Bundled { plugin_id: String },
+    LocalPackage { path: String },
+    Unknown,
+}
+
+impl Default for PluginMarketplaceSource {
+    fn default() -> Self {
+        Self::Unknown
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,6 +226,38 @@ impl PluginSource {
             Self::Bundled => "Bundled WASM",
             Self::UserManifest => "User manifest",
             Self::LegacyJava => "Legacy Java",
+        }
+    }
+}
+
+impl PluginMarketplaceSource {
+    pub fn is_bundled(&self) -> bool {
+        matches!(self, Self::Bundled { .. })
+    }
+
+    fn plugin_source(&self) -> PluginSource {
+        match self {
+            Self::Bundled { .. } => PluginSource::Bundled,
+            Self::LocalPackage { .. } | Self::Unknown => PluginSource::UserManifest,
+        }
+    }
+}
+
+impl PluginMarketplaceRow {
+    pub fn to_installed_plugin(&self) -> PluginRow {
+        PluginRow {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            version: self.version.clone(),
+            provider: self.provider.clone(),
+            source: self.install_source.plugin_source(),
+            enabled: true,
+            status: PluginStatus::Active,
+            capabilities: self.capabilities.clone(),
+            config_fields: Vec::new(),
+            hooks: Vec::new(),
+            diagnostics: Vec::new(),
+            legacy_note: None,
         }
     }
 }

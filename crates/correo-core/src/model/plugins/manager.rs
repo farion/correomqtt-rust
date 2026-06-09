@@ -1,4 +1,4 @@
-use crate::{PluginFeedback, PluginMarketplaceRow, PluginRow, PluginSource, PluginStatus};
+use crate::PluginFeedback;
 
 use super::AppModel;
 
@@ -41,7 +41,7 @@ impl AppModel {
             return;
         }
 
-        let plugin = plugin_from_marketplace(&self.snapshot.plugins.marketplace_plugins[index]);
+        let plugin = self.snapshot.plugins.marketplace_plugins[index].to_installed_plugin();
         let plugin_id = plugin.id.clone();
         let plugin_name = plugin.name.clone();
         self.snapshot.plugins.plugins.push(plugin);
@@ -92,22 +92,5 @@ impl AppModel {
             .marketplace_plugins
             .iter()
             .position(|plugin| plugin.id == plugin_id)
-    }
-}
-
-fn plugin_from_marketplace(marketplace_plugin: &PluginMarketplaceRow) -> PluginRow {
-    PluginRow {
-        id: marketplace_plugin.id.clone(),
-        name: marketplace_plugin.name.clone(),
-        version: marketplace_plugin.version.clone(),
-        provider: marketplace_plugin.provider.clone(),
-        source: PluginSource::UserManifest,
-        enabled: true,
-        status: PluginStatus::Active,
-        capabilities: marketplace_plugin.capabilities.clone(),
-        config_fields: Vec::new(),
-        hooks: Vec::new(),
-        diagnostics: Vec::new(),
-        legacy_note: None,
     }
 }

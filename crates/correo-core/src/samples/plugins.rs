@@ -1,7 +1,8 @@
 use crate::{
     PluginCapabilityRow, PluginConfigField, PluginDiagnosticRow, PluginDiagnosticSeverity,
     PluginHookAssignment, PluginHookKind, PluginHookStatus, PluginLoadState, PluginMarketplaceRow,
-    PluginRow, PluginSource, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
+    PluginMarketplaceSource, PluginRow, PluginSource, PluginStatus, PluginSurfaceSnapshot,
+    PluginSurfaceTab,
 };
 
 pub(super) fn sample_plugins() -> PluginSurfaceSnapshot {
@@ -342,6 +343,9 @@ fn marketplace_json_formatter() -> PluginMarketplaceRow {
                 "Normalizes JSON bytes before display",
             ),
         ],
+        install_source: PluginMarketplaceSource::Bundled {
+            plugin_id: "builtin.json-formatter".to_owned(),
+        },
         installed_plugin_id: Some("builtin.json-formatter".to_owned()),
     }
 }
@@ -362,6 +366,9 @@ fn marketplace_base64_transform() -> PluginMarketplaceRow {
             ),
             cap("Outgoing transform", true, "Encodes outbound payloads"),
         ],
+        install_source: PluginMarketplaceSource::Bundled {
+            plugin_id: "builtin.base64-transform".to_owned(),
+        },
         installed_plugin_id: Some("builtin.base64-transform".to_owned()),
     }
 }
@@ -375,6 +382,7 @@ fn marketplace_validator_pack() -> PluginMarketplaceRow {
         repository: "https://example.invalid/plugins.json".to_owned(),
         description: "Adds validator hooks for common MQTT JSON schema checks.".to_owned(),
         capabilities: vec![cap("Validator", true, "Validates message payloads")],
+        install_source: PluginMarketplaceSource::Unknown,
         installed_plugin_id: None,
     }
 }
