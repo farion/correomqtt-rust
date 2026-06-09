@@ -502,6 +502,47 @@
         "kind": "bundled",
         "plugin_id": "builtin.zip-manipulator"
       }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "org.correomqtt.plugins.save-manipulator",
+        "name": "Save Manipulator",
+        "version": "0.1.0",
+        "description": "Requests that CorreoMQTT save the selected message payload.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "detail_byte_transform"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": true,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "detail_byte_transform",
+            "export": "correo_detail_byte_transform"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "local_package",
+        "path": "plugins/save-manipulator"
+      }
     }
   ]
 }

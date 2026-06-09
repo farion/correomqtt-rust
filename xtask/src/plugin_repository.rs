@@ -1,13 +1,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use correo_plugins::PluginRepositoryDefinition;
+use correo_plugins::{PluginManifest, PluginRepositoryDefinition, PluginRepositoryEntry};
 
 use crate::XtaskError;
 
 pub(crate) const LOCAL_PLUGIN_REPOSITORY_FILE: &str = "repository.json";
 const DEFAULT_REPOSITORY_ID: &str = "local-bundled-rust";
 const DEFAULT_REPOSITORY_NAME: &str = "Bundled Rust Plugins";
+const SAVE_MANIPULATOR_MANIFEST: &str = include_str!("../../plugins/save-manipulator/plugin.toml");
+const SAVE_MANIPULATOR_PACKAGE_PATH: &str = "plugins/save-manipulator";
 
 pub(crate) fn run(args: Vec<String>) -> Result<(), XtaskError> {
     let config = PluginRepositoryConfig::from_args(args)?;
@@ -23,14 +25,25 @@ pub(crate) fn run(args: Vec<String>) -> Result<(), XtaskError> {
 }
 
 pub(crate) fn write_bundled_repository(path: &Path) -> Result<(), XtaskError> {
-    let repository = PluginRepositoryDefinition::from_bundled_plugins(
+    let mut repository = PluginRepositoryDefinition::from_bundled_plugins(
         DEFAULT_REPOSITORY_ID,
         DEFAULT_REPOSITORY_NAME,
     );
+    repository.plugins.push(save_manipulator_entry()?);
+    repository
+        .plugins
+        .sort_by(|left, right| left.manifest.id.cmp(&right.manifest.id));
     repository.validate()?;
     let mut json = serde_json::to_vec_pretty(&repository)?;
     json.push(b'\n');
     write_file(path, &json)
+}
+
+fn save_manipulator_entry() -> Result<PluginRepositoryEntry, XtaskError> {
+    let manifest = PluginManifest::from_toml_str(SAVE_MANIPULATOR_MANIFEST)
+        .map_err(correo_plugins::PluginRepositoryError::from)?;
+    PluginRepositoryEntry::local_package(manifest, SAVE_MANIPULATOR_PACKAGE_PATH)
+        .map_err(XtaskError::from)
 }
 
 fn write_file(path: &Path, content: &[u8]) -> Result<(), XtaskError> {
