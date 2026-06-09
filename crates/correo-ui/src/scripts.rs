@@ -7,6 +7,10 @@ use egui_extras::{Column, TableBuilder};
 
 use crate::theme::ThemeTokens;
 
+const SCRIPT_LIST_WIDTH: f32 = 300.0;
+const EXECUTION_LIST_WIDTH: f32 = 560.0;
+const LOWER_MIN_HEIGHT: f32 = 180.0;
+
 pub fn sidebar(
     ui: &mut Ui,
     scripts: &ScriptSurfaceSnapshot,
@@ -37,13 +41,97 @@ pub fn sidebar(
 pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
     ui.heading("Scripting");
     ui.add_space(8.0);
-    panel(tokens).show(ui, |ui| {
-        toolbar(ui, snapshot, tokens, commands);
-        ui.separator();
-        script_detail(ui, &snapshot.scripts, tokens, commands);
+    let available_height = ui.available_height();
+    let upper_height = (available_height * 0.58)
+        .max(260.0)
+        .min((available_height - LOWER_MIN_HEIGHT).max(260.0));
+    ui.horizontal(|ui| {
+        let list_width = SCRIPT_LIST_WIDTH.min(ui.available_width() * 0.38);
+        ui.allocate_ui_with_layout(
+            egui::vec2(list_width, upper_height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                let cell_size = ui.available_size();
+                panel(tokens).show(ui, |ui| {
+                    ui.set_min_size(cell_size);
+                    script_browser(ui, &snapshot.scripts, tokens, commands)
+                });
+            },
+        );
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), upper_height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                let cell_size = ui.available_size();
+                panel(tokens).show(ui, |ui| {
+                    ui.set_min_size(cell_size);
+                    toolbar(ui, snapshot, tokens, commands);
+                    ui.separator();
+                    editor(ui, &snapshot.scripts, commands);
+                });
+            },
+        );
+    });
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        let lower_height = ui.available_height().max(LOWER_MIN_HEIGHT);
+        let execution_width = EXECUTION_LIST_WIDTH.min(ui.available_width() * 0.55);
+        ui.allocate_ui_with_layout(
+            egui::vec2(execution_width, lower_height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                let cell_size = ui.available_size();
+                panel(tokens).show(ui, |ui| {
+                    ui.set_min_size(cell_size);
+                    error_summary(ui, snapshot.scripts.last_error.as_ref(), tokens);
+                    executions(ui, &snapshot.scripts, tokens, commands);
+                });
+            },
+        );
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), lower_height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                let cell_size = ui.available_size();
+                panel(tokens).show(ui, |ui| {
+                    ui.set_min_size(cell_size);
+                    log_view(ui, &snapshot.scripts, tokens);
+                });
+            },
+        );
     });
     rename_dialog(ui, &snapshot.scripts, commands);
     delete_dialog(ui, &snapshot.scripts, commands);
+}
+
+fn script_browser(
+    ui: &mut Ui,
+    scripts: &ScriptSurfaceSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
+    let mut filter = scripts.script_filter.clone();
+    if ui
+        .add_sized(
+            [ui.available_width(), 28.0],
+            TextEdit::singleline(&mut filter).hint_text("Search scripts..."),
+        )
+        .changed()
+    {
+        send(commands, AppCommand::SearchScripts(filter));
+    }
+    ui.add_space(8.0);
+    if ui
+        .add_sized([ui.available_width(), 28.0], Button::new("+ New Script"))
+        .clicked()
+    {
+        send(commands, AppCommand::CreateScript);
+    }
+    ui.separator();
+    ScrollArea::vertical()
+        .id_salt("script-list")
+        .auto_shrink([false, false])
+        .show(ui, |ui| script_list(ui, scripts, tokens, commands));
 }
 
 fn script_list(
@@ -175,24 +263,6 @@ fn selected_label(scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) -> RichT
     }
 }
 
-fn script_detail(
-    ui: &mut Ui,
-    scripts: &ScriptSurfaceSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    let top_height = (ui.available_height() * 0.58).max(220.0);
-    ui.allocate_ui(egui::vec2(ui.available_width(), top_height), |ui| {
-        editor(ui, scripts, commands);
-    });
-    ui.separator();
-    error_summary(ui, scripts.last_error.as_ref(), tokens);
-    ui.columns(2, |columns| {
-        executions(&mut columns[0], scripts, tokens, commands);
-        log_view(&mut columns[1], scripts, tokens);
-    });
-}
-
 fn editor(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
     if let Some(script) = scripts.selected_script() {
         let mut source = script.source.clone();
@@ -220,8 +290,10 @@ fn executions(
     commands: &AppCommandSender,
 ) {
     ui.heading("Executions");
+    let max_scroll_height = (ui.available_height() - 24.0).max(120.0);
     TableBuilder::new(ui)
         .striped(true)
+        .max_scroll_height(max_scroll_height)
         .column(Column::remainder())
         .column(Column::exact(92.0))
         .column(Column::exact(84.0))

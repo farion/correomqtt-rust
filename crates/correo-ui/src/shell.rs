@@ -161,7 +161,7 @@ impl CorreoUi {
 fn context_panel_visible(snapshot: &AppSnapshot) -> bool {
     !matches!(
         snapshot.active_workspace,
-        Workspace::Diagnostics | Workspace::Settings | Workspace::About
+        Workspace::Scripts | Workspace::Diagnostics | Workspace::Settings | Workspace::About
     ) && !matches!(
         (snapshot.active_workspace, snapshot.connection_surface),
         (Workspace::Connections, ConnectionSurface::Transfer)
