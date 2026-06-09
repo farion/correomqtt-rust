@@ -1,13 +1,16 @@
 use correo_core::{
     sample_snapshot, AppCommandSender, AppSnapshot, ConnectionSurface, ThemeMode, Workspace,
 };
-use egui::{CentralPanel, Frame, SidePanel, Stroke, TopBottomPanel};
+use egui::{CentralPanel, Frame, SidePanel, TopBottomPanel};
 
 use crate::{
     command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, theme, workspace,
 };
 
 pub const THEME_KEY: &str = "correo.theme-mode";
+const HEADER_HEIGHT: f32 = 46.0;
+const HEADER_MARGIN_X: i8 = 16;
+const HEADER_MARGIN_Y: i8 = 6;
 
 pub struct CorreoUi {
     command_sender: AppCommandSender,
@@ -89,7 +92,7 @@ impl CorreoUi {
 
         if snapshot.migration_recovery.blocks_normal_shell() {
             TopBottomPanel::top("correo-recovery-command")
-                .exact_height(40.0)
+                .exact_height(HEADER_HEIGHT)
                 .frame(top_frame(tokens))
                 .show(context, |ui| {
                     migration_recovery::top_bar(ui, &snapshot.migration_recovery);
@@ -113,7 +116,7 @@ impl CorreoUi {
         }
 
         TopBottomPanel::top("correo-command")
-            .exact_height(40.0)
+            .exact_height(HEADER_HEIGHT)
             .frame(top_frame(tokens))
             .show(context, |ui| {
                 command_bar::command_bar(ui, &snapshot, tokens, commands, i18n);
@@ -198,21 +201,18 @@ pub fn stored_theme(creation_context: &eframe::CreationContext<'_>) -> ThemeMode
 fn top_frame(tokens: theme::ThemeTokens) -> Frame {
     Frame::NONE
         .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::symmetric(8, 4))
+        .inner_margin(egui::Margin::symmetric(HEADER_MARGIN_X, HEADER_MARGIN_Y))
 }
 
 fn rail_frame(tokens: theme::ThemeTokens) -> Frame {
     Frame::NONE
         .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
         .inner_margin(egui::Margin::same(4))
 }
 
 fn sidebar_frame(tokens: theme::ThemeTokens) -> Frame {
     Frame::NONE
         .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
         .inner_margin(egui::Margin::same(10))
 }
 
@@ -220,4 +220,29 @@ fn central_frame(tokens: theme::ThemeTokens) -> Frame {
     Frame::NONE
         .fill(tokens.window_bg)
         .inner_margin(egui::Margin::same(12))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_frame_uses_larger_height_and_horizontal_padding() {
+        let frame = top_frame(theme::static_tokens(ThemeMode::Dark));
+
+        assert_eq!(HEADER_HEIGHT, 46.0);
+        assert_eq!(
+            frame.inner_margin,
+            egui::Margin::symmetric(HEADER_MARGIN_X, HEADER_MARGIN_Y)
+        );
+    }
+
+    #[test]
+    fn global_chrome_frames_do_not_draw_decorative_strokes() {
+        let tokens = theme::static_tokens(ThemeMode::Dark);
+
+        assert_eq!(top_frame(tokens).stroke, egui::Stroke::NONE);
+        assert_eq!(rail_frame(tokens).stroke, egui::Stroke::NONE);
+        assert_eq!(sidebar_frame(tokens).stroke, egui::Stroke::NONE);
+    }
 }
