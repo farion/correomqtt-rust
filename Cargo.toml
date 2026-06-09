@@ -10,6 +10,7 @@ members = [
     "crates/correo-storage",
     "crates/correo-ui",
     "plugins/xml-format",
+    "plugins/correo-plugins-advanced-validator",
     "plugins/correo-plugins-contains-string-validator",
     "plugins/save-manipulator",
     "xtask",

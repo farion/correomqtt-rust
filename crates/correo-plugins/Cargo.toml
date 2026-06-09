@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
+correo-plugins-advanced-validator = { path = "../../plugins/correo-plugins-advanced-validator" }
 correo-plugin-xml-format = { path = "../../plugins/xml-format" }
 semver.workspace = true
 serde.workspace = true

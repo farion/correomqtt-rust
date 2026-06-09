@@ -4,19 +4,26 @@ use crate::{
     MessageValidatorResponse, OutgoingMessageTransformResponse, PluginDiagnostic, PluginEntrypoint,
     PluginManifest, ValidationResultDto, ABI_VERSION,
 };
+use advanced_validator::{
+    config_schema as advanced_validator_config_schema,
+    validate_message as validate_advanced_validator_message,
+};
 use base64::Engine;
+use correo_plugins_advanced_validator::AdvancedValidatorError;
 use formatting::{format_json, format_xml};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
+mod advanced_validator;
 mod formatting;
 
 const BASE64_ID: &str = "builtin.base64";
 const JSON_FORMAT_ID: &str = "builtin.json-format";
 const XML_FORMAT_ID: &str = "builtin.xml-format";
 const CONTAINS_STRING_ID: &str = "builtin.contains-string-validator";
+const ADVANCED_VALIDATOR_ID: &str = "builtin.advanced-validator";
 pub const SAVE_MANIPULATOR_ID: &str = "org.correomqtt.plugins.save-manipulator";
 
 #[derive(Debug, Clone)]
@@ -87,6 +94,17 @@ impl BundledPlugin {
                 HookInvocation::MessageValidator(request),
             ) => validate_contains_string(request.config, request.message.payload, self.id())
                 .map(HookOutput::MessageValidator),
+            (BundledPluginKind::AdvancedValidator, HookInvocation::MessageValidator(request)) => {
+                validate_advanced_validator_message(request.config, &request.message.payload)
+                    .map(HookOutput::MessageValidator)
+                    .map_err(
+                        |source| BundledPluginError::InvalidAdvancedValidatorConfig {
+                            plugin_id: self.id().to_owned(),
+                            hook: HookKind::MessageValidator,
+                            source,
+                        },
+                    )
+            }
             (_, invocation) => Err(BundledPluginError::HookNotDeclared {
                 plugin_id: self.id().to_owned(),
                 hook: invocation.hook(),
@@ -101,6 +119,7 @@ enum BundledPluginKind {
     JsonFormatter,
     XmlFormatter,
     ContainsStringValidator,
+    AdvancedValidator,
 }
 
 pub fn bundled_plugins() -> Vec<BundledPlugin> {
@@ -140,6 +159,14 @@ pub fn bundled_plugins() -> Vec<BundledPlugin> {
             contains_string_config_schema(),
             BundledPluginKind::ContainsStringValidator,
         ),
+        bundled_plugin(
+            ADVANCED_VALIDATOR_ID,
+            "Advanced Validator",
+            "Composes configured validator rules with AND and OR groups.",
+            &[HookKind::MessageValidator],
+            advanced_validator_config_schema(),
+            BundledPluginKind::AdvancedValidator,
+        ),
     ]
 }
 
@@ -176,6 +203,7 @@ pub fn legacy_plugin_replacement_decisions() -> Vec<LegacyPluginReplacementDecis
         supported_builtin("json-format", JSON_FORMAT_ID),
         supported_builtin("xml-format", XML_FORMAT_ID),
         supported_builtin("contains-string-validator", CONTAINS_STRING_ID),
+        supported_builtin("advanced-validator", ADVANCED_VALIDATOR_ID),
         supported(
             "save-manipulator",
             SAVE_MANIPULATOR_ID,
@@ -188,10 +216,6 @@ pub fn legacy_plugin_replacement_decisions() -> Vec<LegacyPluginReplacementDecis
         unsupported(
             "zip-manipulator",
             "Zip archive transformation is deferred until archive size and expansion limits are specified.",
-        ),
-        unsupported(
-            "advanced-validator",
-            "Advanced validators need a separate rule/config migration design beyond the MVP contains-string validator.",
         ),
         unsupported(
             "systopic",
@@ -216,6 +240,12 @@ pub enum BundledPluginError {
         hook: HookKind,
         source: serde_json::Error,
     },
+    #[error("bundled plugin {plugin_id} received invalid advanced validator config for {hook:?}: {source}")]
+    InvalidAdvancedValidatorConfig {
+        plugin_id: String,
+        hook: HookKind,
+        source: AdvancedValidatorError,
+    },
 }
 
 impl IntoPluginDiagnostic for BundledPluginError {
@@ -226,6 +256,9 @@ impl IntoPluginDiagnostic for BundledPluginError {
                 plugin_id, hook, ..
             }
             | Self::InvalidConfig {
+                plugin_id, hook, ..
+            }
+            | Self::InvalidAdvancedValidatorConfig {
                 plugin_id, hook, ..
             } => PluginDiagnostic::error(self.to_string())
                 .for_plugin(plugin_id.clone())

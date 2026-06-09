@@ -17,6 +17,7 @@ fn bundled_manifests_cover_mvp_replacements_with_config_schemas() {
     assert_eq!(
         ids,
         BTreeSet::from([
+            "builtin.advanced-validator",
             "builtin.base64",
             "builtin.contains-string-validator",
             "builtin.json-format",
@@ -63,6 +64,7 @@ fn legacy_plugin_decisions_are_explicit_for_supported_and_deferred_plugins() {
     assert_eq!(
         supported,
         BTreeSet::from([
+            "advanced-validator",
             "base64",
             "contains-string-validator",
             "json-format",
@@ -72,12 +74,7 @@ fn legacy_plugin_decisions_are_explicit_for_supported_and_deferred_plugins() {
     );
     assert_eq!(
         unsupported,
-        BTreeSet::from([
-            "advanced-validator",
-            "systopic",
-            "xml-xsd-validator",
-            "zip-manipulator",
-        ])
+        BTreeSet::from(["systopic", "xml-xsd-validator", "zip-manipulator",])
     );
     assert!(decisions
         .iter()

@@ -1311,6 +1311,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "correo-plugin-xml-format",
+ "correo-plugins-advanced-validator",
  "semver",
  "serde",
  "serde_json",
@@ -1319,6 +1320,15 @@ dependencies = [
  "toml",
  "wasmtime",
  "wat",
+]
+
+[[package]]
+name = "correo-plugins-advanced-validator"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

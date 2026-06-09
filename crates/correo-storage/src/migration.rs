@@ -183,6 +183,11 @@ impl RustPluginState {
                     version: "0.1.0".to_owned(),
                     capabilities: vec!["validator".to_owned()],
                 },
+                RustPluginManifest {
+                    id: "builtin.advanced-validator".to_owned(),
+                    version: "0.1.0".to_owned(),
+                    capabilities: vec!["validator".to_owned()],
+                },
             ],
             ignored_legacy_paths,
         }
