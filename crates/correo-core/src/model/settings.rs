@@ -98,7 +98,7 @@ impl AppModel {
             "Global settings save command queued.",
         ));
         self.saved_global_settings = self.snapshot.global_settings.clone();
-        self.saved_theme_mode = self.snapshot.theme_mode;
+        self.saved_theme_mode = self.snapshot.theme_mode.clone();
         self.push_diagnostic(Diagnostic::info("Global settings save command queued."));
     }
 
@@ -108,7 +108,7 @@ impl AppModel {
         self.snapshot.global_settings.selected_section = section;
         self.snapshot.global_settings.feedback =
             Some(SettingsFeedback::info("Global settings changes discarded."));
-        self.snapshot.theme_mode = self.saved_theme_mode;
+        self.snapshot.theme_mode = self.saved_theme_mode.clone();
         self.push_diagnostic(Diagnostic::info("Global settings changes discarded."));
     }
 

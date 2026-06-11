@@ -78,7 +78,7 @@ fn apply_settings_command(
         SettingsPersistenceCommand::Save {
             theme_mode,
             settings,
-        } => store.save_global_settings(theme_name(theme_mode), storage_settings(settings)),
+        } => store.save_global_settings(theme_name(&theme_mode), storage_settings(settings)),
     };
 
     match result {
@@ -133,12 +133,8 @@ fn non_unknown(value: String) -> Option<String> {
     (!trimmed.is_empty() && trimmed != "unknown").then(|| trimmed.to_owned())
 }
 
-fn theme_name(mode: ThemeMode) -> &'static str {
-    match mode {
-        ThemeMode::System => "System",
-        ThemeMode::Light => "Light",
-        ThemeMode::Dark => "Dark",
-    }
+fn theme_name(mode: &ThemeMode) -> String {
+    mode.storage_name().into_owned()
 }
 
 #[cfg(test)]
@@ -210,7 +206,7 @@ mod tests {
                 .unwrap()
                 .name
                 .as_deref(),
-            Some("Dark")
+            Some(correo_style::DARK_THEME_ID)
         );
     }
 

@@ -171,6 +171,36 @@ impl HostState {
         Ok(())
     }
 
+    pub(crate) fn connect(&self) -> ScriptingResult<()> {
+        self.check_cancelled()?;
+        let Some(client) = self.host.mqtt_client() else {
+            return Ok(());
+        };
+        if let Some(handle) = client.cancellation_handle() {
+            self.cancellation.register_handle(handle);
+        }
+        match client.connect(&self.cancellation) {
+            Ok(()) => self.check_cancelled(),
+            Err(_) if self.cancellation.is_cancelled() => Err(ScriptingError::Cancelled),
+            Err(error) => Err(Self::mqtt_error(error)),
+        }
+    }
+
+    pub(crate) fn disconnect(&self) -> ScriptingResult<()> {
+        self.check_cancelled()?;
+        let Some(client) = self.host.mqtt_client() else {
+            return Ok(());
+        };
+        if let Some(handle) = client.cancellation_handle() {
+            self.cancellation.register_handle(handle);
+        }
+        match client.disconnect(&self.cancellation) {
+            Ok(()) => self.check_cancelled(),
+            Err(_) if self.cancellation.is_cancelled() => Err(ScriptingError::Cancelled),
+            Err(error) => Err(Self::mqtt_error(error)),
+        }
+    }
+
     pub(crate) fn publish(
         &self,
         topic: String,

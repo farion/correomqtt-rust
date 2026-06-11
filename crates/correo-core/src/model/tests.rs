@@ -9,8 +9,8 @@ use crate::{
     Diagnostic, GlobalSettingField, GlobalSettingFlag, KeyringState, LegacyMigrationStatus,
     MigrationFailureStage, MigrationRecoveryCommand, MigrationRecoveryCompletion,
     MigrationRecoveryCounts, MigrationRecoveryEvent, MigrationRecoveryFailure,
-    MigrationRecoverySnapshot, MigrationRecoveryState, MqttCommand, StartupState, ThemeMode,
-    TransferSection, Workspace,
+    MigrationRecoverySnapshot, MigrationRecoveryState, MqttCommand, QosLevel, StartupState,
+    ThemeMode, TransferSection, Workspace,
 };
 
 fn storage_fixture(path: &str) -> PathBuf {
@@ -113,46 +113,142 @@ fn topic_updates_refresh_core_validation_state() {
 }
 
 #[test]
-fn unsubscribe_all_requires_confirmation_and_cancel_suppresses_dispatch() {
+fn copying_publish_history_message_restores_retained_state() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::CopyPublishHistoryMessageToPublishForm(3));
+
+    assert_eq!(model.snapshot().workbench.publish.topic, "retain/config");
+    assert_eq!(model.snapshot().workbench.publish.qos, QosLevel::One);
+    assert!(model.snapshot().workbench.publish.retained);
+
+    model.apply_command(AppCommand::CopyPublishHistoryMessageToPublishForm(1));
+    assert_eq!(model.snapshot().workbench.publish.qos, QosLevel::One);
+    assert!(!model.snapshot().workbench.publish.retained);
+}
+
+#[test]
+fn copying_incoming_message_restores_retained_state() {
+    let mut model = AppModel::default();
+    model.apply_command(AppCommand::SetPublishRetained(false));
+
+    model.apply_command(AppCommand::CopyIncomingMessageToPublishForm(3));
+
+    assert_eq!(
+        model.snapshot().workbench.publish.topic,
+        "$SYS/broker/clients/connected"
+    );
+    assert_eq!(model.snapshot().workbench.publish.qos, QosLevel::Zero);
+    assert!(model.snapshot().workbench.publish.retained);
+
+    model.apply_command(AppCommand::CopyIncomingMessageToPublishForm(1));
+    assert_eq!(model.snapshot().workbench.publish.qos, QosLevel::One);
+    assert!(!model.snapshot().workbench.publish.retained);
+}
+
+#[test]
+fn workbench_state_is_scoped_per_selected_connection() {
+    let mut model = AppModel::default();
+    let first = model.snapshot().connections[0].id;
+    let second = model.snapshot().connections[1].id;
+
+    model.apply_command(AppCommand::UpdatePublishTopic("first/topic".to_owned()));
+    model.apply_command(AppCommand::UpdatePublishPayload("first payload".to_owned()));
+
+    model.apply_command(AppCommand::SelectConnection(second));
+    assert_ne!(model.snapshot().workbench.publish.topic, "first/topic");
+    model.apply_command(AppCommand::UpdatePublishTopic("second/topic".to_owned()));
+
+    model.apply_command(AppCommand::SelectConnection(first));
+    assert_eq!(model.snapshot().workbench.publish.topic, "first/topic");
+    assert_eq!(model.snapshot().workbench.publish.payload, "first payload");
+
+    model.apply_command(AppCommand::SelectConnection(second));
+    assert_eq!(model.snapshot().workbench.publish.topic, "second/topic");
+}
+
+#[test]
+fn unsubscribe_all_dispatches_and_removes_all_subscriptions() {
     let mut model = AppModel::default();
 
     let direct = model
         .mqtt_commands_for_app_command(&AppCommand::UnsubscribeAll)
-        .expect("unsubscribe all request should build safely");
-    assert!(direct.is_empty());
-
-    model.apply_command(AppCommand::UnsubscribeAll);
-    assert_eq!(
-        model
-            .snapshot()
-            .workbench
-            .subscribe
-            .unsubscribe_all_confirmation_count,
-        Some(3)
-    );
-
-    let confirmed = model
-        .mqtt_commands_for_app_command(&AppCommand::ConfirmUnsubscribeAll)
-        .expect("confirmed unsubscribe all should build safely");
-    assert_eq!(confirmed.len(), 3);
-    assert!(confirmed
+        .expect("unsubscribe all should build safely");
+    assert_eq!(direct.len(), 3);
+    assert!(direct
         .iter()
         .all(|command| matches!(command, MqttCommand::Unsubscribe { .. })));
 
-    model.apply_command(AppCommand::CancelUnsubscribeAll);
-    assert_eq!(
-        model
-            .snapshot()
-            .workbench
-            .subscribe
-            .unsubscribe_all_confirmation_count,
-        None
-    );
-    let after_cancel = model
-        .mqtt_commands_for_app_command(&AppCommand::ConfirmUnsubscribeAll)
-        .expect("cancelled unsubscribe all should build safely");
-    assert!(after_cancel.is_empty());
-    assert_eq!(model.snapshot().workbench.subscribe.subscriptions.len(), 3);
+    model.apply_command(AppCommand::UnsubscribeAll);
+    assert_eq!(model.snapshot().workbench.subscribe.subscriptions.len(), 0);
+}
+
+#[test]
+fn ctrl_toggles_subscription_selection() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::SelectSubscription {
+        topic_filter: "telemetry/#".to_owned(),
+        extend: false,
+        toggle: false,
+    });
+    model.apply_command(AppCommand::SelectSubscription {
+        topic_filter: "alerts/+".to_owned(),
+        extend: false,
+        toggle: true,
+    });
+    model.apply_command(AppCommand::SelectSubscription {
+        topic_filter: "alerts/+".to_owned(),
+        extend: false,
+        toggle: true,
+    });
+
+    let subscriptions = &model.snapshot().workbench.subscribe.subscriptions;
+    assert!(subscriptions[0].selected);
+    assert!(!subscriptions[1].selected);
+    assert!(!subscriptions[2].selected);
+}
+
+#[test]
+fn selected_subscription_click_toggles_off_without_ctrl() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::SelectSubscription {
+        topic_filter: "telemetry/#".to_owned(),
+        extend: false,
+        toggle: false,
+    });
+    model.apply_command(AppCommand::SelectSubscription {
+        topic_filter: "telemetry/#".to_owned(),
+        extend: false,
+        toggle: true,
+    });
+
+    assert!(model
+        .snapshot()
+        .workbench
+        .subscribe
+        .subscriptions
+        .iter()
+        .all(|subscription| !subscription.selected));
+}
+
+#[test]
+fn run_script_dispatches_connect_for_disconnected_script_connection() {
+    let mut model = AppModel::default();
+    let disconnected_id = model.snapshot().connections[1].id;
+    model.apply_command(AppCommand::SelectScriptConnection(
+        disconnected_id.to_string(),
+    ));
+
+    let commands = model
+        .mqtt_commands_for_app_command(&AppCommand::RunScript)
+        .expect("run script should build pre-connect command");
+
+    assert!(matches!(
+        commands.as_slice(),
+        [MqttCommand::Connect { options }] if options.connection_id == disconnected_id
+    ));
 }
 
 #[test]
@@ -332,6 +428,36 @@ fn transfer_commands_focus_the_requested_section() {
         model.snapshot().transfer.active_section,
         TransferSection::Import
     );
+}
+
+#[test]
+fn message_import_path_loads_cqm_into_publish_form() {
+    let mut model = AppModel::default();
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("message.cqm");
+    std::fs::write(
+        &path,
+        r#"{
+            "topic": "import/topic",
+            "payload": "imported payload",
+            "qos": 2,
+            "retained": true
+        }"#,
+    )
+    .expect("write cqm fixture");
+
+    model.apply_command(AppCommand::ImportMessagesFromPath(path));
+
+    let publish = &model.snapshot().workbench.publish;
+    assert_eq!(publish.topic, "import/topic");
+    assert_eq!(publish.payload, "imported payload");
+    assert_eq!(publish.qos, QosLevel::Two);
+    assert!(publish.retained);
+    assert!(publish.valid);
+    assert!(publish
+        .feedback
+        .as_ref()
+        .is_some_and(|feedback| feedback.message.contains("Loaded .cqm")));
 }
 
 #[test]

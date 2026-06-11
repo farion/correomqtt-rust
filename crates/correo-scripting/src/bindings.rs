@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rquickjs::{Ctx, Function, Object};
+use rquickjs::{prelude::Rest, Ctx, Function, Object, Value};
 
 use crate::{client_bindings::build_client_factory, executor::HostState, ScriptLogLevel};
 
@@ -40,7 +40,8 @@ fn build_logger<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<O
     let debug_state = state.clone();
     logger.set(
         "debug",
-        Function::new(ctx.clone(), move |message: String| {
+        Function::new(ctx.clone(), move |Rest(args): Rest<Value<'js>>| {
+            let message = log_message(args)?;
             debug_state
                 .log(ScriptLogLevel::Debug, message)
                 .map_err(|error| debug_state.throw_host_error(error))
@@ -51,7 +52,8 @@ fn build_logger<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<O
     let info_state = state.clone();
     logger.set(
         "info",
-        Function::new(ctx.clone(), move |message: String| {
+        Function::new(ctx.clone(), move |Rest(args): Rest<Value<'js>>| {
+            let message = log_message(args)?;
             info_state
                 .log(ScriptLogLevel::Info, message)
                 .map_err(|error| info_state.throw_host_error(error))
@@ -62,7 +64,8 @@ fn build_logger<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<O
     let warn_state = state.clone();
     logger.set(
         "warn",
-        Function::new(ctx.clone(), move |message: String| {
+        Function::new(ctx.clone(), move |Rest(args): Rest<Value<'js>>| {
+            let message = log_message(args)?;
             warn_state
                 .log(ScriptLogLevel::Warning, message)
                 .map_err(|error| warn_state.throw_host_error(error))
@@ -73,7 +76,8 @@ fn build_logger<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<O
     let error_state = state;
     logger.set(
         "error",
-        Function::new(ctx, move |message: String| {
+        Function::new(ctx, move |Rest(args): Rest<Value<'js>>| {
+            let message = log_message(args)?;
             error_state
                 .log(ScriptLogLevel::Error, message)
                 .map_err(|error| error_state.throw_host_error(error))
@@ -82,6 +86,37 @@ fn build_logger<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<O
     )?;
 
     Ok(logger)
+}
+
+fn log_message(args: Vec<Value<'_>>) -> rquickjs::Result<String> {
+    let Some((template, values)) = args.split_first() else {
+        return Ok(String::new());
+    };
+    let mut message = value_string(template)?;
+    for value in values {
+        let replacement = value_string(value)?;
+        if let Some(index) = message.find("{}") {
+            message.replace_range(index..index + 2, &replacement);
+        } else {
+            if !message.is_empty() {
+                message.push(' ');
+            }
+            message.push_str(&replacement);
+        }
+    }
+    Ok(message)
+}
+
+fn value_string(value: &Value<'_>) -> rquickjs::Result<String> {
+    if value.is_string() {
+        value.get::<String>()
+    } else if let Some(number) = value.as_number() {
+        Ok(number.to_string())
+    } else if let Some(boolean) = value.as_bool() {
+        Ok(boolean.to_string())
+    } else {
+        Ok("[object Object]".to_owned())
+    }
 }
 
 fn build_queue<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<Object<'js>> {

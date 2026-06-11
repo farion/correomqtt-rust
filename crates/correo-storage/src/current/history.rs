@@ -44,6 +44,20 @@ impl HistoryStore {
         })
     }
 
+    pub fn load_workbench<T>(&self, connection_id: &str) -> Result<T>
+    where
+        T: Default + DeserializeOwned,
+    {
+        self.read_or_default(self.workbench_path(connection_id))
+    }
+
+    pub fn replace_workbench<T>(&self, connection_id: &str, workbench: &T) -> Result<()>
+    where
+        T: Serialize,
+    {
+        self.write_json(self.workbench_path(connection_id), workbench)
+    }
+
     pub fn replace_all(&self, snapshot: &HistoryPersistenceSnapshot) -> Result<()> {
         for connection in snapshot.connections.values() {
             self.replace_connection_history(connection)?;
@@ -154,6 +168,10 @@ impl HistoryStore {
     fn path(&self, connection_id: &str, kind: HistoryFileKind) -> PathBuf {
         self.root
             .join(format!("{connection_id}_{}", kind.file_name()))
+    }
+
+    fn workbench_path(&self, connection_id: &str) -> PathBuf {
+        self.root.join(format!("{connection_id}.json"))
     }
 
     fn read_or_default<T>(&self, path: PathBuf) -> Result<T>

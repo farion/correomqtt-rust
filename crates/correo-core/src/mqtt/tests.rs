@@ -61,6 +61,11 @@ async fn runtime_applies_pub_sub_and_incoming_events() {
     let mut runtime = AppRuntime::new();
     runtime.attach_mqtt_service(service);
     let connection_id = runtime.snapshot().connections[1].id;
+    runtime
+        .command_sender()
+        .send(AppCommand::SelectConnection(connection_id))
+        .unwrap();
+    runtime.pump();
 
     runtime
         .command_sender()

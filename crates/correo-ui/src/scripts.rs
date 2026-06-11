@@ -1,19 +1,28 @@
 use correo_core::{
-    AppCommand, AppCommandSender, AppSnapshot, ScriptExecutionStatus, ScriptFeedbackSeverity,
-    ScriptFileStatus, ScriptLogLevel, ScriptSurfaceSnapshot,
+    AppCommand, AppCommandSender, AppSnapshot, ScriptExecutionStatus, ScriptFileStatus,
+    ScriptSurfaceSnapshot,
 };
-use egui::{Button, ComboBox, Frame, Id, Modal, RichText, ScrollArea, Stroke, TextEdit, Ui};
+use correo_style::layout as style_layout;
+use egui::{Button, ComboBox, Id, Modal, RichText, ScrollArea, Sense, TextEdit, Ui};
+use egui_phosphor::regular;
 
+use crate::i18n::I18n;
+use crate::payload_highlight;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
-    disable_tile_text_selection, padded_text_edit, tighten_tile_spacing, tile_inner_margin,
-    tile_list_content_width, tile_scroll_bar_rect, TILE_GAP,
+    fill_remaining_tile_rows, padded_text_edit, square_icon_button_size, tile_list_content_width,
+    tile_scroll_bar_rect_with_height, tile_table_fill, tile_table_hover_fill,
+    with_icon_button_padding, TILE_GAP, TWO_LINE_TILE_HEIGHT,
 };
 
+#[path = "scripts/dialogs.rs"]
+mod dialogs;
+#[path = "scripts/footer.rs"]
+mod footer;
 #[path = "scripts/layout.rs"]
 mod layout;
-
-const SCRIPTING_HELP_URL: &str = "https://github.com/EXXETA/correomqtt/wiki/scripting";
+#[path = "scripts/log.rs"]
+mod log;
 
 pub fn sidebar(
     ui: &mut Ui,
@@ -39,26 +48,34 @@ pub fn sidebar(
         )
         .clicked()
     {
-        send(commands, AppCommand::CreateScript);
+        send(commands, AppCommand::RequestCreateScript);
     }
     ui.separator();
-    script_list(ui, scripts, tokens, commands);
+    let list_height = ui.available_height().max(style_layout::TABLE_MIN_HEIGHT);
+    script_list(ui, scripts, tokens, commands, list_height);
 }
 
-pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
+pub fn show(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
     layout::four_pane(
         ui,
         tokens,
-        |ui| script_browser(ui, &snapshot.scripts, tokens, commands),
+        |ui| script_browser(ui, &snapshot.scripts, tokens, commands, i18n),
         |ui| {
-            toolbar(ui, snapshot, tokens, commands);
+            toolbar(ui, snapshot, commands);
             ui.add_space(6.0);
             editor(ui, &snapshot.scripts, commands);
         },
         |ui| executions(ui, &snapshot.scripts, tokens, commands),
-        |ui| log_view(ui, &snapshot.scripts, tokens, commands),
-        |ui| footer(ui, &snapshot.scripts, tokens),
+        |ui| log::log_view(ui, &snapshot.scripts, tokens, commands),
+        |ui| footer::footer(ui, &snapshot.scripts, tokens),
     );
+    dialogs::create_dialog(ui, &snapshot.scripts, commands);
     rename_dialog(ui, &snapshot.scripts, commands);
     delete_dialog(ui, &snapshot.scripts, commands);
 }
@@ -68,7 +85,20 @@ fn script_browser(
     scripts: &ScriptSurfaceSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    i18n: &I18n,
 ) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(tile_list_content_width(ui), CONTROL_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.heading(i18n.workspace_label(correo_core::Workspace::Scripts));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if header_add_button(ui).on_hover_text("New Script").clicked() {
+                    send(commands, AppCommand::RequestCreateScript);
+                }
+            });
+        },
+    );
     let mut filter = scripts.script_filter.clone();
     if ui
         .add_sized(
@@ -80,24 +110,26 @@ fn script_browser(
         send(commands, AppCommand::SearchScripts(filter));
     }
     ui.add_space(8.0);
-    if ui
-        .add_sized(
-            [ui.available_width(), CONTROL_HEIGHT],
-            Button::new("+ New Script"),
-        )
-        .clicked()
-    {
-        send(commands, AppCommand::CreateScript);
-    }
-    ui.separator();
+    let list_height = ui.available_height().max(style_layout::TABLE_MIN_HEIGHT);
     ScrollArea::vertical()
         .id_salt("script-list")
+        .max_height(list_height)
         .auto_shrink([false, false])
-        .scroll_bar_rect(tile_scroll_bar_rect(ui))
+        .scroll_bar_rect(tile_scroll_bar_rect_with_height(ui, list_height))
         .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             ui.set_width(tile_list_content_width(ui));
-            script_list(ui, scripts, tokens, commands);
+            script_list(ui, scripts, tokens, commands, list_height);
         });
+}
+
+fn header_add_button(ui: &mut Ui) -> egui::Response {
+    with_icon_button_padding(ui, |ui| {
+        ui.add_sized(
+            square_icon_button_size(),
+            Button::new(RichText::new(regular::PLUS).size(15.0)),
+        )
+    })
 }
 
 fn script_list(
@@ -105,134 +137,176 @@ fn script_list(
     scripts: &ScriptSurfaceSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
+    list_height: f32,
 ) {
     let filtered_scripts = scripts.filtered_scripts();
-    if filtered_scripts.is_empty() {
-        ui.label(RichText::new("No scripts").color(tokens.text_secondary));
-        return;
-    }
-    for script in filtered_scripts {
+    let row_count = filtered_scripts.len();
+    for (index, script) in filtered_scripts.into_iter().enumerate() {
         let selected = scripts.selected_script == script.name;
         let title = if script.is_dirty() {
             format!("{} *", script.name)
         } else {
             script.name.clone()
         };
-        let fill = if selected {
-            tokens.accent_selected_bg
-        } else {
-            tokens.panel_bg
-        };
-        let stroke = if selected {
-            tokens.accent
-        } else {
-            tokens.border
-        };
-        let response = Frame::NONE
-            .fill(fill)
-            .stroke(Stroke::new(1.0, stroke))
-            .corner_radius(egui::CornerRadius::same(4))
-            .inner_margin(tile_inner_margin())
-            .show(ui, |ui| {
-                disable_tile_text_selection(ui);
-                tighten_tile_spacing(ui);
-                ui.set_width(ui.available_width());
-                ui.label(RichText::new(title).strong());
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(script.status.label())
-                            .color(file_status_color(script.status, tokens)),
-                    );
-                    ui.label(
-                        RichText::new(format!("{} runs", script.execution_count))
-                            .color(tokens.text_secondary),
-                    );
-                });
-                ui.label(RichText::new(&script.relative_path).color(tokens.text_secondary));
-            })
-            .response;
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), TWO_LINE_TILE_HEIGHT),
+            Sense::click(),
+        );
+        let fill = tile_fill(
+            index,
+            selected,
+            response.hovered() || response.contains_pointer(),
+            tokens,
+        );
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::ZERO, fill);
+        paint_line(ui, rect, 0, &title, tokens.text_primary);
+        let mut x = paint_line(
+            ui,
+            rect,
+            1,
+            script.status.label(),
+            file_status_color(script.status, tokens),
+        );
+        x = paint_segment(
+            ui,
+            rect,
+            1,
+            x,
+            &format!("{} runs", script.execution_count),
+            tokens.text_secondary,
+        );
+        paint_segment(ui, rect, 1, x, &script.relative_path, tokens.text_secondary);
         if response.clicked() {
             send(commands, AppCommand::SelectScript(script.name.clone()));
         }
         ui.add_space(TILE_GAP);
     }
+    fill_remaining_tile_rows(ui, row_count, TWO_LINE_TILE_HEIGHT, list_height, tokens);
 }
 
-fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: &AppCommandSender) {
+fn paint_line(ui: &Ui, rect: egui::Rect, line: usize, text: &str, color: egui::Color32) -> f32 {
+    paint_segment(ui, rect, line, rect.left() + 12.0, text, color)
+}
+
+fn tile_fill(index: usize, selected: bool, hovered: bool, tokens: ThemeTokens) -> egui::Color32 {
+    if selected {
+        tokens.accent_selected_bg
+    } else if hovered {
+        tile_table_hover_fill(tokens)
+    } else {
+        tile_table_fill(index, tokens)
+    }
+}
+
+fn paint_segment(
+    ui: &Ui,
+    rect: egui::Rect,
+    line: usize,
+    x: f32,
+    text: &str,
+    color: egui::Color32,
+) -> f32 {
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let galley = ui.painter().layout_no_wrap(text.to_owned(), font, color);
+    let pos = egui::pos2(x, rect.top() + 6.0 + (line as f32 * 20.0));
+    ui.painter().galley(pos, galley.clone(), color);
+    x + galley.size().x + 8.0
+}
+
+fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
     let scripts = &snapshot.scripts;
-    ui.horizontal_wrapped(|ui| {
-        let has_script = scripts.selected_script().is_some();
-        if ui
-            .add_enabled(scripts.can_run(), Button::new("Run Script"))
-            .on_hover_text("Queue script execution through core")
+    let has_script = scripts.selected_script().is_some();
+    ui.horizontal(|ui| {
+        ui.heading(script_title(scripts));
+        if script_icon_button(ui, regular::PENCIL_SIMPLE_LINE, has_script, "Rename script")
             .clicked()
         {
-            send(commands, AppCommand::RunScript);
+            send(commands, AppCommand::RequestRenameScript);
         }
-        if ui
-            .add_enabled(scripts.can_save(), Button::new("Save"))
-            .on_hover_text("Save script source through the storage service")
-            .clicked()
+    });
+    ui.add_space(2.0);
+    ui.horizontal(|ui| {
+        if script_icon_button(ui, regular::FLOPPY_DISK, scripts.can_save(), "Save script").clicked()
         {
             send(commands, AppCommand::SaveScript);
         }
-        if ui
-            .add_enabled(scripts.selected_script_is_dirty(), Button::new("Discard"))
-            .on_hover_text("Reset the editor to the saved script source")
-            .clicked()
+        if script_icon_button(
+            ui,
+            regular::ARROW_U_DOWN_LEFT,
+            scripts.selected_script_is_dirty(),
+            "Discard script changes",
+        )
+        .clicked()
         {
             send(commands, AppCommand::DiscardScriptChanges);
         }
-        if ui.add_enabled(has_script, Button::new("Rename")).clicked() {
-            send(commands, AppCommand::RequestRenameScript);
-        }
-        if ui.add_enabled(has_script, Button::new("Delete")).clicked() {
+        if script_icon_button(ui, regular::TRASH, has_script, "Delete script").clicked() {
             send(commands, AppCommand::RequestDeleteScript);
         }
-        ui.separator();
-        ui.label(selected_label(scripts, tokens));
-        if scripts.selected_script_is_dirty() {
-            ui.label(RichText::new("Unsaved").color(tokens.warning));
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("Run on");
-        ComboBox::from_id_salt("script-run-connection")
-            .selected_text(&scripts.selected_connection)
-            .width(220.0)
-            .show_ui(ui, |ui| {
-                for connection in &snapshot.connections {
-                    let id = connection.id.to_string();
-                    let selected = scripts.selected_connection_id.as_deref() == Some(id.as_str());
-                    if ui.selectable_label(selected, &connection.name).clicked() {
-                        send(commands, AppCommand::SelectScriptConnection(id));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .add_enabled(
+                    scripts.can_run(),
+                    Button::new(format!("{}  Run Script", regular::PLAY)),
+                )
+                .on_hover_text("Queue script execution through core")
+                .clicked()
+            {
+                send(commands, AppCommand::RunScript);
+            }
+            ComboBox::from_id_salt("script-run-connection")
+                .selected_text(&scripts.selected_connection)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for connection in &snapshot.connections {
+                        let id = connection.id.to_string();
+                        let selected =
+                            scripts.selected_connection_id.as_deref() == Some(id.as_str());
+                        if ui.selectable_label(selected, &connection.name).clicked() {
+                            send(commands, AppCommand::SelectScriptConnection(id));
+                        }
                     }
-                }
-            });
+                });
+            ui.label("Run on");
+        });
     });
-    if let Some(feedback) = &scripts.feedback {
-        ui.label(RichText::new(&feedback.message).color(feedback_color(feedback.severity, tokens)));
+}
+
+fn script_title(scripts: &ScriptSurfaceSnapshot) -> String {
+    if scripts.selected_script.is_empty() {
+        "No script selected".to_owned()
+    } else {
+        scripts.selected_script.clone()
     }
 }
 
-fn selected_label(scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) -> RichText {
-    if scripts.selected_script.is_empty() {
-        RichText::new("No script selected").color(tokens.text_secondary)
-    } else {
-        RichText::new(format!("Script: {}", scripts.selected_script)).color(tokens.text_primary)
-    }
+fn script_icon_button(ui: &mut Ui, icon: &str, enabled: bool, hover_text: &str) -> egui::Response {
+    let response = ui
+        .add_enabled_ui(enabled, |ui| {
+            with_icon_button_padding(ui, |ui| {
+                ui.add_sized(
+                    square_icon_button_size(),
+                    Button::new(RichText::new(icon).size(16.0)),
+                )
+            })
+        })
+        .inner;
+    response.on_hover_text(hover_text)
 }
 
 fn editor(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
     if let Some(script) = scripts.selected_script() {
         let mut source = script.source.clone();
         let editor_height = ui.available_height().max(180.0);
+        let mut layouter = payload_highlight::javascript_layouter();
         if ui
             .add_sized(
                 [ui.available_width(), editor_height],
                 padded_text_edit(TextEdit::multiline(&mut source))
                     .font(egui::TextStyle::Monospace)
-                    .desired_width(f32::INFINITY),
+                    .desired_width(f32::INFINITY)
+                    .layouter(&mut layouter),
             )
             .changed()
         {
@@ -258,53 +332,41 @@ fn executions(
         });
     });
     ui.add_space(4.0);
+    let list_height = ui.available_height().max(style_layout::TABLE_MIN_HEIGHT);
     ScrollArea::vertical()
         .id_salt("script-executions")
+        .max_height(list_height)
         .auto_shrink([false, false])
-        .scroll_bar_rect(tile_scroll_bar_rect(ui))
+        .scroll_bar_rect(tile_scroll_bar_rect_with_height(ui, list_height))
         .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             ui.set_width(tile_list_content_width(ui));
-            if scripts.executions.is_empty() {
-                ui.label(RichText::new("No executions").color(tokens.text_secondary));
-                return;
-            }
-            for execution in &scripts.executions {
+            for (index, execution) in scripts.executions.iter().enumerate() {
                 let selected =
                     scripts.selected_execution_id() == Some(execution.execution_id.as_str());
-                let response = Frame::NONE
-                    .fill(if selected {
-                        tokens.accent_selected_bg
-                    } else {
-                        tokens.panel_bg
-                    })
-                    .stroke(Stroke::new(
-                        1.0,
-                        if selected {
-                            tokens.accent
-                        } else {
-                            tokens.border
-                        },
-                    ))
-                    .corner_radius(egui::CornerRadius::same(4))
-                    .inner_margin(tile_inner_margin())
-                    .show(ui, |ui| {
-                        disable_tile_text_selection(ui);
-                        tighten_tile_spacing(ui);
-                        ui.set_width(ui.available_width());
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(
-                                RichText::new(execution.status.label())
-                                    .color(execution_color(execution.status, tokens))
-                                    .strong(),
-                            );
-                            ui.label(RichText::new(&execution.script_name).strong());
-                            ui.label(
-                                RichText::new(&execution.duration).color(tokens.text_secondary),
-                            );
-                        });
-                        ui.label(RichText::new(&execution.timestamp).color(tokens.text_secondary));
-                    })
-                    .response;
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), TWO_LINE_TILE_HEIGHT),
+                    Sense::click(),
+                );
+                let fill = tile_fill(
+                    index,
+                    selected,
+                    response.hovered() || response.contains_pointer(),
+                    tokens,
+                );
+                ui.painter()
+                    .rect_filled(rect, egui::CornerRadius::ZERO, fill);
+                let mut x = paint_line(
+                    ui,
+                    rect,
+                    0,
+                    execution.status.label(),
+                    execution_color(execution.status, tokens),
+                );
+                x = paint_segment(ui, rect, 0, x, &execution.script_name, tokens.text_primary);
+                paint_segment(ui, rect, 0, x, &execution.duration, tokens.text_secondary);
+                let timestamp = crate::time_format::local_date_time(&execution.timestamp);
+                paint_line(ui, rect, 1, &timestamp, tokens.text_secondary);
                 if response.clicked() {
                     send(
                         commands,
@@ -313,75 +375,14 @@ fn executions(
                 }
                 ui.add_space(TILE_GAP);
             }
+            fill_remaining_tile_rows(
+                ui,
+                scripts.executions.len(),
+                TWO_LINE_TILE_HEIGHT,
+                list_height,
+                tokens,
+            );
         });
-}
-
-fn log_view(
-    ui: &mut Ui,
-    scripts: &ScriptSurfaceSnapshot,
-    tokens: ThemeTokens,
-    commands: &AppCommandSender,
-) {
-    let selected_execution_id = scripts.selected_execution_id();
-    ui.horizontal(|ui| {
-        ui.heading("Execution log");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let can_stop =
-                scripts.running && selected_execution_id == scripts.active_execution_id.as_deref();
-            if ui
-                .add_enabled(can_stop, Button::new("Stop Script"))
-                .on_hover_text("Stop the selected running execution")
-                .clicked()
-            {
-                send(commands, AppCommand::CancelScript);
-            }
-        });
-    });
-    ui.add_space(4.0);
-    ScrollArea::vertical()
-        .id_salt("script-log")
-        .stick_to_bottom(true)
-        .show(ui, |ui| {
-            for line in scripts.log_lines.iter().filter(|line| {
-                selected_execution_id.is_none_or(|execution_id| line.execution_id == execution_id)
-            }) {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(&line.timestamp)
-                            .color(tokens.text_secondary)
-                            .monospace(),
-                    );
-                    ui.label(
-                        RichText::new(line.level.label())
-                            .color(log_color(line.level, tokens))
-                            .monospace(),
-                    );
-                    ui.label(RichText::new(&line.message).monospace());
-                });
-            }
-        });
-}
-
-fn footer(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, tokens: ThemeTokens) {
-    let running = scripts
-        .executions
-        .iter()
-        .filter(|execution| !execution.status.is_terminal())
-        .count();
-    let finished = scripts
-        .executions
-        .iter()
-        .filter(|execution| execution.status.is_terminal())
-        .count();
-    ui.horizontal(|ui| {
-        ui.label(
-            RichText::new(format!("{running} running / {finished} finished"))
-                .color(tokens.text_secondary),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.hyperlink_to("Scripting help", SCRIPTING_HELP_URL);
-        });
-    });
 }
 
 fn rename_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
@@ -394,21 +395,25 @@ fn rename_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCom
         let mut name = scripts.rename_script_name.clone();
         if ui
             .add_sized(
-                [320.0, CONTROL_HEIGHT],
+                [ui.available_width(), CONTROL_HEIGHT],
                 padded_text_edit(TextEdit::singleline(&mut name)),
             )
             .changed()
         {
             send(commands, AppCommand::UpdateRenameScriptName(name));
         }
-        ui.horizontal(|ui| {
-            if ui.button("Cancel").clicked() {
-                send(commands, AppCommand::CancelRenameScript);
-            }
-            if ui.button("Rename").clicked() {
-                send(commands, AppCommand::ConfirmRenameScript);
-            }
-        });
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), CONTROL_HEIGHT),
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                if ui.button("Rename").clicked() {
+                    send(commands, AppCommand::ConfirmRenameScript);
+                }
+                if ui.button("Cancel").clicked() {
+                    send(commands, AppCommand::CancelRenameScript);
+                }
+            },
+        );
     });
     if response.should_close() {
         send(commands, AppCommand::CancelRenameScript);
@@ -452,23 +457,6 @@ fn execution_color(status: ScriptExecutionStatus, tokens: ThemeTokens) -> egui::
         ScriptExecutionStatus::Succeeded => tokens.success,
         ScriptExecutionStatus::Failed => tokens.danger,
         ScriptExecutionStatus::Cancelled => tokens.warning,
-    }
-}
-
-fn log_color(level: ScriptLogLevel, tokens: ThemeTokens) -> egui::Color32 {
-    match level {
-        ScriptLogLevel::Debug => tokens.text_secondary,
-        ScriptLogLevel::Info => tokens.text_primary,
-        ScriptLogLevel::Warning => tokens.warning,
-        ScriptLogLevel::Error => tokens.danger,
-    }
-}
-
-fn feedback_color(severity: ScriptFeedbackSeverity, tokens: ThemeTokens) -> egui::Color32 {
-    match severity {
-        ScriptFeedbackSeverity::Info => tokens.success,
-        ScriptFeedbackSeverity::Warning => tokens.warning,
-        ScriptFeedbackSeverity::Error => tokens.danger,
     }
 }
 

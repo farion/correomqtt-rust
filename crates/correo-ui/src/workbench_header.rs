@@ -8,7 +8,6 @@ use egui_phosphor::regular;
 use crate::{
     theme::ThemeTokens,
     widgets::{square_icon_button_size, with_icon_button_padding},
-    workbench_layout::{self, WorkbenchLayoutMode},
 };
 
 pub fn connection_header(
@@ -16,42 +15,31 @@ pub fn connection_header(
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
-) -> WorkbenchLayoutMode {
+) {
     let Some(connection) = snapshot.selected_connection() else {
-        return workbench_layout::current_mode(ui);
+        return;
     };
 
-    let mut mode = workbench_layout::current_mode(ui);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(&connection.name).strong().size(18.0));
-        mode = workbench_layout::mode_buttons(ui, tokens);
+        ui.heading(&connection.name);
+        if edit_button(ui).clicked() {
+            send(commands, AppCommand::OpenConnectionSettings(connection.id));
+        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             connection_action(ui, connection, commands);
-            state_label(ui, connection, tokens);
+            connection_summary(ui, connection, tokens);
         });
     });
-    ui.add_space(2.0);
-    ui.horizontal_wrapped(|ui| {
-        metadata_label(ui, &connection.endpoint, tokens);
-        ui.separator();
-        ui.label(&connection.mqtt_version);
-        for badge in &connection.badges {
-            ui.label(RichText::new(badge.label()).color(tokens.accent).strong());
-        }
-        if !snapshot.workbench.reconnect_status.is_empty() {
-            ui.separator();
-            ui.label(
-                RichText::new(&snapshot.workbench.reconnect_status).color(tokens.text_secondary),
-            )
-            .on_hover_text(&snapshot.workbench.reconnect_status);
-        }
-    });
-    mode
 }
 
-fn metadata_label(ui: &mut Ui, label: &str, tokens: ThemeTokens) {
-    ui.label(RichText::new(label).color(tokens.text_secondary))
-        .on_hover_text(label);
+fn edit_button(ui: &mut Ui) -> egui::Response {
+    with_icon_button_padding(ui, |ui| {
+        ui.add_sized(
+            square_icon_button_size(),
+            Button::new(RichText::new(regular::PENCIL_SIMPLE).size(16.0)),
+        )
+    })
+    .on_hover_text("Edit connection")
 }
 
 fn connection_action(ui: &mut Ui, connection: &ConnectionSummary, commands: &AppCommandSender) {
@@ -59,7 +47,8 @@ fn connection_action(ui: &mut Ui, connection: &ConnectionSummary, commands: &App
     let response = with_icon_button_padding(ui, |ui| {
         ui.add_enabled(
             action.enabled,
-            Button::new(action.label).min_size(egui::vec2(96.0, square_icon_button_size()[1])),
+            Button::new(format!("{}  {}", regular::PLUG, action.label))
+                .min_size(egui::vec2(104.0, square_icon_button_size()[1])),
         )
     })
     .on_hover_text(action.tooltip);
@@ -68,16 +57,33 @@ fn connection_action(ui: &mut Ui, connection: &ConnectionSummary, commands: &App
     }
 }
 
-fn state_label(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTokens) {
-    ui.label(
-        RichText::new(format!(
-            "{} {}",
-            state_icon(connection.state),
-            connection.state.label()
-        ))
-        .color(state_color(connection.state, tokens)),
-    )
-    .on_hover_text(connection.state.label());
+fn connection_summary(ui: &mut Ui, connection: &ConnectionSummary, tokens: ThemeTokens) {
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(state_icon(connection.state))
+                .size(22.0)
+                .color(state_color(connection.state, tokens)),
+        )
+        .on_hover_text(connection.state.label());
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.label(
+                    RichText::new(connection.state.label())
+                        .color(state_color(connection.state, tokens)),
+                )
+                .on_hover_text(connection.state.label());
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.label(
+                    RichText::new(&connection.endpoint)
+                        .size(12.0)
+                        .color(tokens.text_disabled),
+                )
+                .on_hover_text(&connection.endpoint);
+            });
+        });
+    });
 }
 
 fn action_for(connection: &ConnectionSummary) -> HeaderAction {

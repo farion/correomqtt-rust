@@ -91,6 +91,7 @@ Do not create a single large application crate unless the task explicitly asks f
 - This is a dense desktop tool, not a marketing surface.
 - Prioritize predictable panes, lists, tabs, dialogs, keyboard-friendly controls, and clear status.
 - Use native-feeling egui widgets and stable layout dimensions.
+- Icon-only buttons must be square and use the shared square icon button sizing.
 - Keep connection state, errors, and script/plugin failures visible without blocking normal work.
 - Do not mix service logic into egui widgets.
 

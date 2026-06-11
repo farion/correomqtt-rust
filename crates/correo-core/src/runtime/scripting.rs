@@ -1,5 +1,6 @@
 use crate::{
-    AppCommand, AppEvent, AppSnapshot, Diagnostic, ScriptRow, ScriptingCommand, ScriptingEvent,
+    AppCommand, AppEvent, AppSnapshot, Diagnostic, ScriptExecutionRow, ScriptExecutionStatus,
+    ScriptRow, ScriptingCommand, ScriptingEvent,
 };
 
 use super::AppRuntime;
@@ -51,6 +52,10 @@ impl AppRuntime {
                     duration,
                     error,
                 });
+                if let Some(diagnostic) = script_completion_diagnostic(status) {
+                    self.model
+                        .apply_event(AppEvent::DiagnosticRaised(diagnostic));
+                }
             }
         }
     }
@@ -62,13 +67,30 @@ impl AppRuntime {
         let Some(command) = scripting_command(command, before, self.model.snapshot()) else {
             return;
         };
+        let script_started = matches!(command, ScriptingCommand::Run { .. });
         if let Err(error) = worker.dispatch(command) {
             let _ = self
                 .event_sender
                 .emit(AppEvent::DiagnosticRaised(Diagnostic::error(
                     error.to_string(),
                 )));
+        } else if script_started {
+            let _ = self
+                .event_sender
+                .emit(AppEvent::DiagnosticRaised(script_started_diagnostic()));
         }
+    }
+}
+
+fn script_started_diagnostic() -> Diagnostic {
+    Diagnostic::info("Script execution started.")
+}
+
+fn script_completion_diagnostic(status: ScriptExecutionStatus) -> Option<Diagnostic> {
+    match status {
+        ScriptExecutionStatus::Succeeded => Some(Diagnostic::info("Script execution succeeded.")),
+        ScriptExecutionStatus::Failed => Some(Diagnostic::error("Script execution failed.")),
+        _ => None,
     }
 }
 
@@ -118,11 +140,44 @@ fn scripting_command(
             })
         }
         AppCommand::CancelScript => {
-            let execution_id = before.scripts.active_execution_id.clone()?;
+            let execution_id = before.scripts.running_execution_id()?.to_owned();
             Some(ScriptingCommand::Cancel { execution_id })
+        }
+        AppCommand::ClearFinishedScriptExecutions => {
+            let executions = cleared_finished_executions(before, after);
+            (!executions.is_empty()).then_some(ScriptingCommand::ClearFinished { executions })
         }
         _ => None,
     }
+}
+
+fn cleared_finished_executions(before: &AppSnapshot, after: &AppSnapshot) -> Vec<(String, String)> {
+    before
+        .scripts
+        .executions
+        .iter()
+        .filter(|execution| execution.status.is_terminal())
+        .filter(|execution| !execution_exists(&after.scripts.executions, &execution.execution_id))
+        .filter_map(|execution| {
+            script_path_for(before, &execution.script_name)
+                .map(|path| (path, execution.execution_id.clone()))
+        })
+        .collect()
+}
+
+fn execution_exists(executions: &[ScriptExecutionRow], execution_id: &str) -> bool {
+    executions
+        .iter()
+        .any(|execution| execution.execution_id == execution_id)
+}
+
+fn script_path_for(snapshot: &AppSnapshot, script_name: &str) -> Option<String> {
+    snapshot
+        .scripts
+        .scripts
+        .iter()
+        .find(|script| script.name == script_name)
+        .map(|script| script.relative_path.clone())
 }
 
 fn selected_script(snapshot: &AppSnapshot) -> Option<&ScriptRow> {
@@ -139,9 +194,9 @@ fn script_exists(snapshot: &AppSnapshot, relative_path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{sample_snapshot, AppCommand, ScriptingCommand, ThemeMode};
+    use crate::{sample_snapshot, AppCommand, ScriptExecutionStatus, ScriptingCommand, ThemeMode};
 
-    use super::scripting_command;
+    use super::{script_completion_diagnostic, script_started_diagnostic, scripting_command};
 
     #[test]
     fn run_script_dispatch_uses_active_execution_and_selected_connection() {
@@ -160,5 +215,49 @@ mod tests {
                 ..
             } if execution_id == "exec-1"
         ));
+    }
+
+    #[test]
+    fn clear_finished_dispatch_deletes_removed_execution_artifacts() {
+        let before = sample_snapshot(ThemeMode::Light);
+        let mut after = before.clone();
+        after
+            .scripts
+            .executions
+            .retain(|execution| !execution.status.is_terminal());
+
+        let command =
+            scripting_command(&AppCommand::ClearFinishedScriptExecutions, &before, &after)
+                .expect("clear finished should dispatch");
+
+        assert!(matches!(
+            command,
+            ScriptingCommand::ClearFinished { executions }
+                if executions == vec![
+                    ("scripts/payload_replay.js".to_owned(), "exec-0999".to_owned()),
+                    ("scripts/payload_replay.js".to_owned(), "exec-0998".to_owned()),
+                ]
+        ));
+    }
+
+    #[test]
+    fn script_lifecycle_diagnostics_use_toast_messages() {
+        assert_eq!(
+            script_started_diagnostic().message,
+            "Script execution started."
+        );
+        assert_eq!(
+            script_completion_diagnostic(ScriptExecutionStatus::Succeeded)
+                .expect("success diagnostic")
+                .message,
+            "Script execution succeeded."
+        );
+        assert_eq!(
+            script_completion_diagnostic(ScriptExecutionStatus::Failed)
+                .expect("failed diagnostic")
+                .message,
+            "Script execution failed."
+        );
+        assert!(script_completion_diagnostic(ScriptExecutionStatus::Cancelled).is_none());
     }
 }

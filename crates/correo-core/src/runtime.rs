@@ -118,6 +118,7 @@ impl AppRuntime {
             if refresh_detail {
                 self.refresh_message_detail();
             }
+            self.dispatch_dirty_workbenches();
             report.events_processed += 1;
         }
 
@@ -163,6 +164,7 @@ impl AppRuntime {
                 self.dispatch_global_settings_save();
             }
             self.dispatch_scripting_command(&command, &command_before);
+            self.dispatch_dirty_workbenches();
             report.commands_processed += 1;
         }
 
@@ -220,6 +222,29 @@ impl AppRuntime {
         }
     }
 
+    fn dispatch_dirty_workbenches(&mut self) {
+        let commands = self.model.drain_workbench_persistence_commands();
+        let Some(worker) = &self.history_worker else {
+            if !commands.is_empty() {
+                let _ = self
+                    .event_sender
+                    .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                        "Workbench persistence worker is not running.",
+                    )));
+            }
+            return;
+        };
+        for command in commands {
+            if let Err(error) = worker.dispatch(command) {
+                let _ = self
+                    .event_sender
+                    .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                        error.to_string(),
+                    )));
+            }
+        }
+    }
+
     fn apply_history_event(&self, event: HistoryPersistenceEvent) {
         if let HistoryPersistenceEvent::Failed {
             connection_id,
@@ -246,7 +271,7 @@ impl AppRuntime {
             return;
         };
         if let Err(error) = worker.dispatch(SettingsPersistenceCommand::Save {
-            theme_mode: self.model.snapshot().theme_mode,
+            theme_mode: self.model.snapshot().theme_mode.clone(),
             settings: self.model.snapshot().global_settings.clone(),
         }) {
             let _ = self
@@ -313,7 +338,7 @@ impl AppRuntime {
             }
             crate::MigrationRecoveryCommand::ApplyMigration => {
                 Some(MigrationPersistenceCommand::Apply {
-                    fallback_theme: self.model.snapshot().theme_mode,
+                    fallback_theme: self.model.snapshot().theme_mode.clone(),
                 })
             }
             _ => None,
@@ -362,6 +387,7 @@ fn history_kind_label(kind: HistoryPersistenceKind) -> &'static str {
     match kind {
         HistoryPersistenceKind::Publish => "Publish",
         HistoryPersistenceKind::Subscription => "Subscription",
+        HistoryPersistenceKind::Workbench => "Workbench",
     }
 }
 

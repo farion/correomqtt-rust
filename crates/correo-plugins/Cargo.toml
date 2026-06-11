@@ -13,6 +13,7 @@ correo-plugins-systopic = { path = "../../plugins/correo-plugins-systopic" }
 correo-plugins-xml-xsd-validator = { path = "../../plugins/correo-plugins-xml-xsd-validator" }
 correo-plugin-xml-format = { path = "../../plugins/xml-format" }
 correo-plugin-zip-manipulator = { path = "../correo-plugin-zip-manipulator" }
+correo-style = { path = "../correo-style" }
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true

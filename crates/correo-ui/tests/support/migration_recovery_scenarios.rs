@@ -15,6 +15,7 @@ pub(super) struct RecoveryCapture {
 
 impl RecoveryCapture {
     fn new(scenario: RecoveryScenario, mode: ThemeMode, size: (u32, u32)) -> Self {
+        let mode_slug = mode_slug(&mode);
         Self {
             scenario,
             mode,
@@ -22,7 +23,7 @@ impl RecoveryCapture {
             file_name: format!(
                 "correo-{}-{}-{}x{}.png",
                 scenario.slug(),
-                mode_slug(mode),
+                mode_slug,
                 size.0,
                 size.1
             ),
@@ -120,7 +121,7 @@ pub(super) fn recovery_captures() -> Vec<RecoveryCapture> {
 
 pub(super) fn snapshot_for(capture: &RecoveryCapture) -> AppSnapshot {
     let mut snapshot = AppSnapshot::empty();
-    snapshot.theme_mode = capture.mode;
+    snapshot.theme_mode = capture.mode.clone();
     snapshot.migration_recovery = recovery_snapshot(capture.scenario);
     snapshot.diagnostics = vec![
         Diagnostic::warning(MigrationRecoverySnapshot::plugin_diagnostic()),
@@ -129,11 +130,13 @@ pub(super) fn snapshot_for(capture: &RecoveryCapture) -> AppSnapshot {
     snapshot
 }
 
-pub(super) fn mode_slug(mode: ThemeMode) -> &'static str {
-    match mode {
-        ThemeMode::Light => "light",
-        ThemeMode::Dark => "dark",
-        ThemeMode::System => "system",
+pub(super) fn mode_slug(mode: &ThemeMode) -> &'static str {
+    if matches!(mode, ThemeMode::System) {
+        "system"
+    } else if mode.is_light() {
+        "light"
+    } else {
+        "dark"
     }
 }
 

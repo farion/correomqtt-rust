@@ -12,12 +12,11 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
         return;
     }
 
-    let mode = workbench_header::connection_header(ui, snapshot, tokens, commands);
+    workbench_header::connection_header(ui, snapshot, tokens, commands);
     ui.add_space(6.0);
     workbench_layout::show(
         ui,
         tokens,
-        mode,
         |ui| workbench_publish::editor(ui, snapshot, tokens, commands),
         |ui| workbench_subscribe::editor(ui, snapshot, tokens, commands),
         |ui| workbench_publish::outgoing_messages(ui, snapshot, tokens, commands),

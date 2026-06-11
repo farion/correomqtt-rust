@@ -9,6 +9,7 @@ members = [
     "crates/correo-plugins",
     "crates/correo-scripting",
     "crates/correo-storage",
+    "crates/correo-style",
     "crates/correo-ui",
     "plugins/correo-plugins-advanced-validator",
     "plugins/correo-plugins-json-format",
@@ -41,7 +42,7 @@ directories = "6"
 eframe = { version = "0.31", default-features = false, features = ["accesskit", "default_fonts", "glow", "persistence", "wayland", "x11"] }
 egui = "0.31"
 egui-phosphor = { version = "0.9", default-features = false, features = ["regular"] }
-egui_extras = "0.31"
+egui_extras = { version = "0.31", features = ["image", "svg"] }
 egui_kittest = { version = "0.31", features = ["snapshot", "wgpu"] }
 flume = "0.11"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
@@ -65,7 +66,7 @@ serde_with = "3"
 sha2 = "0.10"
 tempfile = "3"
 thiserror = "1"
-time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
+time = { version = "0.3", features = ["formatting", "local-offset", "macros", "parsing", "serde"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-util = "0.7"
 toml = "0.8"

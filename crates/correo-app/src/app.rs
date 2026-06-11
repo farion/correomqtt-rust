@@ -6,6 +6,7 @@ use correo_core::{
 use crate::startup::{history_root, load_startup_state};
 
 pub fn run() -> eframe::Result {
+    prefer_x11_when_wayland_is_unstable();
     correo_diagnostics::install_tracing();
     tracing::info!("starting CorreoMQTT desktop shell");
 
@@ -24,6 +25,20 @@ pub fn run() -> eframe::Result {
         options,
         Box::new(|creation_context| Ok(Box::new(CorreoDesktopApp::new(creation_context)))),
     )
+}
+
+fn prefer_x11_when_wayland_is_unstable() {
+    #[cfg(target_os = "linux")]
+    {
+        let user_selected_backend = std::env::var_os("WINIT_UNIX_BACKEND").is_some();
+        let allow_wayland = std::env::var_os("CORREOMQTT_ALLOW_WAYLAND").is_some();
+        let wayland_available = std::env::var_os("WAYLAND_DISPLAY").is_some();
+        let x11_available = std::env::var_os("DISPLAY").is_some();
+
+        if !user_selected_backend && !allow_wayland && wayland_available && x11_available {
+            std::env::set_var("WINIT_UNIX_BACKEND", "x11");
+        }
+    }
 }
 
 fn app_icon() -> eframe::egui::IconData {
@@ -46,7 +61,10 @@ impl CorreoDesktopApp {
         runtime.attach_history_worker(HistoryPersistenceWorker::start(storage_root.clone()));
         runtime.attach_migration_worker(MigrationPersistenceWorker::start(storage_root.clone()));
         runtime.attach_settings_worker(SettingsPersistenceWorker::start(storage_root.clone()));
-        runtime.attach_scripting_worker(ScriptingWorker::start(storage_root));
+        runtime.attach_scripting_worker(ScriptingWorker::start_with_mqtt_sender(
+            storage_root,
+            runtime.mqtt_command_sender(),
+        ));
         let ui = correo_ui::CorreoUi::with_command_sender(
             creation_context,
             runtime.snapshot().clone(),

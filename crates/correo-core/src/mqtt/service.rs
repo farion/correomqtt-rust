@@ -72,7 +72,7 @@ pub struct MqttCommandSender {
 }
 
 impl MqttCommandSender {
-    fn new(sender: Sender<MqttCommand>) -> Self {
+    pub(crate) fn new(sender: Sender<MqttCommand>) -> Self {
         Self { sender }
     }
 

@@ -3,20 +3,26 @@ use correo_core::{
     ConnectionSettingFlag, ConnectionSettingsSnapshot, ConnectionSettingsTab, KeyringState,
 };
 use egui::{
-    Button, Color32, CornerRadius, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, TextEdit,
-    Ui, UiBuilder, Window,
+    Button, Color32, CornerRadius, Rect, RichText, ScrollArea, Sense, TextEdit, Ui, UiBuilder,
 };
+use egui_phosphor::regular;
 
+use crate::widgets::{square_icon_button_size, with_icon_button_padding};
 use crate::{i18n::I18n, theme::ThemeTokens};
 
+#[path = "connection_settings_actions.rs"]
+mod actions;
 #[path = "connection_settings_controls.rs"]
 mod controls;
+use actions::{action_bar, delete_confirmation};
 use controls::{
-    combo, field, field_with_button, file_field, flag, panel, secret_field, secret_field_enabled,
-    send,
+    combo, control_width, field, field_with_button, file_field, flag, row, secret_field,
+    secret_field_enabled, send,
 };
 
-const MODAL_SCALE: f32 = 0.95;
+const MODAL_MAX_WIDTH: f32 = controls::FORM_MAX_WIDTH + 24.0;
+const MODAL_HEIGHT_SCALE: f32 = 0.9;
+const MODAL_MAX_HEIGHT: f32 = 720.0;
 const SCRIM_ALPHA: u8 = 112;
 const MODAL_RADIUS: u8 = 4;
 
@@ -39,21 +45,9 @@ fn show_body(
     modal: bool,
 ) {
     let settings = &snapshot.connection_settings;
-    header(ui, snapshot, tokens, i18n);
+    header(ui, i18n);
     ui.add_space(8.0);
-    tab_bar(ui, settings.selected_tab, commands, i18n);
-    ui.separator();
-
-    panel(tokens).show(ui, |ui| match settings.selected_tab {
-        ConnectionSettingsTab::Mqtt => mqtt_tab(ui, settings, tokens, commands, i18n),
-        ConnectionSettingsTab::Tls => tls_tab(ui, settings, tokens, commands, i18n),
-        ConnectionSettingsTab::Proxy => proxy_tab(ui, settings, tokens, commands, i18n),
-        ConnectionSettingsTab::Lwt => lwt_tab(ui, settings, tokens, commands, i18n),
-    });
-
-    ui.add_space(8.0);
-    validation(ui, settings, tokens);
-    keyring_status(ui, settings.keyring_state, tokens, i18n);
+    settings_content(ui, settings, tokens, commands, i18n);
     ui.add_space(8.0);
     action_bar(ui, settings, commands, i18n, modal);
     ui.add_space(8.0);
@@ -66,11 +60,11 @@ fn show_body(
 
 pub fn overlay(
     ui: &mut Ui,
-    view_rect: Rect,
     snapshot: &AppSnapshot,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
+    padding: f32,
 ) {
     let Some(editor_id) = snapshot.connection_settings_overlay else {
         return;
@@ -78,17 +72,24 @@ pub fn overlay(
     if snapshot.selected_connection != Some(editor_id) {
         return;
     }
+    if ui.ctx().input(|input| input.key_pressed(egui::Key::Escape)) {
+        send(commands, AppCommand::DiscardConnectionSettings);
+    }
 
-    let modal_size = view_rect.size() * MODAL_SCALE;
+    let overlay_rect = ui.max_rect().expand2(egui::vec2(padding, 0.0));
+    let modal_size = egui::vec2(
+        (overlay_rect.width() * 0.95).min(MODAL_MAX_WIDTH),
+        (overlay_rect.height() * MODAL_HEIGHT_SCALE).min(MODAL_MAX_HEIGHT),
+    );
     egui::Area::new(egui::Id::new((
         "connection-settings-overlay",
         editor_id.to_string(),
     )))
     .order(egui::Order::Foreground)
-    .fixed_pos(view_rect.min)
+    .fixed_pos(overlay_rect.min)
     .movable(false)
     .show(ui.ctx(), |ui| {
-        let (scrim_rect, _) = ui.allocate_exact_size(view_rect.size(), Sense::click());
+        let (scrim_rect, _) = ui.allocate_exact_size(overlay_rect.size(), Sense::click());
         ui.painter().rect_filled(
             scrim_rect,
             CornerRadius::ZERO,
@@ -99,13 +100,7 @@ pub fn overlay(
         ui.painter().rect_filled(
             modal_rect,
             CornerRadius::same(MODAL_RADIUS),
-            tokens.panel_bg,
-        );
-        ui.painter().rect_stroke(
-            modal_rect,
-            CornerRadius::same(MODAL_RADIUS),
-            Stroke::new(1.0, tokens.border),
-            StrokeKind::Inside,
+            tokens.window_bg,
         );
 
         let content_rect = modal_rect.shrink(12.0);
@@ -114,24 +109,69 @@ pub fn overlay(
         content_ui.set_max_size(content_rect.size());
         let body_id = egui::Id::new(("connection-settings-overlay-body", editor_id.to_string()));
         content_ui.vertical(|ui| {
+            modal_header(ui, commands, i18n);
+            ui.separator();
+            let footer_height = crate::theme::CONTROL_HEIGHT + 20.0;
+            let body_height = (ui.available_height() - footer_height).max(120.0);
             ScrollArea::vertical()
                 .id_salt(body_id)
+                .max_height(body_height)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    show_body(ui, snapshot, tokens, commands, i18n, true);
+                    settings_content(ui, &snapshot.connection_settings, tokens, commands, i18n);
+                    ui.add_space(8.0);
+                    internal_id_hint(ui, &snapshot.connection_settings, tokens, i18n);
                 });
+            ui.add_space(8.0);
+            action_bar(ui, &snapshot.connection_settings, commands, i18n, true);
+            if snapshot.connection_settings.delete_confirmation_open {
+                delete_confirmation(ui, &snapshot.connection_settings, commands, i18n);
+            }
         });
     });
 }
 
-fn header(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, i18n: &I18n) {
-    ui.horizontal_wrapped(|ui| {
+fn header(ui: &mut Ui, i18n: &I18n) {
+    ui.heading(i18n.text("connection-settings-title"));
+}
+
+fn modal_header(ui: &mut Ui, commands: &AppCommandSender, i18n: &I18n) {
+    ui.horizontal(|ui| {
         ui.heading(i18n.text("connection-settings-title"));
-        if let Some(connection) = snapshot.selected_connection() {
-            ui.label(RichText::new(&connection.name).strong());
-            ui.label(RichText::new(&connection.endpoint).color(tokens.text_secondary));
-        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if with_icon_button_padding(ui, |ui| {
+                ui.add_sized(
+                    square_icon_button_size(),
+                    Button::new(RichText::new(regular::X).size(16.0)),
+                )
+            })
+            .on_hover_text(i18n.text("common-cancel"))
+            .clicked()
+            {
+                send(commands, AppCommand::DiscardConnectionSettings);
+            }
+        });
     });
+}
+
+fn settings_content(
+    ui: &mut Ui,
+    settings: &ConnectionSettingsSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    tab_bar(ui, settings.selected_tab, commands, i18n);
+    ui.separator();
+    match settings.selected_tab {
+        ConnectionSettingsTab::Mqtt => mqtt_tab(ui, settings, tokens, commands, i18n),
+        ConnectionSettingsTab::Tls => tls_tab(ui, settings, tokens, commands, i18n),
+        ConnectionSettingsTab::Proxy => proxy_tab(ui, settings, tokens, commands, i18n),
+        ConnectionSettingsTab::Lwt => lwt_tab(ui, settings, tokens, commands, i18n),
+    }
+    ui.add_space(8.0);
+    validation(ui, settings, tokens);
+    keyring_status(ui, settings.keyring_state, tokens, i18n);
 }
 
 fn tab_bar(ui: &mut Ui, selected: ConnectionSettingsTab, commands: &AppCommandSender, i18n: &I18n) {
@@ -339,11 +379,11 @@ fn lwt_tab(
     i18n: &I18n,
 ) {
     let mut enabled = settings.lwt_enabled;
-    if crate::widgets::checkbox(ui, &mut enabled, i18n.text("connection-enable-last-will"))
-        .changed()
-    {
-        send(commands, AppCommand::SetLwtEnabled(enabled));
-    }
+    row(ui, &i18n.text("connection-enable-last-will"), |ui| {
+        if crate::widgets::checkbox(ui, &mut enabled, "").changed() {
+            send(commands, AppCommand::SetLwtEnabled(enabled));
+        }
+    });
     ui.add_enabled_ui(settings.lwt_enabled, |ui| {
         field(
             ui,
@@ -359,24 +399,27 @@ fn lwt_tab(
             ConnectionSettingFlag::LwtRetained,
             commands,
         );
-        let mut payload = settings.lwt_payload.clone();
-        if ui
-            .add(
-                crate::widgets::padded_text_edit(TextEdit::multiline(&mut payload))
-                    .font(egui::TextStyle::Monospace)
-                    .desired_rows(5)
-                    .desired_width(f32::INFINITY),
-            )
-            .changed()
-        {
-            send(
-                commands,
-                AppCommand::UpdateConnectionSetting {
-                    field: ConnectionSettingField::LwtPayload,
-                    value: payload,
-                },
-            );
-        }
+        row(ui, &i18n.text("connection-lwt-payload"), |ui| {
+            let mut payload = settings.lwt_payload.clone();
+            if ui
+                .add_sized(
+                    [control_width(ui), 120.0],
+                    crate::widgets::padded_text_edit(TextEdit::multiline(&mut payload))
+                        .font(egui::TextStyle::Monospace)
+                        .desired_rows(5)
+                        .desired_width(f32::INFINITY),
+                )
+                .changed()
+            {
+                send(
+                    commands,
+                    AppCommand::UpdateConnectionSetting {
+                        field: ConnectionSettingField::LwtPayload,
+                        value: payload,
+                    },
+                );
+            }
+        });
     });
     if !settings.lwt_enabled {
         ui.label(
@@ -415,67 +458,4 @@ fn internal_id_hint(
         .monospace()
         .color(tokens.text_secondary),
     );
-}
-
-fn action_bar(
-    ui: &mut Ui,
-    settings: &ConnectionSettingsSnapshot,
-    commands: &AppCommandSender,
-    i18n: &I18n,
-    modal: bool,
-) {
-    ui.horizontal(|ui| {
-        let cancel_label = if modal {
-            i18n.text("common-cancel")
-        } else {
-            i18n.text("common-discard")
-        };
-        if ui
-            .add_enabled(settings.dirty || modal, Button::new(cancel_label))
-            .clicked()
-        {
-            send(commands, AppCommand::DiscardConnectionSettings);
-        }
-        if ui
-            .button(format!("{}...", i18n.text("common-delete")))
-            .clicked()
-        {
-            send(commands, AppCommand::RequestDeleteConnection);
-        }
-        let can_save = settings.dirty && settings.valid;
-        let save = ui.add_enabled(can_save, Button::new(i18n.text("common-save")));
-        if save.clicked() {
-            send(commands, AppCommand::SaveConnectionSettings);
-        }
-        if !can_save {
-            save.on_hover_text(&settings.save_disabled_reason);
-        }
-    });
-}
-
-fn delete_confirmation(
-    ui: &mut Ui,
-    settings: &ConnectionSettingsSnapshot,
-    commands: &AppCommandSender,
-    i18n: &I18n,
-) {
-    Window::new(i18n.text("connection-delete-title"))
-        .collapsible(false)
-        .resizable(false)
-        .show(ui.ctx(), |ui| {
-            ui.label(format!(
-                "{} {}?",
-                i18n.text("common-delete"),
-                settings.profile_name
-            ));
-            ui.label(i18n.text("connection-delete-detail"));
-            ui.horizontal(|ui| {
-                if ui.button(i18n.text("common-cancel")).clicked() {
-                    send(commands, AppCommand::CancelDeleteConnection);
-                }
-                if ui.button(i18n.text("common-delete")).clicked() {
-                    send(commands, AppCommand::ConfirmDeleteConnection);
-                }
-            });
-        });
 }

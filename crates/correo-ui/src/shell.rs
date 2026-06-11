@@ -1,35 +1,35 @@
-use correo_core::{
-    sample_snapshot, AppCommandSender, AppSnapshot, ConnectionSurface, ThemeMode, Workspace,
-};
+use correo_core::{sample_snapshot, AppCommandSender, AppSnapshot, ThemeMode, Workspace};
+use correo_style::{apply_theme, layout, tokens, ThemeTokens};
 use egui::{CentralPanel, Frame, SidePanel, TopBottomPanel};
 
 use crate::{
-    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, theme, workspace,
+    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, toasts,
+    transfer_wizard, workspace,
 };
 
 pub const THEME_KEY: &str = "correo.theme-mode";
-const HEADER_HEIGHT: f32 = 46.0;
-const HEADER_MARGIN_X: i8 = 16;
-const HEADER_MARGIN_Y: i8 = 6;
 
 pub struct CorreoUi {
     command_sender: AppCommandSender,
     snapshot: AppSnapshot,
     i18n: I18n,
     icons_installed: bool,
+    transfer_wizard: transfer_wizard::State,
 }
 
 impl CorreoUi {
     pub fn new(creation_context: &eframe::CreationContext<'_>) -> Self {
         let theme_mode = stored_theme(creation_context);
-        let snapshot = sample_snapshot(theme_mode);
-        theme::apply_theme(&creation_context.egui_ctx, theme_mode);
+        let snapshot = sample_snapshot(theme_mode.clone());
+        apply_theme(&creation_context.egui_ctx, &theme_mode);
+        egui_extras::install_image_loaders(&creation_context.egui_ctx);
         icons::install(&creation_context.egui_ctx);
         Self {
             command_sender: AppCommandSender::disconnected(),
             i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: true,
+            transfer_wizard: transfer_wizard::State::default(),
         }
     }
 
@@ -39,6 +39,7 @@ impl CorreoUi {
             i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: false,
+            transfer_wizard: transfer_wizard::State::default(),
         }
     }
 
@@ -51,6 +52,7 @@ impl CorreoUi {
             i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: false,
+            transfer_wizard: transfer_wizard::State::default(),
         }
     }
 
@@ -59,13 +61,15 @@ impl CorreoUi {
         snapshot: AppSnapshot,
         command_sender: AppCommandSender,
     ) -> Self {
-        theme::apply_theme(&creation_context.egui_ctx, snapshot.theme_mode);
+        apply_theme(&creation_context.egui_ctx, &snapshot.theme_mode);
+        egui_extras::install_image_loaders(&creation_context.egui_ctx);
         icons::install(&creation_context.egui_ctx);
         Self {
             command_sender,
             i18n: I18n::new(&snapshot.global_settings.language),
             snapshot,
             icons_installed: true,
+            transfer_wizard: transfer_wizard::State::default(),
         }
     }
 
@@ -79,28 +83,30 @@ impl CorreoUi {
     }
 
     pub fn theme_mode(&self) -> ThemeMode {
-        self.snapshot.theme_mode
+        self.snapshot.theme_mode.clone()
     }
 
     pub fn draw(&mut self, context: &egui::Context) {
         self.ensure_icons_installed(context);
         let snapshot = self.snapshot.clone();
-        theme::apply_theme(context, snapshot.theme_mode);
-        let tokens = theme::tokens(context, snapshot.theme_mode);
+        apply_theme(context, &snapshot.theme_mode);
+        let tokens = tokens(context, &snapshot.theme_mode);
         let commands = &self.command_sender;
         let i18n = &self.i18n;
 
         if snapshot.migration_recovery.blocks_normal_shell() {
             TopBottomPanel::top("correo-recovery-command")
-                .exact_height(HEADER_HEIGHT)
+                .exact_height(layout::HEADER_HEIGHT)
                 .frame(top_frame(tokens))
                 .show(context, |ui| {
                     migration_recovery::top_bar(ui, &snapshot.migration_recovery);
                 });
 
             SidePanel::left("correo-recovery-context")
-                .default_width(280.0)
-                .width_range(240.0..=360.0)
+                .default_width(layout::RECOVERY_CONTEXT_DEFAULT_WIDTH)
+                .width_range(
+                    layout::RECOVERY_CONTEXT_MIN_WIDTH..=layout::RECOVERY_CONTEXT_MAX_WIDTH,
+                )
                 .resizable(true)
                 .frame(sidebar_frame(tokens))
                 .show(context, |ui| {
@@ -116,14 +122,14 @@ impl CorreoUi {
         }
 
         TopBottomPanel::top("correo-command")
-            .exact_height(HEADER_HEIGHT)
+            .exact_height(layout::HEADER_HEIGHT)
             .frame(top_frame(tokens))
             .show(context, |ui| {
                 command_bar::command_bar(ui, &snapshot, tokens, commands, i18n);
             });
 
         SidePanel::left("correo-rail")
-            .exact_width(48.0)
+            .exact_width(layout::RAIL_WIDTH)
             .resizable(false)
             .frame(rail_frame(tokens))
             .show(context, |ui| {
@@ -132,8 +138,8 @@ impl CorreoUi {
 
         if context_panel_visible(&snapshot) {
             SidePanel::left("correo-context")
-                .default_width(260.0)
-                .width_range(220.0..=360.0)
+                .default_width(layout::SIDEBAR_DEFAULT_WIDTH)
+                .width_range(layout::SIDEBAR_MIN_WIDTH..=layout::SIDEBAR_MAX_WIDTH)
                 .resizable(true)
                 .frame(sidebar_frame(tokens))
                 .show(context, |ui| match snapshot.active_workspace {
@@ -151,6 +157,15 @@ impl CorreoUi {
             .show(context, |ui| {
                 workspace::show(ui, &snapshot, tokens, commands, i18n);
             });
+        transfer_wizard::show(
+            context,
+            &snapshot,
+            tokens,
+            commands,
+            i18n,
+            &mut self.transfer_wizard,
+        );
+        toasts::show(context, &snapshot, tokens);
     }
 
     fn ensure_icons_installed(&mut self, context: &egui::Context) {
@@ -169,9 +184,6 @@ fn context_panel_visible(snapshot: &AppSnapshot) -> bool {
             | Workspace::Diagnostics
             | Workspace::Settings
             | Workspace::About
-    ) && !matches!(
-        (snapshot.active_workspace, snapshot.connection_surface),
-        (Workspace::Connections, ConnectionSurface::Transfer)
     )
 }
 
@@ -198,48 +210,56 @@ pub fn stored_theme(creation_context: &eframe::CreationContext<'_>) -> ThemeMode
         .unwrap_or_default()
 }
 
-fn top_frame(tokens: theme::ThemeTokens) -> Frame {
+fn top_frame(tokens: ThemeTokens) -> Frame {
     Frame::NONE
-        .fill(tokens.panel_bg)
-        .inner_margin(egui::Margin::symmetric(HEADER_MARGIN_X, HEADER_MARGIN_Y))
+        .fill(chrome_bg(tokens))
+        .inner_margin(egui::Margin::symmetric(
+            layout::HEADER_MARGIN_X,
+            layout::HEADER_MARGIN_Y,
+        ))
 }
 
-fn rail_frame(tokens: theme::ThemeTokens) -> Frame {
+fn rail_frame(tokens: ThemeTokens) -> Frame {
     Frame::NONE
-        .fill(tokens.panel_bg)
-        .inner_margin(egui::Margin::same(4))
+        .fill(chrome_bg(tokens))
+        .inner_margin(egui::Margin::same(layout::RAIL_MARGIN))
 }
 
-fn sidebar_frame(tokens: theme::ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .inner_margin(egui::Margin::same(10))
+fn chrome_bg(tokens: ThemeTokens) -> egui::Color32 {
+    tokens.panel_raised.gamma_multiply(1.12)
 }
 
-fn central_frame(tokens: theme::ThemeTokens) -> Frame {
+fn sidebar_frame(tokens: ThemeTokens) -> Frame {
     Frame::NONE
         .fill(tokens.window_bg)
-        .inner_margin(egui::Margin::same(12))
+        .inner_margin(layout::sidebar_margin())
+}
+
+fn central_frame(tokens: ThemeTokens) -> Frame {
+    Frame::NONE
+        .fill(tokens.window_bg)
+        .inner_margin(egui::Margin::same(layout::CENTRAL_MARGIN))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use correo_style::static_tokens;
 
     #[test]
     fn header_frame_uses_larger_height_and_horizontal_padding() {
-        let frame = top_frame(theme::static_tokens(ThemeMode::Dark));
+        let frame = top_frame(static_tokens(&ThemeMode::Dark));
 
-        assert_eq!(HEADER_HEIGHT, 46.0);
+        assert_eq!(layout::HEADER_HEIGHT, 64.0);
         assert_eq!(
             frame.inner_margin,
-            egui::Margin::symmetric(HEADER_MARGIN_X, HEADER_MARGIN_Y)
+            egui::Margin::symmetric(layout::HEADER_MARGIN_X, layout::HEADER_MARGIN_Y)
         );
     }
 
     #[test]
     fn global_chrome_frames_do_not_draw_decorative_strokes() {
-        let tokens = theme::static_tokens(ThemeMode::Dark);
+        let tokens = static_tokens(&ThemeMode::Dark);
 
         assert_eq!(top_frame(tokens).stroke, egui::Stroke::NONE);
         assert_eq!(rail_frame(tokens).stroke, egui::Stroke::NONE);

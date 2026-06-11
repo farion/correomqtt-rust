@@ -3,11 +3,15 @@ use egui::{Button, RichText, ScrollArea, Ui};
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
-use crate::widgets::{tile_list_content_width, tile_scroll_bar_rect};
+use correo_style::layout;
+
+use crate::widgets::{
+    fill_remaining_tile_rows, tile_list_content_width, tile_scroll_bar_rect_with_height,
+};
 
 use super::{
     install_button, marketplace_capability_chips, metadata_row, plugin_split, plugin_tile,
-    search_field, send,
+    search_field, send, TILE_HEIGHT,
 };
 
 pub(super) fn tab(
@@ -40,27 +44,25 @@ fn marketplace_list(
     ui.add_space(4.0);
     search_field(ui, plugins, commands, i18n);
     ui.add_space(8.0);
+    let list_height = ui.available_height().max(layout::TABLE_MIN_HEIGHT);
     ScrollArea::vertical()
         .id_salt("plugin-marketplace-list")
+        .max_height(list_height)
         .auto_shrink([false, false])
-        .scroll_bar_rect(tile_scroll_bar_rect(ui))
+        .scroll_bar_rect(tile_scroll_bar_rect_with_height(ui, list_height))
         .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             ui.set_width(tile_list_content_width(ui));
-            if filtered.is_empty() {
-                ui.label(
-                    RichText::new(i18n.text("plugin-no-marketplace-match"))
-                        .color(tokens.text_secondary),
-                );
-                return;
+            for (index, plugin) in filtered.into_iter().enumerate() {
+                marketplace_row(ui, index, plugins, plugin, tokens, commands, i18n);
             }
-            for plugin in filtered {
-                marketplace_row(ui, plugins, plugin, tokens, commands, i18n);
-            }
+            fill_remaining_tile_rows(ui, filtered.len(), TILE_HEIGHT, list_height, tokens);
         });
 }
 
 fn marketplace_row(
     ui: &mut Ui,
+    index: usize,
     plugins: &PluginSurfaceSnapshot,
     plugin: &PluginMarketplaceRow,
     tokens: ThemeTokens,
@@ -69,6 +71,7 @@ fn marketplace_row(
 ) {
     let response = plugin_tile(
         ui,
+        index,
         plugins.selected_marketplace_plugin_id == plugin.id,
         tokens,
         |ui| {

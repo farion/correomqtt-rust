@@ -343,6 +343,7 @@ fn bundled_plugin(
                 export: bundled_export_name(*hook).to_owned(),
             })
             .collect(),
+        themes: Vec::new(),
         config_schema: Some(config_schema),
     };
     manifest

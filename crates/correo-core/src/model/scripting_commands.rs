@@ -10,7 +10,9 @@ impl AppModel {
                 self.select_script_connection(connection_id);
             }
             AppCommand::SelectScript(name) => self.select_script(name.clone()),
+            AppCommand::RequestCreateScript => self.request_create_script(),
             AppCommand::UpdateNewScriptName(name) => self.update_new_script_name(name.clone()),
+            AppCommand::CancelCreateScript => self.cancel_create_script(),
             AppCommand::CreateScript => self.create_script(),
             AppCommand::UpdateScriptSource(source) => self.update_script_source(source.clone()),
             AppCommand::SaveScript => self.save_script(),

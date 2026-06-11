@@ -1,9 +1,10 @@
 use correo_mqtt::{IncomingMessage, Qos, SessionState, TopicFilter, TopicName};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use crate::{
     AppModel, ConnectDisabledReason, ConnectionState, Diagnostic, MessageRow, MqttCommand,
     MqttEvent, MqttFailure, MqttOperation, PublishHistoryRow, QosLevel, SubscriptionRow,
-    WorkflowFeedback,
+    WorkbenchSnapshot, WorkflowFeedback,
 };
 
 impl AppModel {
@@ -15,6 +16,62 @@ impl AppModel {
     pub(super) fn update_publish_payload(&mut self, payload: String) {
         self.snapshot.workbench.publish.payload = payload;
         self.refresh_publish_validation();
+    }
+
+    pub(super) fn copy_publish_history_message_to_publish_form(&mut self, id: u32) {
+        let Some(row) = self
+            .snapshot
+            .workbench
+            .publish
+            .history
+            .iter()
+            .find(|row| row.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        self.snapshot.workbench.publish.topic = row.topic;
+        self.snapshot.workbench.publish.qos = row.qos;
+        self.snapshot.workbench.publish.retained = row.retained;
+        self.snapshot.workbench.publish.payload =
+            String::from_utf8_lossy(&row.payload).into_owned();
+        self.snapshot.workbench.publish.selected_history_id = Some(id);
+        self.snapshot.workbench.narrow_tab = crate::WorkbenchTab::Publish;
+        self.refresh_publish_validation();
+    }
+
+    pub(super) fn copy_incoming_message_to_publish_form(&mut self, id: u32) {
+        let Some(message) = self
+            .snapshot
+            .workbench
+            .messages
+            .iter()
+            .find(|message| message.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        self.snapshot.workbench.publish.topic = message.topic;
+        self.snapshot.workbench.publish.qos = message.qos;
+        self.snapshot.workbench.publish.retained = message.retained;
+        self.snapshot.workbench.publish.payload =
+            String::from_utf8_lossy(&message.payload).into_owned();
+        self.snapshot.workbench.selected_message_id = Some(id);
+        self.snapshot.workbench.narrow_tab = crate::WorkbenchTab::Publish;
+        self.refresh_publish_validation();
+    }
+
+    pub(super) fn clear_publish_history(&mut self) {
+        self.snapshot.workbench.publish.history.clear();
+        self.snapshot.workbench.publish.selected_history_id = None;
+    }
+
+    pub(super) fn clear_incoming_messages(&mut self) {
+        self.snapshot.workbench.messages.clear();
+        self.snapshot.workbench.selected_message_id = None;
+        for subscription in &mut self.snapshot.workbench.subscribe.subscriptions {
+            subscription.message_count = 0;
+        }
     }
 
     pub(super) fn update_publish_qos(&mut self, qos: QosLevel) {
@@ -88,7 +145,13 @@ impl AppModel {
                 qos,
                 retain,
             } => {
-                self.add_publish_success(topic.as_str(), payload.len(), qos_level(qos), retain);
+                self.add_publish_success(
+                    connection_id,
+                    topic.as_str(),
+                    payload,
+                    qos_level(qos),
+                    retain,
+                );
                 self.push_diagnostic(Diagnostic::info(format!(
                     "MQTT publish completed for {} on {}.",
                     topic.as_str(),
@@ -99,16 +162,24 @@ impl AppModel {
                 connection_id,
                 subscription,
             } => {
-                self.add_subscription(SubscriptionRow {
-                    topic_filter: subscription.topic_filter.as_str().to_owned(),
-                    qos: qos_level(subscription.qos),
-                    message_count: 0,
-                    active: true,
-                });
-                self.snapshot.workbench.subscribe.feedback = Some(WorkflowFeedback::info(format!(
-                    "Subscribed to {}.",
-                    subscription.topic_filter.as_str()
-                )));
+                self.add_subscription(
+                    connection_id,
+                    SubscriptionRow {
+                        topic_filter: subscription.topic_filter.as_str().to_owned(),
+                        qos: qos_level(subscription.qos),
+                        message_count: 0,
+                        active: true,
+                        messages_visible: true,
+                        selected: false,
+                    },
+                );
+                self.set_subscribe_feedback(
+                    connection_id,
+                    WorkflowFeedback::info(format!(
+                        "Subscribed to {}.",
+                        subscription.topic_filter.as_str()
+                    )),
+                );
                 self.push_diagnostic(Diagnostic::info(format!(
                     "MQTT subscribe completed for {} on {}.",
                     subscription.topic_filter.as_str(),
@@ -119,11 +190,14 @@ impl AppModel {
                 connection_id,
                 request,
             } => {
-                self.remove_subscription(request.topic_filter.as_str());
-                self.snapshot.workbench.subscribe.feedback = Some(WorkflowFeedback::info(format!(
-                    "Unsubscribed from {}.",
-                    request.topic_filter.as_str()
-                )));
+                self.remove_subscription(connection_id, request.topic_filter.as_str());
+                self.set_subscribe_feedback(
+                    connection_id,
+                    WorkflowFeedback::info(format!(
+                        "Unsubscribed from {}.",
+                        request.topic_filter.as_str()
+                    )),
+                );
                 self.push_diagnostic(Diagnostic::info(format!(
                     "MQTT unsubscribe completed for {} on {}.",
                     request.topic_filter.as_str(),
@@ -160,18 +234,22 @@ impl AppModel {
                 );
             }
             MqttOperation::Publish => {
-                self.snapshot.workbench.publish.feedback =
-                    Some(WorkflowFeedback::info("Publish accepted by MQTT service."));
+                self.set_publish_feedback(
+                    connection_id,
+                    WorkflowFeedback::info("Publish accepted by MQTT service."),
+                );
             }
             MqttOperation::Subscribe => {
-                self.snapshot.workbench.subscribe.feedback = Some(WorkflowFeedback::info(
-                    "Subscribe accepted by MQTT service.",
-                ));
+                self.set_subscribe_feedback(
+                    connection_id,
+                    WorkflowFeedback::info("Subscribe accepted by MQTT service."),
+                );
             }
             MqttOperation::Unsubscribe => {
-                self.snapshot.workbench.subscribe.feedback = Some(WorkflowFeedback::info(
-                    "Unsubscribe accepted by MQTT service.",
-                ));
+                self.set_subscribe_feedback(
+                    connection_id,
+                    WorkflowFeedback::info("Unsubscribe accepted by MQTT service."),
+                );
             }
             _ => {}
         }
@@ -241,15 +319,21 @@ impl AppModel {
             Some(ConnectDisabledReason::Busy),
             format!("reconnect attempt {attempt}"),
         );
-        self.snapshot.workbench.reconnect_status = format!("Reconnect attempt {attempt}");
+        self.workbench_for_connection_mut(connection_id)
+            .reconnect_status = format!("Reconnect attempt {attempt}");
+        self.mark_workbench_dirty(connection_id);
     }
 
     fn add_incoming_message(&mut self, message: IncomingMessage) {
         let topic = message.topic.as_str().to_owned();
+        let connection_id = message.connection_id;
         let row = MessageRow {
-            id: self.next_message_id(),
+            id: self
+                .workbench_for_connection(connection_id)
+                .map(next_message_id)
+                .unwrap_or(1),
             topic: topic.clone(),
-            timestamp: "now".to_owned(),
+            timestamp: current_timestamp(),
             qos: qos_level(message.qos),
             retained: message.retain,
             payload: message.payload.clone(),
@@ -259,30 +343,24 @@ impl AppModel {
             diagnostics: Vec::new(),
             formatted_detail: None,
         };
-        self.snapshot.workbench.messages.insert(0, row);
-        self.snapshot.workbench.selected_message_id = self
-            .snapshot
-            .workbench
-            .messages
-            .first()
-            .map(|message| message.id);
-        self.increment_matching_subscriptions(&topic);
-        self.update_recent_message_count(message.connection_id);
+        let workbench = self.workbench_for_connection_mut(connection_id);
+        workbench.messages.insert(0, row);
+        workbench.selected_message_id = workbench.messages.first().map(|message| message.id);
+        self.increment_matching_subscriptions(connection_id, &topic);
+        self.update_recent_message_count(connection_id);
+        self.mark_workbench_dirty(connection_id);
     }
 
-    fn next_message_id(&self) -> u32 {
-        self.snapshot
-            .workbench
-            .messages
-            .iter()
-            .map(|message| message.id)
-            .max()
-            .unwrap_or(0)
-            .saturating_add(1)
-    }
-
-    fn increment_matching_subscriptions(&mut self, topic: &str) {
-        for subscription in &mut self.snapshot.workbench.subscribe.subscriptions {
+    fn increment_matching_subscriptions(
+        &mut self,
+        connection_id: correo_mqtt::ConnectionId,
+        topic: &str,
+    ) {
+        for subscription in &mut self
+            .workbench_for_connection_mut(connection_id)
+            .subscribe
+            .subscriptions
+        {
             if subscription.active && topic_matches_filter(topic, &subscription.topic_filter) {
                 subscription.message_count = subscription.message_count.saturating_add(1);
             }
@@ -304,36 +382,50 @@ impl AppModel {
             failure.operation.label(),
             failure.report.message
         );
-        match failure.operation {
-            MqttOperation::Publish => {
-                self.snapshot.workbench.publish.feedback =
-                    Some(WorkflowFeedback::error(message.clone()));
-            }
-            MqttOperation::Subscribe | MqttOperation::Unsubscribe => {
-                self.snapshot.workbench.subscribe.feedback =
-                    Some(WorkflowFeedback::error(message.clone()));
-            }
-            _ => {}
-        }
         if let Some(connection_id) = failure.connection_id {
+            match failure.operation {
+                MqttOperation::Publish => {
+                    self.set_publish_feedback(
+                        connection_id,
+                        WorkflowFeedback::error(message.clone()),
+                    );
+                }
+                MqttOperation::Subscribe | MqttOperation::Unsubscribe => {
+                    self.set_subscribe_feedback(
+                        connection_id,
+                        WorkflowFeedback::error(message.clone()),
+                    );
+                }
+                _ => {}
+            }
             self.update_connection_state(
                 connection_id,
                 ConnectionState::Error,
                 None,
                 format!("{} failed", failure.operation.label()),
             );
+        } else {
+            match failure.operation {
+                MqttOperation::Publish => {
+                    self.snapshot.workbench.publish.feedback =
+                        Some(WorkflowFeedback::error(message.clone()));
+                    self.mark_active_workbench_dirty();
+                }
+                MqttOperation::Subscribe | MqttOperation::Unsubscribe => {
+                    self.snapshot.workbench.subscribe.feedback =
+                        Some(WorkflowFeedback::error(message.clone()));
+                    self.mark_active_workbench_dirty();
+                }
+                _ => {}
+            }
         }
         self.push_diagnostic(Diagnostic::error(message));
     }
 
-    fn add_subscription(&mut self, row: SubscriptionRow) {
-        push_recent_unique(
-            &mut self.snapshot.workbench.subscribe.topic_history,
-            &row.topic_filter,
-        );
-        if let Some(existing) = self
-            .snapshot
-            .workbench
+    fn add_subscription(&mut self, connection_id: correo_mqtt::ConnectionId, row: SubscriptionRow) {
+        let workbench = self.workbench_for_connection_mut(connection_id);
+        push_recent_unique(&mut workbench.subscribe.topic_history, &row.topic_filter);
+        if let Some(existing) = workbench
             .subscribe
             .subscriptions
             .iter_mut()
@@ -341,47 +433,86 @@ impl AppModel {
         {
             existing.qos = row.qos;
             existing.active = true;
+            existing.messages_visible = true;
+            self.mark_workbench_dirty(connection_id);
             return;
         }
-        self.snapshot
-            .workbench
-            .subscribe
-            .subscriptions
-            .insert(0, row);
+        workbench.subscribe.subscriptions.insert(0, row);
+        self.mark_workbench_dirty(connection_id);
     }
 
-    fn remove_subscription(&mut self, topic_filter: &str) {
-        self.snapshot
-            .workbench
+    fn remove_subscription(
+        &mut self,
+        connection_id: correo_mqtt::ConnectionId,
+        topic_filter: &str,
+    ) {
+        self.workbench_for_connection_mut(connection_id)
             .subscribe
             .subscriptions
             .retain(|subscription| subscription.topic_filter != topic_filter);
+        self.mark_workbench_dirty(connection_id);
     }
 
     fn add_publish_success(
         &mut self,
+        connection_id: correo_mqtt::ConnectionId,
         topic: &str,
-        byte_size: usize,
+        payload: Vec<u8>,
         qos: QosLevel,
         retained: bool,
     ) {
-        push_recent_unique(&mut self.snapshot.workbench.publish.topic_history, topic);
-        self.snapshot.workbench.publish.history.insert(
+        let workbench = self.workbench_for_connection_mut(connection_id);
+        let byte_size = payload.len();
+        push_recent_unique(&mut workbench.publish.topic_history, topic);
+        let id = next_publish_history_id(workbench);
+        let mut badges = Vec::new();
+        if retained {
+            badges.push("retained".to_owned());
+        }
+        workbench.publish.history.insert(
             0,
             PublishHistoryRow {
+                id,
                 topic: topic.to_owned(),
-                timestamp: "now".to_owned(),
+                timestamp: current_timestamp(),
                 qos,
                 retained,
+                payload_preview: payload_preview(&payload),
+                payload,
                 byte_size,
+                badges,
             },
         );
-        self.snapshot.workbench.publish.feedback = Some(WorkflowFeedback::info(format!(
+        workbench.publish.selected_history_id = Some(id);
+        workbench.publish.feedback = Some(WorkflowFeedback::info(format!(
             "Published {byte_size} bytes to {topic}."
         )));
+        self.mark_workbench_dirty(connection_id);
     }
 
-    fn refresh_publish_validation(&mut self) {
+    fn set_publish_feedback(
+        &mut self,
+        connection_id: correo_mqtt::ConnectionId,
+        feedback: WorkflowFeedback,
+    ) {
+        self.workbench_for_connection_mut(connection_id)
+            .publish
+            .feedback = Some(feedback);
+        self.mark_workbench_dirty(connection_id);
+    }
+
+    fn set_subscribe_feedback(
+        &mut self,
+        connection_id: correo_mqtt::ConnectionId,
+        feedback: WorkflowFeedback,
+    ) {
+        self.workbench_for_connection_mut(connection_id)
+            .subscribe
+            .feedback = Some(feedback);
+        self.mark_workbench_dirty(connection_id);
+    }
+
+    pub(super) fn refresh_publish_validation(&mut self) {
         let publish = &mut self.snapshot.workbench.publish;
         let topic = publish.topic.trim();
         publish.validation = publish_validation(topic, publish.payload.len());
@@ -424,6 +555,12 @@ fn payload_preview(payload: &[u8]) -> String {
     preview
 }
 
+fn current_timestamp() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| OffsetDateTime::now_utc().unix_timestamp().to_string())
+}
+
 fn incoming_badges(message: &IncomingMessage) -> Vec<String> {
     let mut badges = Vec::new();
     if message.retain {
@@ -448,6 +585,27 @@ fn subscribe_validation(topic: &str) -> Vec<String> {
         Ok(_) => "Topic filter is valid".to_owned(),
         Err(error) => format!("Topic filter error: {}", error.to_report().message),
     }]
+}
+
+fn next_message_id(workbench: &WorkbenchSnapshot) -> u32 {
+    workbench
+        .messages
+        .iter()
+        .map(|message| message.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1)
+}
+
+fn next_publish_history_id(workbench: &WorkbenchSnapshot) -> u32 {
+    workbench
+        .publish
+        .history
+        .iter()
+        .map(|row| row.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1)
 }
 
 fn push_recent_unique(entries: &mut Vec<String>, topic: &str) {

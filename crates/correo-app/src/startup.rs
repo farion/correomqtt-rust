@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use correo_core::{startup_state_from_current, startup_state_from_migration, Diagnostic};
-use correo_core::{StartupState, ThemeMode};
+use std::collections::BTreeMap;
+
+use correo_core::{
+    startup_state_from_current_with_workbenches, startup_state_from_migration, Diagnostic,
+};
+use correo_core::{StartupState, ThemeMode, WorkbenchSnapshot};
 use correo_storage::current::{
     AppConfig, ConfigStore, HistoryPersistenceSnapshot, HistoryStore, ScriptPersistenceSnapshot,
     ScriptStore,
@@ -16,7 +20,7 @@ pub fn load_startup_state(fallback_theme: ThemeMode) -> StartupState {
             continue;
         }
 
-        return load_root(&root, fallback_theme).unwrap_or_else(|error| {
+        return load_root(&root, fallback_theme.clone()).unwrap_or_else(|error| {
             StartupState::empty(
                 fallback_theme,
                 Diagnostic::error(format!(
@@ -55,10 +59,12 @@ fn load_root(root: &Path, fallback_theme: ThemeMode) -> Result<StartupState, Str
     match read_current_config(root) {
         Ok(config) => {
             let histories = load_current_histories(root, &config)?;
+            let workbenches = load_current_workbenches(root, &config)?;
             let scripts = load_current_scripts(root)?;
-            Ok(startup_state_from_current(
+            Ok(startup_state_from_current_with_workbenches(
                 config,
                 histories,
+                workbenches,
                 scripts,
                 Vec::new(),
                 fallback_theme,
@@ -102,6 +108,23 @@ fn load_current_histories(
         histories.connections.insert(connection.id.clone(), history);
     }
     Ok(histories)
+}
+
+fn load_current_workbenches(
+    root: &Path,
+    config: &AppConfig,
+) -> Result<BTreeMap<String, WorkbenchSnapshot>, String> {
+    let store = HistoryStore::new(root);
+    let mut workbenches = BTreeMap::new();
+    for connection in &config.connections {
+        let workbench = store
+            .load_workbench::<WorkbenchSnapshot>(&connection.id)
+            .map_err(|error| error.to_string())?;
+        if workbench != WorkbenchSnapshot::default() {
+            workbenches.insert(connection.id.clone(), workbench);
+        }
+    }
+    Ok(workbenches)
 }
 
 fn current_roots() -> Vec<PathBuf> {

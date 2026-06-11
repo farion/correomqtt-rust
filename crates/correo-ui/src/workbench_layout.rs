@@ -1,3 +1,4 @@
+use correo_style::layout;
 use egui::{
     pos2, vec2, Align, Button, Color32, CursorIcon, Id, Layout, Rect, RichText, Sense, Stroke, Ui,
     UiBuilder,
@@ -9,98 +10,40 @@ use crate::{
     widgets::{square_icon_button_size, with_icon_button_padding},
 };
 
-const DEFAULT_CENTER_RATIO: f32 = 0.5;
-const DEFAULT_STACK_RATIO: f32 = 0.55;
-const DIVIDER_SIZE: f32 = 8.0;
-const MIN_PANE_WIDTH: f32 = 240.0;
-const MIN_TOP_HEIGHT: f32 = 180.0;
-const MIN_BOTTOM_HEIGHT: f32 = 150.0;
-const PANE_PADDING: f32 = 8.0;
+const PANE_TITLE_SIZE: f32 = 18.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum WorkbenchLayoutMode {
+pub(crate) enum WorkbenchPaneSide {
     Publish,
-    Both,
     Subscribe,
 }
 
-impl WorkbenchLayoutMode {
-    fn icon(self) -> &'static str {
+impl WorkbenchPaneSide {
+    fn hide_icon(self) -> &'static str {
         match self {
-            Self::Publish => regular::ALIGN_RIGHT_SIMPLE,
-            Self::Both => regular::LAYOUT,
-            Self::Subscribe => regular::ALIGN_LEFT_SIMPLE,
+            Self::Publish => regular::ARROW_SQUARE_LEFT,
+            Self::Subscribe => regular::ARROW_SQUARE_RIGHT,
+        }
+    }
+
+    fn show_icon(self) -> &'static str {
+        match self {
+            Self::Publish => regular::ARROW_SQUARE_RIGHT,
+            Self::Subscribe => regular::ARROW_SQUARE_LEFT,
         }
     }
 
     fn label(self) -> &'static str {
         match self {
-            Self::Publish => "Publish only",
-            Self::Both => "Publish and subscriptions",
-            Self::Subscribe => "Subscription only",
+            Self::Publish => "Publish",
+            Self::Subscribe => "Subscribe",
         }
     }
-
-    fn value(self) -> u8 {
-        match self {
-            Self::Publish => 0,
-            Self::Both => 1,
-            Self::Subscribe => 2,
-        }
-    }
-
-    fn from_value(value: u8) -> Self {
-        match value {
-            0 => Self::Publish,
-            2 => Self::Subscribe,
-            _ => Self::Both,
-        }
-    }
-}
-
-pub(crate) fn current_mode(ui: &Ui) -> WorkbenchLayoutMode {
-    ui.ctx().data_mut(|data| {
-        WorkbenchLayoutMode::from_value(
-            *data.get_persisted_mut_or(mode_id(), WorkbenchLayoutMode::Both.value()),
-        )
-    })
-}
-
-pub(crate) fn mode_buttons(ui: &mut Ui, tokens: ThemeTokens) -> WorkbenchLayoutMode {
-    let mut selected = current_mode(ui);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        for mode in [
-            WorkbenchLayoutMode::Publish,
-            WorkbenchLayoutMode::Both,
-            WorkbenchLayoutMode::Subscribe,
-        ] {
-            let active = selected == mode;
-            let response = with_icon_button_padding(ui, |ui| {
-                ui.add_sized(
-                    square_icon_button_size(),
-                    Button::new(RichText::new(mode.icon()).size(16.0)).fill(if active {
-                        tokens.accent_selected_bg
-                    } else {
-                        tokens.panel_raised
-                    }),
-                )
-            })
-            .on_hover_text(mode.label());
-            if response.clicked() {
-                selected = mode;
-                ui.ctx()
-                    .data_mut(|data| data.insert_persisted(mode_id(), mode.value()));
-            }
-        }
-    });
-    selected
 }
 
 pub(crate) fn show(
     ui: &mut Ui,
     tokens: ThemeTokens,
-    mode: WorkbenchLayoutMode,
     publish: impl FnOnce(&mut Ui),
     subscribe: impl FnOnce(&mut Ui),
     outgoing: impl FnOnce(&mut Ui),
@@ -108,8 +51,11 @@ pub(crate) fn show(
 ) {
     let rect = ui.available_rect_before_wrap();
     ui.allocate_rect(rect, Sense::hover());
-    match mode {
-        WorkbenchLayoutMode::Both => {
+    match (
+        is_collapsed(ui, WorkbenchPaneSide::Publish),
+        is_collapsed(ui, WorkbenchPaneSide::Subscribe),
+    ) {
+        (false, false) => {
             let (left, right) = center_split(ui, rect, tokens);
             stack_split(
                 ui,
@@ -128,41 +74,79 @@ pub(crate) fn show(
                 incoming,
             );
         }
-        WorkbenchLayoutMode::Publish => {
+        (true, false) => {
+            let (collapsed, content) = left_collapsed_split(ui, rect, tokens);
+            collapsed_pane(ui, collapsed, WorkbenchPaneSide::Publish);
             stack_split(
                 ui,
-                Id::new("workbench-publish-only-stack-ratio"),
-                rect,
-                tokens,
-                publish,
-                outgoing,
-            );
-        }
-        WorkbenchLayoutMode::Subscribe => {
-            stack_split(
-                ui,
-                Id::new("workbench-subscribe-only-stack-ratio"),
-                rect,
+                Id::new("workbench-subscribe-expanded-stack-ratio"),
+                content,
                 tokens,
                 subscribe,
                 incoming,
             );
         }
+        (false, true) => {
+            let (content, collapsed) = right_collapsed_split(ui, rect, tokens);
+            stack_split(
+                ui,
+                Id::new("workbench-publish-expanded-stack-ratio"),
+                content,
+                tokens,
+                publish,
+                outgoing,
+            );
+            collapsed_pane(ui, collapsed, WorkbenchPaneSide::Subscribe);
+        }
+        (true, true) => {
+            let left = Rect::from_min_size(
+                rect.left_top(),
+                vec2(layout::WORKBENCH_COLLAPSED_PANE_WIDTH, rect.height()),
+            );
+            let right = Rect::from_min_max(
+                pos2(
+                    (rect.right() - layout::WORKBENCH_COLLAPSED_PANE_WIDTH).max(left.right()),
+                    rect.top(),
+                ),
+                rect.right_bottom(),
+            );
+            collapsed_pane(ui, left, WorkbenchPaneSide::Publish);
+            collapsed_pane(ui, right, WorkbenchPaneSide::Subscribe);
+        }
     }
 }
 
+pub(crate) fn pane_title(ui: &mut Ui, title: &str, side: WorkbenchPaneSide) {
+    ui.allocate_ui_with_layout(
+        vec2(ui.available_width(), layout::CONTROL_HEIGHT),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            ui.label(RichText::new(title).strong().size(PANE_TITLE_SIZE));
+            if !is_collapsed(ui, opposite_side(side)) {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let response =
+                        collapse_button(ui, side.hide_icon(), &format!("Hide {title} pane"));
+                    if response.clicked() {
+                        set_collapsed(ui, side, true);
+                    }
+                });
+            }
+        },
+    );
+}
+
 fn center_split(ui: &mut Ui, rect: Rect, tokens: ThemeTokens) -> (Rect, Rect) {
-    let usable = (rect.width() - DIVIDER_SIZE).max(1.0);
-    let min_left = MIN_PANE_WIDTH.min(usable * 0.45);
-    let min_right = MIN_PANE_WIDTH.min((usable - min_left).max(0.0));
+    let usable = (rect.width() - layout::WORKBENCH_DIVIDER_SIZE).max(1.0);
+    let min_left = layout::WORKBENCH_MIN_PANE_WIDTH.min(usable * 0.45);
+    let min_right = layout::WORKBENCH_MIN_PANE_WIDTH.min((usable - min_left).max(0.0));
     let max_left = (usable - min_right).max(min_left);
     let id = Id::new("workbench-center-ratio");
-    let mut left_width = ratio(ui, id, DEFAULT_CENTER_RATIO) * usable;
+    let mut left_width = ratio(ui, id, layout::WORKBENCH_DEFAULT_CENTER_RATIO) * usable;
     left_width = left_width.clamp(min_left, max_left);
 
     let divider = Rect::from_min_size(
         pos2(rect.left() + left_width, rect.top()),
-        vec2(DIVIDER_SIZE, rect.height()),
+        vec2(layout::WORKBENCH_DIVIDER_SIZE, rect.height()),
     );
     let response = ui
         .allocate_rect(divider, Sense::click_and_drag())
@@ -174,8 +158,20 @@ fn center_split(ui: &mut Ui, rect: Rect, tokens: ThemeTokens) -> (Rect, Rect) {
     draw_divider(ui, divider, tokens.border, true);
 
     (
-        Rect::from_min_max(rect.left_top(), pos2(divider.left(), rect.bottom())),
-        Rect::from_min_max(pos2(divider.right(), rect.top()), rect.right_bottom()),
+        Rect::from_min_max(
+            rect.left_top(),
+            pos2(
+                divider.left() - layout::WORKBENCH_CENTER_SPLIT_GUTTER,
+                rect.bottom(),
+            ),
+        ),
+        Rect::from_min_max(
+            pos2(
+                divider.right() + layout::WORKBENCH_CENTER_SPLIT_GUTTER,
+                rect.top(),
+            ),
+            rect.right_bottom(),
+        ),
     )
 }
 
@@ -187,16 +183,16 @@ fn stack_split(
     top: impl FnOnce(&mut Ui),
     bottom: impl FnOnce(&mut Ui),
 ) {
-    let usable = (rect.height() - DIVIDER_SIZE).max(1.0);
-    let min_top = MIN_TOP_HEIGHT.min(usable * 0.6);
-    let min_bottom = MIN_BOTTOM_HEIGHT.min((usable - min_top).max(0.0));
+    let usable = (rect.height() - layout::WORKBENCH_DIVIDER_SIZE).max(1.0);
+    let min_top = layout::WORKBENCH_MIN_TOP_HEIGHT.min(usable * 0.6);
+    let min_bottom = layout::WORKBENCH_MIN_BOTTOM_HEIGHT.min((usable - min_top).max(0.0));
     let max_top = (usable - min_bottom).max(min_top);
-    let mut top_height = ratio(ui, id, DEFAULT_STACK_RATIO) * usable;
+    let mut top_height = ratio(ui, id, layout::WORKBENCH_DEFAULT_STACK_RATIO) * usable;
     top_height = top_height.clamp(min_top, max_top);
 
     let divider = Rect::from_min_size(
         pos2(rect.left(), rect.top() + top_height),
-        vec2(rect.width(), DIVIDER_SIZE),
+        vec2(rect.width(), layout::WORKBENCH_DIVIDER_SIZE),
     );
     let response = ui
         .allocate_rect(divider, Sense::click_and_drag())
@@ -207,20 +203,37 @@ fn stack_split(
     }
     draw_divider(ui, divider, tokens.border, false);
 
-    pane(
+    top_pane(
         ui,
         Rect::from_min_max(rect.left_top(), pos2(rect.right(), divider.top())),
         top,
     );
-    pane(
+    bottom_pane(
         ui,
         Rect::from_min_max(pos2(rect.left(), divider.bottom()), rect.right_bottom()),
         bottom,
     );
 }
 
-fn pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
-    let content_rect = rect.shrink(PANE_PADDING);
+fn top_pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
+    pane(ui, rect, layout::WORKBENCH_PANE_PADDING_Y, add_contents);
+}
+
+fn bottom_pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
+    pane(ui, rect, 0.0, add_contents);
+}
+
+fn pane(ui: &mut Ui, rect: Rect, bottom_padding: f32, add_contents: impl FnOnce(&mut Ui)) {
+    let content_rect = Rect::from_min_max(
+        pos2(
+            rect.left() + layout::WORKBENCH_PANE_PADDING_X,
+            rect.top() + layout::WORKBENCH_PANE_PADDING_Y,
+        ),
+        pos2(
+            rect.right() - layout::WORKBENCH_PANE_PADDING_X,
+            rect.bottom() - bottom_padding,
+        ),
+    );
     let mut child = ui.new_child(
         UiBuilder::new()
             .max_rect(content_rect)
@@ -228,6 +241,94 @@ fn pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
     );
     child.set_clip_rect(content_rect);
     add_contents(&mut child);
+}
+
+fn left_collapsed_split(ui: &mut Ui, rect: Rect, tokens: ThemeTokens) -> (Rect, Rect) {
+    let column_width = collapsed_column_width(rect);
+    let collapsed = Rect::from_min_size(rect.left_top(), vec2(column_width, rect.height()));
+    let divider = Rect::from_min_size(
+        pos2(collapsed.right(), rect.top()),
+        vec2(layout::WORKBENCH_DIVIDER_SIZE, rect.height()),
+    );
+    draw_divider(ui, divider, tokens.border, true);
+    let content_left = (divider.right() + layout::WORKBENCH_CENTER_SPLIT_GUTTER).min(rect.right());
+    let content = Rect::from_min_max(pos2(content_left, rect.top()), rect.right_bottom());
+    (collapsed, content)
+}
+
+fn right_collapsed_split(ui: &mut Ui, rect: Rect, tokens: ThemeTokens) -> (Rect, Rect) {
+    let column_width = collapsed_column_width(rect);
+    let collapsed = Rect::from_min_max(
+        pos2((rect.right() - column_width).max(rect.left()), rect.top()),
+        rect.right_bottom(),
+    );
+    let divider = Rect::from_min_size(
+        pos2(
+            collapsed.left() - layout::WORKBENCH_DIVIDER_SIZE,
+            rect.top(),
+        ),
+        vec2(layout::WORKBENCH_DIVIDER_SIZE, rect.height()),
+    );
+    draw_divider(ui, divider, tokens.border, true);
+    let content_right = (divider.left() - layout::WORKBENCH_CENTER_SPLIT_GUTTER).max(rect.left());
+    let content = Rect::from_min_max(rect.left_top(), pos2(content_right, rect.bottom()));
+    (content, collapsed)
+}
+
+fn collapsed_column_width(rect: Rect) -> f32 {
+    layout::WORKBENCH_COLLAPSED_PANE_WIDTH.min(rect.width().max(0.0))
+}
+
+fn collapsed_pane(ui: &mut Ui, rect: Rect, side: WorkbenchPaneSide) {
+    let content_rect = rect.shrink2(vec2(0.0, layout::WORKBENCH_PANE_PADDING_Y));
+    let mut child = ui.new_child(
+        UiBuilder::new()
+            .max_rect(content_rect)
+            .layout(Layout::top_down(Align::Center)),
+    );
+    child.set_clip_rect(content_rect);
+    let tooltip = format!("Show {} pane", side.label());
+    if collapse_button(&mut child, side.show_icon(), &tooltip).clicked() {
+        set_collapsed(&child, side, false);
+    }
+}
+
+fn collapse_button(ui: &mut Ui, icon: &str, tooltip: &str) -> egui::Response {
+    with_icon_button_padding(ui, |ui| {
+        ui.add_sized(
+            square_icon_button_size(),
+            Button::new(RichText::new(icon).size(16.0)),
+        )
+    })
+    .on_hover_text(tooltip)
+}
+
+fn is_collapsed(ui: &Ui, side: WorkbenchPaneSide) -> bool {
+    ui.ctx()
+        .data_mut(|data| *data.get_persisted_mut_or(collapse_id(side), false))
+}
+
+fn set_collapsed(ui: &Ui, side: WorkbenchPaneSide, collapsed: bool) {
+    ui.ctx().data_mut(|data| {
+        data.insert_persisted(collapse_id(side), collapsed);
+        if collapsed {
+            data.insert_persisted(collapse_id(opposite_side(side)), false);
+        }
+    });
+}
+
+fn collapse_id(side: WorkbenchPaneSide) -> Id {
+    match side {
+        WorkbenchPaneSide::Publish => Id::new("workbench-publish-collapsed"),
+        WorkbenchPaneSide::Subscribe => Id::new("workbench-subscribe-collapsed"),
+    }
+}
+
+fn opposite_side(side: WorkbenchPaneSide) -> WorkbenchPaneSide {
+    match side {
+        WorkbenchPaneSide::Publish => WorkbenchPaneSide::Subscribe,
+        WorkbenchPaneSide::Subscribe => WorkbenchPaneSide::Publish,
+    }
 }
 
 fn ratio(ui: &Ui, id: Id, default: f32) -> f32 {
@@ -249,8 +350,4 @@ fn draw_divider(ui: &Ui, rect: Rect, color: Color32, vertical: bool) {
         [pos2(rect.left(), center.y), pos2(rect.right(), center.y)]
     };
     ui.painter().line_segment(points, Stroke::new(1.0, color));
-}
-
-fn mode_id() -> Id {
-    Id::new("workbench-layout-mode")
 }

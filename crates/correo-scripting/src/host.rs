@@ -42,6 +42,14 @@ pub trait ScriptHost: Send + Sync {
 }
 
 pub trait ScriptMqttClient: Send + Sync {
+    fn connect(&self, _cancellation: &ScriptCancellationToken) -> Result<(), MqttError> {
+        Ok(())
+    }
+
+    fn disconnect(&self, _cancellation: &ScriptCancellationToken) -> Result<(), MqttError> {
+        Ok(())
+    }
+
     fn publish(
         &self,
         request: ScriptPublishRequest,

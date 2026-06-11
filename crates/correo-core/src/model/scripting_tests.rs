@@ -4,22 +4,57 @@ use crate::{
 };
 
 #[test]
-fn create_script_without_name_allocates_unique_default() {
+fn request_create_script_prefills_unique_default() {
     let mut model = AppModel::empty();
 
+    model.apply_command(AppCommand::RequestCreateScript);
     model.apply_command(AppCommand::CreateScript);
+    model.apply_command(AppCommand::RequestCreateScript);
     model.apply_command(AppCommand::CreateScript);
 
     let scripts = &model.snapshot().scripts;
     assert_eq!(scripts.scripts[0].name, "new_script.js");
     assert_eq!(scripts.scripts[1].name, "new_script_2.js");
     assert_eq!(scripts.selected_script, "new_script_2.js");
+    assert!(!scripts.create_dialog_open);
+    assert!(!scripts.can_save());
+    assert!(scripts.scripts.iter().all(|script| script.persisted));
+    assert!(scripts.scripts.iter().all(|script| !script.is_dirty()));
     assert!(scripts
         .feedback
         .as_ref()
         .unwrap()
         .message
         .contains("Created"));
+    assert!(model
+        .snapshot()
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("Created new_script_2.js")));
+}
+
+#[test]
+fn create_script_validation_errors_stay_in_dialog() {
+    let mut model = AppModel::empty();
+
+    model.apply_command(AppCommand::RequestCreateScript);
+    model.apply_command(AppCommand::UpdateNewScriptName("".to_owned()));
+    model.apply_command(AppCommand::CreateScript);
+
+    assert_eq!(
+        model.snapshot().scripts.create_error.as_deref(),
+        Some("Script name is required.")
+    );
+    assert!(model.snapshot().scripts.create_dialog_open);
+    assert!(model.snapshot().scripts.scripts.is_empty());
+    assert_eq!(
+        model.snapshot().scripts.feedback.as_ref().unwrap().message,
+        "Script name is required."
+    );
+    assert_eq!(
+        model.snapshot().diagnostics[0].message,
+        "Script name is required."
+    );
 }
 
 #[test]
@@ -45,6 +80,9 @@ fn script_edit_save_tracks_dirty_state() {
         .unwrap()
         .is_dirty());
     assert!(!model.snapshot().scripts.can_save());
+    assert!(model.snapshot().diagnostics[0]
+        .message
+        .starts_with("Saved "));
 }
 
 #[test]
@@ -71,6 +109,35 @@ fn discard_script_changes_restores_saved_source() {
 }
 
 #[test]
+fn rename_script_validation_errors_stay_in_dialog() {
+    let mut model = AppModel::empty();
+    model.apply_command(AppCommand::RequestCreateScript);
+    model.apply_command(AppCommand::CreateScript);
+    model.apply_command(AppCommand::RequestCreateScript);
+    model.apply_command(AppCommand::CreateScript);
+
+    model.apply_command(AppCommand::RequestRenameScript);
+    model.apply_command(AppCommand::UpdateRenameScriptName(
+        "new_script.js".to_owned(),
+    ));
+    model.apply_command(AppCommand::ConfirmRenameScript);
+
+    assert_eq!(
+        model.snapshot().scripts.rename_error.as_deref(),
+        Some("Script already exists: new_script.js")
+    );
+    assert!(model.snapshot().scripts.rename_dialog_open);
+    assert_eq!(
+        model.snapshot().scripts.feedback.as_ref().unwrap().message,
+        "Script already exists: new_script.js"
+    );
+    assert_eq!(
+        model.snapshot().diagnostics[0].message,
+        "Script already exists: new_script.js"
+    );
+}
+
+#[test]
 fn run_and_cancel_script_updates_execution_state() {
     let mut model = AppModel::default();
 
@@ -93,6 +160,55 @@ fn run_and_cancel_script_updates_execution_state() {
         model.snapshot().scripts.last_error.as_ref().unwrap().kind,
         ScriptExecutionErrorKind::Cancellation
     );
+}
+
+#[test]
+fn cancel_script_uses_running_execution_row_when_active_id_is_missing() {
+    let mut model = AppModel::default();
+    model.snapshot.scripts.running = true;
+    model.snapshot.scripts.active_execution_id = None;
+    model.snapshot.scripts.executions.insert(
+        0,
+        ScriptExecutionRow {
+            execution_id: "restored-running".to_owned(),
+            script_name: model.snapshot().scripts.selected_script.clone(),
+            status: ScriptExecutionStatus::Running,
+            duration: "running".to_owned(),
+            timestamp: "stored".to_owned(),
+            error: None,
+        },
+    );
+
+    model.apply_command(AppCommand::CancelScript);
+
+    assert!(!model.snapshot().scripts.running);
+    assert_eq!(
+        model.snapshot().scripts.executions[0].status,
+        ScriptExecutionStatus::Cancelled
+    );
+}
+
+#[test]
+fn run_script_uses_real_timestamps_in_execution_log() {
+    let mut model = AppModel::empty();
+
+    model.apply_command(AppCommand::RequestCreateScript);
+    model.apply_command(AppCommand::CreateScript);
+    model.apply_command(AppCommand::RunScript);
+
+    let execution = &model.snapshot().scripts.executions[0];
+    let log = model.snapshot().scripts.log_lines.last().unwrap();
+    assert_real_timestamp(&execution.timestamp);
+    assert_real_timestamp(&log.timestamp);
+}
+
+fn assert_real_timestamp(timestamp: &str) {
+    assert_ne!(timestamp, "now");
+    assert!(!timestamp
+        .chars()
+        .all(|character| character.is_ascii_digit()));
+    assert!(timestamp.contains('T'));
+    assert!(timestamp.contains('-'));
 }
 
 #[test]

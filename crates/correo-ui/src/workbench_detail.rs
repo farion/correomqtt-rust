@@ -27,15 +27,17 @@ pub(crate) fn message_window_content(
 }
 
 pub(crate) fn outgoing_window_content(ui: &mut Ui, row: &PublishHistoryRow, tokens: ThemeTokens) {
+    let timestamp = crate::time_format::local_date_time(&row.timestamp);
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(&row.topic).strong());
-        ui.label(RichText::new(&row.timestamp).color(tokens.text_secondary));
+        ui.label(RichText::new(&timestamp).color(tokens.text_secondary));
         ui.label(row.qos.label());
         if row.retained {
             badge_label(ui, "retained", tokens);
         }
     });
     ui.add_space(6.0);
+    ui.label(RichText::new(&row.payload_preview).monospace());
     ui.label(format!("Bytes: {}", row.byte_size));
     ui.label(RichText::new("Published message history").color(tokens.text_secondary));
 }
@@ -46,9 +48,10 @@ fn selected_message(
     message: &MessageRow,
     tokens: ThemeTokens,
 ) {
+    let timestamp = crate::time_format::local_date_time(&message.timestamp);
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(&message.topic).strong());
-        ui.label(RichText::new(&message.timestamp).color(tokens.text_secondary));
+        ui.label(RichText::new(&timestamp).color(tokens.text_secondary));
         ui.label(message.qos.label());
         if message.retained {
             badge_label(ui, "retained", tokens);
@@ -79,7 +82,11 @@ fn properties_tab(ui: &mut Ui, message: &MessageRow, tokens: ThemeTokens) {
         ));
     });
     ui.label(
-        RichText::new(format!("Timestamp: {}", message.timestamp)).color(tokens.text_secondary),
+        RichText::new(format!(
+            "Timestamp: {}",
+            crate::time_format::local_date_time(&message.timestamp)
+        ))
+        .color(tokens.text_secondary),
     );
 }
 

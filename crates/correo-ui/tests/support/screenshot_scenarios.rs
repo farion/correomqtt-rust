@@ -59,6 +59,7 @@ pub(super) struct Capture {
 
 impl Capture {
     fn new(scenario: Scenario, mode: ThemeMode, size: (u32, u32)) -> Self {
+        let mode_slug = mode_slug(&mode);
         Self {
             scenario,
             mode,
@@ -66,7 +67,7 @@ impl Capture {
             file_name: format!(
                 "correo-{}-{}-{}x{}.png",
                 scenario.slug(),
-                mode_slug(mode),
+                mode_slug,
                 size.0,
                 size.1
             ),
@@ -218,7 +219,7 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
     for scenario in FULL_MATRIX_SCENARIOS {
         for mode in REQUIRED_MODES {
             for size in REQUIRED_SIZES {
-                captures.push(Capture::new(scenario, mode, size));
+                captures.push(Capture::new(scenario, mode.clone(), size));
             }
         }
     }
@@ -226,10 +227,14 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
         for mode in REQUIRED_MODES {
             if matches!(scenario, Scenario::Plugins) {
                 for size in PLUGIN_MANAGER_SIZES {
-                    captures.push(Capture::new(scenario, mode, size));
+                    captures.push(Capture::new(scenario, mode.clone(), size));
                 }
             } else {
-                captures.push(Capture::new(scenario, mode, scenario.representative_size()));
+                captures.push(Capture::new(
+                    scenario,
+                    mode.clone(),
+                    scenario.representative_size(),
+                ));
             }
         }
     }
@@ -265,7 +270,7 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
 }
 
 pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
-    let mut snapshot = sample_snapshot(capture.mode);
+    let mut snapshot = sample_snapshot(capture.mode.clone());
     snapshot.active_workspace = workspace_for(capture.scenario);
     let connection_transfer = transfer_section_for(capture.scenario, TransferSection::Messages)
         != TransferSection::Messages;
@@ -294,11 +299,13 @@ pub(super) fn snapshot_for(capture: &Capture) -> correo_core::AppSnapshot {
     snapshot
 }
 
-pub(super) fn mode_slug(mode: ThemeMode) -> &'static str {
-    match mode {
-        ThemeMode::Light => "light",
-        ThemeMode::Dark => "dark",
-        ThemeMode::System => "system",
+pub(super) fn mode_slug(mode: &ThemeMode) -> &'static str {
+    if matches!(mode, ThemeMode::System) {
+        "system"
+    } else if mode.is_light() {
+        "light"
+    } else {
+        "dark"
     }
 }
 

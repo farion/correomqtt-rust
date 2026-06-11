@@ -2,17 +2,14 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, PluginDisableConfirmation, PluginFeedbackSeverity,
     PluginLoadState, PluginRow, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
 };
-use egui::{
-    Button, CornerRadius, CursorIcon, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui, UiBuilder,
-    Window,
-};
+use egui::{Button, RichText, Sense, Stroke, TextEdit, Ui, UiBuilder, Window};
 use egui_extras::{Size, StripBuilder};
 
 use crate::i18n::I18n;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
     disable_tile_text_selection, padded_text_edit, tighten_tile_spacing, tile_inner_padding,
-    tile_list_content_width, TILE_GAP,
+    tile_list_content_width, tile_table_fill, tile_table_hover_fill, TILE_GAP,
 };
 
 #[path = "plugins/installed.rs"]
@@ -22,7 +19,7 @@ mod keyboard;
 #[path = "plugins/marketplace.rs"]
 mod marketplace;
 
-const TILE_HEIGHT: f32 = 88.0;
+pub(super) const TILE_HEIGHT: f32 = 76.0;
 const LIST_WIDTH: f32 = 340.0;
 const MIN_LIST_WIDTH: f32 = 260.0;
 const MAX_LIST_WIDTH: f32 = 520.0;
@@ -269,34 +266,23 @@ pub(super) fn search_field(
 
 pub(super) fn plugin_tile(
     ui: &mut Ui,
+    index: usize,
     selected: bool,
     tokens: ThemeTokens,
     add_contents: impl FnOnce(&mut Ui),
 ) -> egui::Response {
     let width = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, TILE_HEIGHT), Sense::click());
-    let response = response.on_hover_cursor(CursorIcon::PointingHand);
     let fill = if selected {
         tokens.accent_selected_bg
     } else if response.hovered() || response.contains_pointer() {
-        tokens.panel_raised
+        tile_table_hover_fill(tokens)
     } else {
-        tokens.panel_bg
-    };
-    let stroke = if selected {
-        tokens.accent
-    } else {
-        tokens.border
+        tile_table_fill(index, tokens)
     };
     let clip_rect = rect.intersect(ui.clip_rect());
     let painter = ui.painter().with_clip_rect(clip_rect);
-    painter.rect_filled(rect, CornerRadius::same(4), fill);
-    painter.rect_stroke(
-        rect,
-        CornerRadius::same(4),
-        Stroke::new(1.0, stroke),
-        StrokeKind::Inside,
-    );
+    painter.rect_filled(rect, egui::CornerRadius::ZERO, fill);
 
     let content_rect = rect.shrink2(tile_inner_padding());
     let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));

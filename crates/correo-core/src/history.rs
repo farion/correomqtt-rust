@@ -5,6 +5,8 @@ use std::time::Duration;
 use correo_storage::current::{HistoryStore, Message};
 use thiserror::Error;
 
+use crate::WorkbenchSnapshot;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HistoryPersistenceCommand {
     RecordPublish {
@@ -23,12 +25,17 @@ pub enum HistoryPersistenceCommand {
     ClearPublishedMessages {
         connection_id: String,
     },
+    ReplaceWorkbench {
+        connection_id: String,
+        workbench: WorkbenchSnapshot,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoryPersistenceKind {
     Publish,
     Subscription,
+    Workbench,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,6 +134,15 @@ fn apply_history_command(
             let result = store.clear_published_messages(&connection_id).map(|_| ());
             (connection_id, HistoryPersistenceKind::Publish, result)
         }
+        HistoryPersistenceCommand::ReplaceWorkbench {
+            connection_id,
+            workbench,
+        } => {
+            let result = store
+                .replace_workbench(&connection_id, &workbench)
+                .map(|_| ());
+            (connection_id, HistoryPersistenceKind::Workbench, result)
+        }
     };
 
     match result {
@@ -179,6 +195,14 @@ mod tests {
                 hidden: false,
             })
             .unwrap();
+        let mut workbench = crate::WorkbenchSnapshot::default();
+        workbench.publish.topic = "alerts/status".to_owned();
+        worker
+            .dispatch(HistoryPersistenceCommand::ReplaceWorkbench {
+                connection_id: "connection-01".to_owned(),
+                workbench: workbench.clone(),
+            })
+            .unwrap();
 
         assert_eq!(
             worker.recv_event_timeout(Duration::from_secs(2)),
@@ -194,6 +218,13 @@ mod tests {
                 kind: HistoryPersistenceKind::Subscription,
             })
         );
+        assert_eq!(
+            worker.recv_event_timeout(Duration::from_secs(2)),
+            Some(HistoryPersistenceEvent::Changed {
+                connection_id: "connection-01".to_owned(),
+                kind: HistoryPersistenceKind::Workbench,
+            })
+        );
 
         let snapshot = HistoryStore::new(temp.path())
             .load_connection("connection-01")
@@ -201,5 +232,9 @@ mod tests {
         assert_eq!(snapshot.publish_topics.topics, ["alerts/status"]);
         assert_eq!(snapshot.publish_messages.messages.len(), 1);
         assert_eq!(snapshot.subscriptions.topics, ["alerts/#"]);
+        let restored = HistoryStore::new(temp.path())
+            .load_workbench::<crate::WorkbenchSnapshot>("connection-01")
+            .unwrap();
+        assert_eq!(restored.publish.topic, "alerts/status");
     }
 }

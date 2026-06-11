@@ -1,5 +1,8 @@
 use correo_mqtt::ConnectionId;
+pub use correo_style::{ThemeId, ThemeSelection};
 use serde::{Deserialize, Serialize};
+
+pub type ThemeMode = ThemeSelection;
 
 #[path = "types/workflow.rs"]
 mod workflow;
@@ -84,31 +87,6 @@ impl AppSnapshot {
 impl Default for AppSnapshot {
     fn default() -> Self {
         crate::sample_snapshot(ThemeMode::System)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThemeMode {
-    System,
-    Light,
-    Dark,
-}
-
-impl ThemeMode {
-    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::System => "System",
-            Self::Light => "Light",
-            Self::Dark => "Dark",
-        }
-    }
-}
-
-impl Default for ThemeMode {
-    fn default() -> Self {
-        Self::System
     }
 }
 
@@ -350,15 +328,25 @@ pub struct PublishPaneSnapshot {
     pub feedback: Option<WorkflowFeedback>,
     pub history_filter: String,
     pub history: Vec<PublishHistoryRow>,
+    #[serde(default)]
+    pub selected_history_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishHistoryRow {
+    #[serde(default)]
+    pub id: u32,
     pub topic: String,
     pub timestamp: String,
     pub qos: QosLevel,
     pub retained: bool,
+    #[serde(default)]
+    pub payload: Vec<u8>,
+    #[serde(default)]
+    pub payload_preview: String,
     pub byte_size: usize,
+    #[serde(default)]
+    pub badges: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -380,6 +368,14 @@ pub struct SubscriptionRow {
     pub qos: QosLevel,
     pub message_count: usize,
     pub active: bool,
+    #[serde(default = "default_subscription_messages_visible")]
+    pub messages_visible: bool,
+    #[serde(default)]
+    pub selected: bool,
+}
+
+fn default_subscription_messages_visible() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

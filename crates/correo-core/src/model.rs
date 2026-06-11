@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use correo_mqtt::ConnectionId;
 
 use crate::{
     AppCommand, AppEvent, AppSnapshot, ConnectDisabledReason, ConnectionSettingsSnapshot,
     ConnectionState, Diagnostic, MqttCommand, MqttCommandBuildError, StartupState,
+    WorkbenchSnapshot,
 };
 
 mod connections;
@@ -27,6 +28,8 @@ pub struct AppModel {
     snapshot: AppSnapshot,
     connection_settings: HashMap<ConnectionId, ConnectionSettingsSnapshot>,
     storage_connection_ids: HashMap<ConnectionId, String>,
+    workbenches: HashMap<ConnectionId, WorkbenchSnapshot>,
+    dirty_workbenches: HashSet<ConnectionId>,
     saved_global_settings: crate::GlobalSettingsSnapshot,
     saved_theme_mode: crate::ThemeMode,
 }
@@ -41,7 +44,7 @@ impl AppModel {
     }
 
     pub fn with_snapshot(snapshot: AppSnapshot) -> Self {
-        Self::from_parts(snapshot, HashMap::new(), HashMap::new())
+        Self::from_parts(snapshot, HashMap::new(), HashMap::new(), HashMap::new())
     }
 
     pub fn with_startup_state(state: StartupState) -> Self {
@@ -49,6 +52,7 @@ impl AppModel {
             state.snapshot,
             state.connection_settings,
             state.storage_connection_ids,
+            state.workbenches,
         )
     }
 
@@ -56,13 +60,19 @@ impl AppModel {
         snapshot: AppSnapshot,
         connection_settings: HashMap<ConnectionId, ConnectionSettingsSnapshot>,
         storage_connection_ids: HashMap<ConnectionId, String>,
+        mut workbenches: HashMap<ConnectionId, WorkbenchSnapshot>,
     ) -> Self {
         let saved_global_settings = snapshot.global_settings.clone();
-        let saved_theme_mode = snapshot.theme_mode;
+        let saved_theme_mode = snapshot.theme_mode.clone();
+        if let Some(selected) = snapshot.selected_connection {
+            workbenches.insert(selected, snapshot.workbench.clone());
+        }
         let mut model = Self {
             snapshot,
             connection_settings,
             storage_connection_ids,
+            workbenches,
+            dirty_workbenches: HashSet::new(),
             saved_global_settings,
             saved_theme_mode,
         };
@@ -74,11 +84,70 @@ impl AppModel {
         &self.snapshot
     }
 
+    pub(crate) fn drain_workbench_persistence_commands(
+        &mut self,
+    ) -> Vec<crate::HistoryPersistenceCommand> {
+        let dirty: Vec<_> = self.dirty_workbenches.drain().collect();
+        dirty
+            .into_iter()
+            .filter_map(|connection_id| {
+                let workbench = self.workbench_for_connection(connection_id)?.clone();
+                Some(crate::HistoryPersistenceCommand::ReplaceWorkbench {
+                    connection_id: self.storage_connection_id(connection_id),
+                    workbench,
+                })
+            })
+            .collect()
+    }
+
     pub(crate) fn mqtt_commands_for_app_command(
         &self,
         command: &AppCommand,
     ) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
         crate::commands_for_app_command(command, &self.snapshot, &self.connection_settings)
+    }
+
+    fn select_connection_workbench(&mut self, id: ConnectionId) {
+        if let Some(current) = self.snapshot.selected_connection {
+            self.workbenches
+                .insert(current, self.snapshot.workbench.clone());
+            self.mark_workbench_dirty(current);
+        }
+        self.snapshot.selected_connection = Some(id);
+        self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
+        self.snapshot.workbench = self.workbenches.get(&id).cloned().unwrap_or_default();
+    }
+
+    pub(super) fn mark_active_workbench_dirty(&mut self) {
+        if let Some(connection_id) = self.snapshot.selected_connection {
+            self.mark_workbench_dirty(connection_id);
+        }
+    }
+
+    pub(super) fn mark_workbench_dirty(&mut self, connection_id: ConnectionId) {
+        self.dirty_workbenches.insert(connection_id);
+    }
+
+    pub(super) fn workbench_for_connection(
+        &self,
+        connection_id: ConnectionId,
+    ) -> Option<&WorkbenchSnapshot> {
+        if self.snapshot.selected_connection == Some(connection_id) {
+            Some(&self.snapshot.workbench)
+        } else {
+            self.workbenches.get(&connection_id)
+        }
+    }
+
+    pub(super) fn workbench_for_connection_mut(
+        &mut self,
+        connection_id: ConnectionId,
+    ) -> &mut WorkbenchSnapshot {
+        if self.snapshot.selected_connection == Some(connection_id) {
+            &mut self.snapshot.workbench
+        } else {
+            self.workbenches.entry(connection_id).or_default()
+        }
     }
 
     pub fn apply_command(&mut self, command: AppCommand) {
@@ -89,14 +158,12 @@ impl AppModel {
             return;
         }
 
+        let dirty_active_workbench = command_mutates_active_workbench(&command);
         match command {
             AppCommand::SelectWorkspace(workspace) => self.snapshot.active_workspace = workspace,
             AppCommand::SetThemeMode(mode) => self.set_theme_mode(mode),
             AppCommand::SearchConnections(filter) => self.snapshot.connection_filter = filter,
-            AppCommand::SelectConnection(id) => {
-                self.snapshot.selected_connection = Some(id);
-                self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
-            }
+            AppCommand::SelectConnection(id) => self.select_connection_workbench(id),
             AppCommand::MoveConnection {
                 connection_id,
                 target_connection_id,
@@ -105,15 +172,11 @@ impl AppModel {
             AppCommand::OpenConnectionLauncher => {
                 self.open_default_connection_surface();
             }
-            AppCommand::OpenConnectionWorkbench(id) => {
-                self.snapshot.selected_connection = Some(id);
-                self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
-            }
+            AppCommand::OpenConnectionWorkbench(id) => self.select_connection_workbench(id),
             AppCommand::Connect(id) => self.connect(id),
             AppCommand::OpenConnectionSettings(id) | AppCommand::EditConnection(id) => {
-                self.snapshot.selected_connection = Some(id);
+                self.select_connection_workbench(id);
                 self.load_connection_settings(id);
-                self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
                 self.snapshot.connection_settings_overlay = Some(id);
             }
             AppCommand::Reconnect(id) => self.record_action(id, "Reconnect requested"),
@@ -122,8 +185,12 @@ impl AppModel {
             AppCommand::AddConnection => self.add_connection(),
             AppCommand::ImportConnections => self.import_connections(),
             AppCommand::ExportConnections => self.open_connection_export(),
-            AppCommand::ChooseConnectionImportFile => self.choose_connection_import_file(),
-            AppCommand::SubmitConnectionImportPassword => self.submit_connection_import_password(),
+            AppCommand::ChooseConnectionImportFile(path) => {
+                self.choose_connection_import_file(&path)
+            }
+            AppCommand::SubmitConnectionImportPassword(password) => {
+                self.submit_connection_import_password(&password)
+            }
             AppCommand::ClearConnectionImportError => self.clear_connection_import_error(),
             AppCommand::SelectConnectionImportRow { row_id, selected } => {
                 self.select_connection_import_row(&row_id, selected);
@@ -140,11 +207,20 @@ impl AppModel {
             }
             AppCommand::StartConnectionExport => self.start_connection_export(),
             AppCommand::ImportMessages => self.import_messages(),
+            AppCommand::ImportMessagesFromPath(path) => self.import_messages_from_path(&path),
             AppCommand::ExportMessages => self.export_messages(),
             AppCommand::ExportPublishHistoryMessage(topic) => {
                 self.export_publish_history_message(topic)
             }
             AppCommand::ExportIncomingMessage(id) => self.export_incoming_message(id),
+            AppCommand::CopyPublishHistoryMessageToPublishForm(id) => {
+                self.copy_publish_history_message_to_publish_form(id);
+            }
+            AppCommand::CopyIncomingMessageToPublishForm(id) => {
+                self.copy_incoming_message_to_publish_form(id);
+            }
+            AppCommand::ClearPublishHistory => self.clear_publish_history(),
+            AppCommand::ClearIncomingMessages => self.clear_incoming_messages(),
             AppCommand::SelectWorkbenchTab(tab) => self.snapshot.workbench.narrow_tab = tab,
             AppCommand::UpdatePublishTopic(topic) => self.update_publish_topic(topic),
             AppCommand::UpdatePublishPayload(payload) => self.update_publish_payload(payload),
@@ -155,6 +231,9 @@ impl AppModel {
             AppCommand::SearchPublishHistory(filter) => {
                 self.snapshot.workbench.publish.history_filter = filter;
             }
+            AppCommand::SelectPublishHistoryMessage(id) => {
+                self.snapshot.workbench.publish.selected_history_id = Some(id);
+            }
             AppCommand::Publish => self.publish_from_snapshot(),
             AppCommand::UpdateSubscribeTopic(topic) => self.update_subscribe_topic(topic),
             AppCommand::UpdateSubscribeQos(qos) => self.update_subscribe_qos(qos),
@@ -163,6 +242,18 @@ impl AppModel {
             AppCommand::UnsubscribeAll => self.request_unsubscribe_all(),
             AppCommand::CancelUnsubscribeAll => self.cancel_unsubscribe_all(),
             AppCommand::ConfirmUnsubscribeAll => self.confirm_unsubscribe_all(),
+            AppCommand::SetSubscriptionMessagesVisible {
+                topic_filter,
+                visible,
+            } => self.set_subscription_messages_visible(&topic_filter, visible),
+            AppCommand::SetAllSubscriptionMessagesVisible(visible) => {
+                self.set_all_subscription_messages_visible(visible);
+            }
+            AppCommand::SelectSubscription {
+                topic_filter,
+                extend,
+                toggle,
+            } => self.select_subscription(&topic_filter, extend, toggle),
             AppCommand::SearchMessages(filter) => {
                 self.snapshot.workbench.subscribe.message_filter = filter;
             }
@@ -228,6 +319,9 @@ impl AppModel {
             AppCommand::Mqtt(command) => self.apply_mqtt_command(command),
             AppCommand::Shutdown => {}
             _ => unreachable!("handled before main dispatch"),
+        }
+        if dirty_active_workbench {
+            self.mark_active_workbench_dirty();
         }
     }
 
@@ -379,6 +473,11 @@ impl AppModel {
     }
 
     fn unsubscribe(&mut self, topic: &str) {
+        self.snapshot
+            .workbench
+            .subscribe
+            .subscriptions
+            .retain(|subscription| subscription.topic_filter != topic);
         self.snapshot.workbench.subscribe.feedback = Some(crate::WorkflowFeedback::info(format!(
             "Unsubscribe queued for {topic}."
         )));
@@ -397,6 +496,45 @@ impl Default for AppModel {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn command_mutates_active_workbench(command: &AppCommand) -> bool {
+    matches!(
+        command,
+        AppCommand::ImportMessages
+            | AppCommand::ImportMessagesFromPath(_)
+            | AppCommand::ExportMessages
+            | AppCommand::ExportPublishHistoryMessage(_)
+            | AppCommand::ExportIncomingMessage(_)
+            | AppCommand::CopyPublishHistoryMessageToPublishForm(_)
+            | AppCommand::CopyIncomingMessageToPublishForm(_)
+            | AppCommand::ClearPublishHistory
+            | AppCommand::ClearIncomingMessages
+            | AppCommand::SelectWorkbenchTab(_)
+            | AppCommand::UpdatePublishTopic(_)
+            | AppCommand::UpdatePublishPayload(_)
+            | AppCommand::UpdatePublishQos(_)
+            | AppCommand::SetPublishRetained(_)
+            | AppCommand::SearchPublishHistory(_)
+            | AppCommand::SelectPublishHistoryMessage(_)
+            | AppCommand::Publish
+            | AppCommand::UpdateSubscribeTopic(_)
+            | AppCommand::UpdateSubscribeQos(_)
+            | AppCommand::Subscribe
+            | AppCommand::Unsubscribe(_)
+            | AppCommand::UnsubscribeAll
+            | AppCommand::CancelUnsubscribeAll
+            | AppCommand::ConfirmUnsubscribeAll
+            | AppCommand::SetSubscriptionMessagesVisible { .. }
+            | AppCommand::SetAllSubscriptionMessagesVisible(_)
+            | AppCommand::SelectSubscription { .. }
+            | AppCommand::SearchMessages(_)
+            | AppCommand::SelectMessage(_)
+            | AppCommand::SelectInspectorTab(_)
+            | AppCommand::SelectDetailTransform(_)
+            | AppCommand::SelectDetailFormatter(_)
+            | AppCommand::RefreshMessageDetail
+    )
 }
 
 #[cfg(test)]

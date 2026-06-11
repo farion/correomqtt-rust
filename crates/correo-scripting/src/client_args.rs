@@ -37,6 +37,13 @@ impl MqttOperation {
             Self::Unsubscribe(topic_filter) => state.unsubscribe(topic_filter.clone()),
         }
     }
+
+    pub(crate) fn published_message(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::Publish(request) => Some((request.topic.as_str(), request.payload.as_str())),
+            _ => None,
+        }
+    }
 }
 
 pub(crate) fn parse_publish_args(args: &[Value<'_>]) -> ScriptingResult<PublishInvocation> {
@@ -152,6 +159,7 @@ pub(crate) fn parse_async_subscribe_args<'js>(
     SubscribeInvocation,
     Option<Function<'js>>,
     Option<Function<'js>>,
+    Option<Function<'js>>,
 )> {
     let callback_start = subscribe_callback_start(&args)?;
     validate_callback_tail("subscribe", &args[callback_start..], 3)?;
@@ -160,13 +168,26 @@ pub(crate) fn parse_async_subscribe_args<'js>(
         .map(|value| callback_from_value(value, "subscribe callback"))
         .collect::<ScriptingResult<Vec<_>>>()?;
     let subscribe = parse_subscribe_args(&args)?;
-    let (on_success, on_error) = match callbacks.len() {
-        0 | 1 => (None, None),
-        2 => (callbacks.into_iter().next(), None),
-        3 => callback_pair(callbacks.into_iter().take(2).collect()),
+    let (on_success, on_error, on_message) = match callbacks.len() {
+        0 => (None, None, None),
+        1 => (None, None, callbacks.into_iter().next()),
+        2 => {
+            let (on_success, on_error) = callback_pair(callbacks);
+            (on_success, on_error, None)
+        }
+        3 => {
+            let mut callbacks = callbacks.into_iter();
+            (callbacks.next(), callbacks.next(), callbacks.next())
+        }
         _ => unreachable!("callback tail was already validated"),
     };
-    Ok((subscribe, on_success, on_error))
+    Ok((subscribe, on_success, on_error, on_message))
+}
+
+impl SubscribeInvocation {
+    pub(crate) fn topic_filter(&self) -> &str {
+        &self.topic_filter
+    }
 }
 
 pub(crate) fn parse_async_unsubscribe_args<'js>(
@@ -176,6 +197,14 @@ pub(crate) fn parse_async_unsubscribe_args<'js>(
     let topic_filter = parse_unsubscribe_args(&args)?;
     let (on_success, on_error) = callback_pair(callbacks);
     Ok((topic_filter, on_success, on_error))
+}
+
+pub(crate) fn parse_async_noop_args<'js>(
+    args: Vec<Value<'js>>,
+    operation: &str,
+) -> ScriptingResult<Option<Function<'js>>> {
+    validate_callback_tail(operation, &args, 1)?;
+    Ok(args.into_iter().next().and_then(Value::into_function))
 }
 
 fn publish_options(options: Option<Object<'_>>) -> ScriptingResult<(Qos, bool)> {

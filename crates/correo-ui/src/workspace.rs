@@ -1,10 +1,14 @@
 use correo_core::{AppCommand, AppCommandSender, AppSnapshot, ConnectionSurface, Workspace};
-use egui::{RichText, Ui};
+use correo_style::layout;
+use egui::{RichText, Ui, UiBuilder};
 
 use crate::{
-    about, connection_settings, diagnostics, i18n::I18n, plugins, scripts, settings, skeletons,
+    about, connection_settings, diagnostics, i18n::I18n, plugins, scripts, settings,
     theme::ThemeTokens, workbench,
 };
+
+const VIEW_PADDING: f32 = 10.0;
+const VIEW_PADDING_TOP: f32 = 0.0;
 
 pub fn sidebar(
     ui: &mut Ui,
@@ -35,14 +39,62 @@ pub fn show(
     i18n: &I18n,
 ) {
     match snapshot.active_workspace {
-        Workspace::Connections => connections(ui, snapshot, tokens, commands, i18n),
-        Workspace::ImportExport => skeletons::import_export(ui, snapshot, tokens, commands),
-        Workspace::Scripts => scripts::show(ui, snapshot, tokens, commands),
-        Workspace::Plugins => plugins::show(ui, snapshot, tokens, commands, i18n),
-        Workspace::Diagnostics => diagnostics::workspace(ui, snapshot, tokens, i18n),
-        Workspace::Settings => settings::show(ui, snapshot, tokens, commands, i18n),
-        Workspace::About => about::show(ui, tokens, i18n),
+        Workspace::Connections => padded_view(ui, |ui| {
+            connections(ui, snapshot, tokens, commands, i18n);
+        }),
+        Workspace::ImportExport => {
+            padded_view(ui, |ui| {
+                workspace_title(ui, i18n.workspace_label(Workspace::ImportExport));
+                import_export_launcher(ui, tokens, commands, i18n);
+            });
+        }
+        Workspace::Scripts => scripts::show(ui, snapshot, tokens, commands, i18n),
+        Workspace::Plugins => padded_view(ui, |ui| {
+            plugins::show(ui, snapshot, tokens, commands, i18n);
+        }),
+        Workspace::Diagnostics => {
+            padded_view(ui, |ui| {
+                workspace_title(ui, i18n.workspace_label(Workspace::Diagnostics));
+                diagnostics::workspace(ui, snapshot, tokens, i18n);
+            });
+        }
+        Workspace::Settings => padded_view(ui, |ui| {
+            settings::show(ui, snapshot, tokens, commands, i18n);
+        }),
+        Workspace::About => {
+            padded_view(ui, |ui| {
+                workspace_title(ui, i18n.workspace_label(Workspace::About));
+                about::show(ui, tokens, i18n);
+            });
+        }
     }
+}
+
+fn padded_view(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
+    let available = ui.available_rect_before_wrap();
+    let rect = egui::Rect::from_min_max(
+        egui::pos2(
+            available.left() + VIEW_PADDING,
+            available.top() + VIEW_PADDING_TOP,
+        ),
+        egui::pos2(
+            available.right() - VIEW_PADDING,
+            available.bottom() - VIEW_PADDING,
+        ),
+    );
+    ui.allocate_rect(available, egui::Sense::hover());
+    let mut child = ui.new_child(
+        UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    child.set_clip_rect(rect);
+    add_contents(&mut child);
+}
+
+fn workspace_title(ui: &mut Ui, title: String) {
+    ui.heading(title);
+    ui.add_space(8.0);
 }
 
 fn connections(
@@ -52,7 +104,6 @@ fn connections(
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
-    let connection_view_rect = ui.max_rect();
     match snapshot.connection_surface {
         ConnectionSurface::Launcher | ConnectionSurface::Workbench => {
             connection_workbench(ui, snapshot, tokens, commands, i18n)
@@ -60,16 +111,39 @@ fn connections(
         ConnectionSurface::Settings => {
             connection_settings::show(ui, snapshot, tokens, commands, i18n)
         }
-        ConnectionSurface::Transfer => {
-            skeletons::connection_transfer(ui, snapshot, tokens, commands)
-        }
+        ConnectionSurface::Transfer => connection_workbench(ui, snapshot, tokens, commands, i18n),
     }
     if matches!(
         snapshot.connection_surface,
         ConnectionSurface::Launcher | ConnectionSurface::Workbench
     ) {
-        connection_settings::overlay(ui, connection_view_rect, snapshot, tokens, commands, i18n);
+        connection_settings::overlay(
+            ui,
+            snapshot,
+            tokens,
+            commands,
+            i18n,
+            VIEW_PADDING + f32::from(layout::CENTRAL_MARGIN),
+        );
     }
+}
+
+fn import_export_launcher(
+    ui: &mut Ui,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    ui.label(RichText::new(i18n.text("transfer-launch-detail")).color(tokens.text_secondary));
+    ui.add_space(12.0);
+    ui.horizontal(|ui| {
+        if ui.button(i18n.text("transfer-import-title")).clicked() {
+            send(commands, AppCommand::ImportConnections);
+        }
+        if ui.button(i18n.text("transfer-export-title")).clicked() {
+            send(commands, AppCommand::ExportConnections);
+        }
+    });
 }
 
 fn connection_workbench(
@@ -112,7 +186,12 @@ fn transfer_sidebar(
         correo_core::TransferSection::Export,
     ] {
         let selected = snapshot.transfer.active_section == section;
-        if ui.selectable_label(selected, section.label()).clicked() {
+        let label = match section {
+            correo_core::TransferSection::Import => i18n.text("transfer-import-title"),
+            correo_core::TransferSection::Export => i18n.text("transfer-export-title"),
+            correo_core::TransferSection::Messages => section.label().to_owned(),
+        };
+        if ui.selectable_label(selected, label).clicked() {
             send(commands, AppCommand::SelectTransferSection(section));
         }
     }

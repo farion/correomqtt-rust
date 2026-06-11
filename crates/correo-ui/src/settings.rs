@@ -2,15 +2,13 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, GlobalSettingField, GlobalSettingFlag,
     GlobalSettingsSnapshot, SettingsOption,
 };
+use correo_style::layout;
 use egui::{Button, ComboBox, RichText, ScrollArea, TextEdit, Ui};
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{checkbox, padded_text_edit};
-
-const LABEL_WIDTH: f32 = 220.0;
-const CONTROL_WIDTH: f32 = 420.0;
 
 pub fn show(
     ui: &mut Ui,
@@ -172,7 +170,7 @@ fn plugins(
     row(ui, &i18n.text("settings-bundled-url"), |ui| {
         let mut url = settings.bundled_plugins_url.clone();
         let response = ui.add_sized(
-            [CONTROL_WIDTH, CONTROL_HEIGHT],
+            [layout::SETTINGS_CONTROL_WIDTH, CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut url)),
         );
         if response.changed() {
@@ -204,7 +202,7 @@ fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
         ui.set_min_height(CONTROL_HEIGHT);
         let (rect, _) = ui.allocate_exact_size(
-            egui::vec2(LABEL_WIDTH, CONTROL_HEIGHT),
+            egui::vec2(layout::SETTINGS_LABEL_WIDTH, CONTROL_HEIGHT),
             egui::Sense::hover(),
         );
         ui.painter().text(
@@ -237,7 +235,7 @@ fn repository_row(
     row(ui, &label, |ui| {
         let mut url = current_url.to_owned();
         let response = ui.add_sized(
-            [CONTROL_WIDTH, CONTROL_HEIGHT],
+            [layout::SETTINGS_CONTROL_WIDTH, CONTROL_HEIGHT],
             padded_text_edit(TextEdit::singleline(&mut url)),
         );
         if response.changed() {
@@ -302,7 +300,7 @@ fn option_combo(
     let mut selected = current.to_owned();
     ComboBox::from_id_salt(id)
         .selected_text(option_label(current, options, i18n))
-        .width(180.0)
+        .width(layout::SETTINGS_COMBO_WIDTH)
         .show_ui(ui, |ui| {
             for option in options {
                 let label = i18n.language_option_label(&option.id, &option.label);

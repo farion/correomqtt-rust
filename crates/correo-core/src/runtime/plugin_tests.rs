@@ -171,6 +171,11 @@ async fn incoming_transform_error_keeps_payload_and_records_diagnostic() {
         crate::MqttService::spawn(FakeFactory::new(Arc::default(), None)).unwrap(),
     );
     let connection_id = runtime.snapshot().connections[2].id;
+    runtime
+        .command_sender()
+        .send(AppCommand::SelectConnection(connection_id))
+        .unwrap();
+    runtime.pump();
 
     runtime
         .command_sender()

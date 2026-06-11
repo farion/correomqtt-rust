@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 
 use correo_mqtt::ConnectionId;
@@ -13,7 +14,7 @@ use crate::{
     ConnectionSettingsSnapshot, ConnectionState, ConnectionSummary, Diagnostic,
     GlobalSettingsSnapshot, KeyringState, LegacyMigrationStatus, MigrationRecoverySnapshot,
     PluginRepositoryRow, PublishHistoryRow, QosLevel, SubscribePaneSnapshot, SubscriptionRow,
-    ThemeMode,
+    ThemeMode, WorkbenchSnapshot,
 };
 
 #[path = "bootstrap_scripts.rs"]
@@ -28,6 +29,7 @@ pub struct StartupState {
     pub snapshot: AppSnapshot,
     pub connection_settings: HashMap<ConnectionId, ConnectionSettingsSnapshot>,
     pub storage_connection_ids: HashMap<ConnectionId, String>,
+    pub workbenches: HashMap<ConnectionId, WorkbenchSnapshot>,
 }
 
 impl StartupState {
@@ -39,6 +41,7 @@ impl StartupState {
             snapshot,
             connection_settings: HashMap::new(),
             storage_connection_ids: HashMap::new(),
+            workbenches: HashMap::new(),
         }
     }
 
@@ -62,6 +65,7 @@ impl StartupState {
             snapshot,
             connection_settings: HashMap::new(),
             storage_connection_ids: HashMap::new(),
+            workbenches: HashMap::new(),
         }
     }
 }
@@ -73,10 +77,29 @@ pub fn startup_state_from_current(
     warnings: Vec<String>,
     fallback_theme: ThemeMode,
 ) -> StartupState {
+    startup_state_from_current_with_workbenches(
+        config,
+        histories,
+        BTreeMap::new(),
+        scripts,
+        warnings,
+        fallback_theme,
+    )
+}
+
+pub fn startup_state_from_current_with_workbenches(
+    config: AppConfig,
+    histories: HistoryPersistenceSnapshot,
+    persisted_workbenches: BTreeMap<String, WorkbenchSnapshot>,
+    scripts: ScriptPersistenceSnapshot,
+    warnings: Vec<String>,
+    fallback_theme: ThemeMode,
+) -> StartupState {
     let theme_mode = theme_mode(config.theme_settings.as_ref()).unwrap_or(fallback_theme);
     let mut snapshot = AppSnapshot::empty();
     let mut connection_settings = HashMap::new();
     let mut storage_connection_ids = HashMap::new();
+    let mut workbenches = HashMap::new();
     let mut mapped = Vec::new();
 
     for connection in &config.connections {
@@ -85,6 +108,14 @@ pub fn startup_state_from_current(
         mapped.push(summary(id, connection, history));
         connection_settings.insert(id, settings_snapshot(connection, &warnings));
         storage_connection_ids.insert(id, connection.id.clone());
+        let workbench = persisted_workbenches
+            .get(&connection.id)
+            .cloned()
+            .or_else(|| history.map(workbench_from_history))
+            .unwrap_or_default();
+        let mut workbench = workbench;
+        normalize_publish_history_ids(&mut workbench);
+        workbenches.insert(id, workbench);
     }
 
     snapshot.connection_count = mapped.len();
@@ -103,13 +134,7 @@ pub fn startup_state_from_current(
         if let Some(settings) = connection_settings.get(&selected) {
             snapshot.connection_settings = settings.clone();
         }
-        if let Some(storage_id) = config
-            .connections
-            .first()
-            .map(|connection| connection.id.as_str())
-        {
-            apply_history(&mut snapshot, histories.connections.get(storage_id));
-        }
+        snapshot.workbench = workbenches.get(&selected).cloned().unwrap_or_default();
     }
     apply_default_script_connection(&mut snapshot);
 
@@ -117,6 +142,7 @@ pub fn startup_state_from_current(
         snapshot,
         connection_settings,
         storage_connection_ids,
+        workbenches,
     }
 }
 
@@ -214,27 +240,37 @@ fn settings_snapshot(
     }
 }
 
-fn apply_history(snapshot: &mut AppSnapshot, history: Option<&ConnectionHistorySnapshot>) {
-    let Some(history) = history else {
-        return;
-    };
-    snapshot.workbench.publish.topic_history = history.publish_topics.topics.clone();
-    snapshot.workbench.publish.history = history
+fn workbench_from_history(history: &ConnectionHistorySnapshot) -> WorkbenchSnapshot {
+    let mut workbench = WorkbenchSnapshot::default();
+    workbench.publish.topic_history = history.publish_topics.topics.clone();
+    workbench.publish.history = history
         .publish_messages
         .messages
         .iter()
-        .map(|message| PublishHistoryRow {
-            topic: message.topic.clone(),
-            timestamp: message
-                .date_time
-                .clone()
-                .unwrap_or_else(|| "migrated".to_owned()),
-            qos: message.qos.map(qos).unwrap_or_default(),
-            retained: message.retained,
-            byte_size: message.payload.as_deref().map(str::len).unwrap_or_default(),
+        .enumerate()
+        .map(|(index, message)| {
+            let payload = message.payload.clone().unwrap_or_default().into_bytes();
+            let mut badges = Vec::new();
+            if message.retained {
+                badges.push("retained".to_owned());
+            }
+            PublishHistoryRow {
+                id: (index as u32).saturating_add(1),
+                topic: message.topic.clone(),
+                timestamp: message
+                    .date_time
+                    .clone()
+                    .unwrap_or_else(|| "migrated".to_owned()),
+                qos: message.qos.map(qos).unwrap_or_default(),
+                retained: message.retained,
+                payload_preview: payload_preview(&payload),
+                byte_size: payload.len(),
+                payload,
+                badges,
+            }
         })
         .collect();
-    snapshot.workbench.subscribe = SubscribePaneSnapshot {
+    workbench.subscribe = SubscribePaneSnapshot {
         topic_history: history.subscriptions.topics.clone(),
         subscriptions: history
             .subscriptions
@@ -245,10 +281,13 @@ fn apply_history(snapshot: &mut AppSnapshot, history: Option<&ConnectionHistoryS
                 qos: QosLevel::Zero,
                 message_count: 0,
                 active: true,
+                messages_visible: true,
+                selected: false,
             })
             .collect(),
         ..SubscribePaneSnapshot::default()
     };
+    workbench
 }
 
 fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
@@ -318,14 +357,33 @@ fn badges(connection: &ConnectionConfig) -> Vec<ConnectionBadge> {
 }
 
 fn theme_mode(settings: Option<&ThemeSettings>) -> Option<ThemeMode> {
-    match settings
+    settings
         .and_then(|settings| settings.active_theme.as_ref())
         .and_then(|theme| theme.name.as_deref())
-    {
-        Some("Light" | "light" | "Light Legacy" | "light_legacy") => Some(ThemeMode::Light),
-        Some("Dark" | "dark" | "Dark Legacy" | "dark_legacy") => Some(ThemeMode::Dark),
-        _ => None,
+        .map(ThemeMode::parse)
+}
+
+fn normalize_publish_history_ids(workbench: &mut WorkbenchSnapshot) {
+    let mut next_id = 1u32;
+    for row in &mut workbench.publish.history {
+        if row.id == 0 {
+            row.id = next_id;
+        }
+        next_id = next_id.max(row.id.saturating_add(1));
     }
+    if workbench.publish.selected_history_id == Some(0) {
+        workbench.publish.selected_history_id = None;
+    }
+}
+
+fn payload_preview(payload: &[u8]) -> String {
+    const LIMIT: usize = 96;
+    let mut preview = String::from_utf8_lossy(payload).replace(['\n', '\r'], " ");
+    if preview.len() > LIMIT {
+        let truncated = preview.chars().take(LIMIT).collect::<String>();
+        preview = format!("{truncated}...");
+    }
+    preview
 }
 
 fn mqtt_label(version: MqttVersion) -> &'static str {

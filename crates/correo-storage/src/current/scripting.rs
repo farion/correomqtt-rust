@@ -11,10 +11,13 @@ mod helpers;
 
 use helpers::{
     collect_script_paths, display_path, ensure_dir, ensure_parent_dir, normalize_script_path,
-    remove_dir_if_exists, rename_path, write_text,
+    remove_dir_if_exists, remove_file_if_exists, rename_path, write_text,
 };
+#[path = "scripting_log.rs"]
+mod log;
 
 pub use helpers::redact_script_log_text;
+pub use log::{BoundedScriptLog, ScriptLogLevel, ScriptLogRecord};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptPersistenceSnapshot {
@@ -85,113 +88,6 @@ pub struct ScriptExecutionError {
 pub enum ScriptExecutionErrorType {
     Guest,
     Host,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ScriptLogRecord {
-    pub execution_id: String,
-    pub sequence: u64,
-    pub timestamp: Option<String>,
-    pub level: ScriptLogLevel,
-    pub message: String,
-}
-
-impl ScriptLogRecord {
-    pub fn redacted(&self) -> Self {
-        let mut record = self.clone();
-        record.message = redact_script_log_text(&record.message).replace('\n', "\\n");
-        record
-    }
-
-    pub fn from_legacy_line(execution_id: &str, sequence: u64, line: &str) -> Self {
-        let (level, message) = ScriptLogLevel::parse_prefix(line);
-        Self {
-            execution_id: execution_id.to_owned(),
-            sequence,
-            timestamp: None,
-            level,
-            message: redact_script_log_text(message.trim()),
-        }
-    }
-
-    fn to_persisted_line(&self) -> String {
-        let record = self.redacted();
-        match record.timestamp {
-            Some(timestamp) => {
-                format!("{} {} {}", timestamp, record.level.as_str(), record.message)
-            }
-            None => format!("{} {}", record.level.as_str(), record.message),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ScriptLogLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-impl ScriptLogLevel {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Trace => "TRACE",
-            Self::Debug => "DEBUG",
-            Self::Info => "INFO",
-            Self::Warn => "WARN",
-            Self::Error => "ERROR",
-        }
-    }
-
-    fn parse_prefix(line: &str) -> (Self, &str) {
-        let trimmed = line.trim_start();
-        for (prefix, level) in [
-            ("TRACE", Self::Trace),
-            ("DEBUG", Self::Debug),
-            ("INFO", Self::Info),
-            ("WARN", Self::Warn),
-            ("ERROR", Self::Error),
-        ] {
-            if let Some(rest) = trimmed.strip_prefix(prefix) {
-                return (level, rest);
-            }
-        }
-        (Self::Info, trimmed)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BoundedScriptLog {
-    pub execution_id: String,
-    pub max_records: usize,
-    pub records: Vec<ScriptLogRecord>,
-    pub truncated_count: usize,
-}
-
-impl BoundedScriptLog {
-    pub fn new(execution_id: impl Into<String>, max_records: usize) -> Self {
-        Self {
-            execution_id: execution_id.into(),
-            max_records,
-            records: Vec::new(),
-            truncated_count: 0,
-        }
-    }
-
-    pub fn push(&mut self, record: ScriptLogRecord) {
-        if self.max_records == 0 {
-            self.truncated_count += 1;
-            return;
-        }
-        self.records.push(record);
-        let overflow = self.records.len().saturating_sub(self.max_records);
-        if overflow > 0 {
-            self.records.drain(0..overflow);
-            self.truncated_count += overflow;
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -440,13 +336,30 @@ impl ScriptStore {
         }
         let text = crate::error::read_to_string(path)?;
         for (index, line) in text.lines().enumerate() {
-            log.push(ScriptLogRecord::from_legacy_line(
+            log.push(ScriptLogRecord::from_persisted_line(
                 execution_id,
                 index as u64,
                 line,
             ));
         }
         Ok(log)
+    }
+
+    pub fn delete_execution_artifacts(
+        &self,
+        script_path: impl AsRef<Path>,
+        execution_id: &str,
+    ) -> Result<()> {
+        let relative_path = normalize_script_path(script_path.as_ref())?;
+        remove_file_if_exists(
+            self.script_sidecar_dir("executions", &relative_path)
+                .join(format!("{execution_id}.json")),
+        )?;
+        remove_file_if_exists(
+            self.script_sidecar_dir("logs", &relative_path)
+                .join(format!("{execution_id}.log")),
+        )?;
+        Ok(())
     }
 
     fn scripts_root(&self) -> PathBuf {

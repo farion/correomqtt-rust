@@ -30,11 +30,28 @@ pub(crate) fn commands_for_app_command(
         AppCommand::Publish => publish_command(snapshot),
         AppCommand::Subscribe => subscribe_command(snapshot),
         AppCommand::Unsubscribe(topic_filter) => unsubscribe_command(topic_filter, snapshot),
-        AppCommand::UnsubscribeAll | AppCommand::CancelUnsubscribeAll => Ok(Vec::new()),
-        AppCommand::ConfirmUnsubscribeAll => unsubscribe_all_commands(snapshot),
+        AppCommand::UnsubscribeAll => unsubscribe_all_commands(snapshot),
+        AppCommand::RunScript => script_connection_connect_command(snapshot, connection_settings),
+        AppCommand::CancelUnsubscribeAll | AppCommand::ConfirmUnsubscribeAll => Ok(Vec::new()),
         AppCommand::Mqtt(command) => Ok(vec![command.clone()]),
         _ => Ok(Vec::new()),
     }
+}
+
+fn script_connection_connect_command(
+    snapshot: &AppSnapshot,
+    connection_settings: &HashMap<ConnectionId, ConnectionSettingsSnapshot>,
+) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
+    let Some(connection_id) = snapshot
+        .scripts
+        .selected_connection_id
+        .as_deref()
+        .and_then(|id| uuid::Uuid::parse_str(id).ok())
+        .map(ConnectionId::from_uuid)
+    else {
+        return Ok(Vec::new());
+    };
+    connect_command(connection_id, false, snapshot, connection_settings)
 }
 
 #[derive(Debug, Error)]
@@ -161,15 +178,6 @@ fn unsubscribe_command(
 fn unsubscribe_all_commands(
     snapshot: &AppSnapshot,
 ) -> Result<Vec<MqttCommand>, MqttCommandBuildError> {
-    if snapshot
-        .workbench
-        .subscribe
-        .unsubscribe_all_confirmation_count
-        .is_none()
-    {
-        return Ok(Vec::new());
-    }
-
     let connection_id = connected_connection_id(snapshot, MqttOperation::Unsubscribe)?;
     snapshot
         .workbench

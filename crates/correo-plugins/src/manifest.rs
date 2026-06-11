@@ -1,4 +1,5 @@
 use crate::capabilities::{CapabilityGrants, HookKind};
+use correo_style::{ThemeDefinition, ThemeId};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -19,6 +20,8 @@ pub struct PluginManifest {
     pub compatible_correomqtt: VersionReq,
     pub capabilities: CapabilityGrants,
     pub entrypoints: Vec<PluginEntrypoint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub themes: Vec<ThemeDefinition>,
     #[serde(default)]
     pub config_schema: Option<ConfigSchemaMetadata>,
 }
@@ -58,6 +61,19 @@ impl PluginManifest {
             }
         }
 
+        for theme in &self.themes {
+            match &theme.id {
+                ThemeId::Plugin(id) if id.starts_with(&format!("{}/", self.id)) => {}
+                _ => {
+                    return Err(ManifestError::InvalidThemeId {
+                        theme_id: theme.id.as_str().into_owned(),
+                        plugin_id: self.id.clone(),
+                    });
+                }
+            }
+            ensure_non_empty("themes.name", &theme.name)?;
+        }
+
         Ok(())
     }
 
@@ -93,6 +109,8 @@ pub enum ManifestError {
     EntrypointCapabilityMissing { hook: HookKind },
     #[error("duplicate entrypoint for hook {hook:?}")]
     DuplicateEntrypoint { hook: HookKind },
+    #[error("plugin theme id {theme_id} must be namespaced under plugin id {plugin_id}/")]
+    InvalidThemeId { theme_id: String, plugin_id: String },
 }
 
 fn ensure_non_empty(field: &'static str, value: &str) -> Result<(), ManifestError> {

@@ -1,5 +1,5 @@
 use correo_core::{AppCommand, AppCommandSender, Workspace};
-use egui::{Align, Button, CornerRadius, Layout, RichText, Stroke, Ui};
+use egui::{Align, Button, Color32, CornerRadius, Layout, RichText, Ui};
 
 use crate::i18n::I18n;
 use crate::icons;
@@ -67,19 +67,17 @@ fn nav_button(
     i18n: &I18n,
 ) {
     let selected = workspace == active;
-    let fill = if selected {
-        tokens.accent_selected_bg
-    } else {
-        tokens.panel_bg
-    };
     let response = with_icon_button_padding(ui, |ui| {
-        ui.add_sized(
-            square_icon_button_size(),
-            Button::new(RichText::new(icons::workspace_icon(workspace)).size(18.0))
-                .fill(fill)
-                .stroke(Stroke::new(1.0, tokens.border))
-                .corner_radius(CornerRadius::same(4)),
-        )
+        if !selected {
+            ui.visuals_mut().widgets.inactive.bg_fill = Color32::TRANSPARENT;
+            ui.visuals_mut().widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+        }
+        let mut button = Button::new(RichText::new(icons::workspace_icon(workspace)).size(18.0))
+            .corner_radius(CornerRadius::same(4));
+        if selected {
+            button = button.fill(tokens.accent_selected_bg);
+        }
+        ui.add_sized(square_icon_button_size(), button)
     })
     .on_hover_text(i18n.workspace_label(workspace));
     if selected {

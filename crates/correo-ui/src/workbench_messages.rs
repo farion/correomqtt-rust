@@ -14,14 +14,14 @@ pub(crate) fn open_incoming_message(ctx: &Context, message_id: u32) {
     });
 }
 
-pub(crate) fn open_outgoing_message(ctx: &Context, row_index: usize) {
+pub(crate) fn open_outgoing_message(ctx: &Context, message_id: u32) {
     let mut ids = outgoing_ids(ctx);
-    if !ids.contains(&row_index) {
-        ids.push(row_index);
+    if !ids.contains(&message_id) {
+        ids.push(message_id);
     }
     ctx.data_mut(|data| {
         data.insert_temp(outgoing_ids_id(), ids);
-        data.insert_temp(focused_outgoing_id(), Some(row_index));
+        data.insert_temp(focused_outgoing_id(), Some(message_id));
     });
 }
 
@@ -70,16 +70,22 @@ fn show_incoming(
 }
 
 fn show_outgoing(ctx: &Context, snapshot: &AppSnapshot, tokens: ThemeTokens) {
-    let focused = ctx.data_mut(|data| data.get_temp::<Option<usize>>(focused_outgoing_id()));
+    let focused = ctx.data_mut(|data| data.get_temp::<Option<u32>>(focused_outgoing_id()));
     let mut retained = Vec::new();
-    for row_index in outgoing_ids(ctx) {
-        let Some(row) = snapshot.workbench.publish.history.get(row_index) else {
+    for message_id in outgoing_ids(ctx) {
+        let Some(row) = snapshot
+            .workbench
+            .publish
+            .history
+            .iter()
+            .find(|row| row.id == message_id)
+        else {
             continue;
         };
         let mut open = true;
         Window::new(format!("Published {}", row.topic))
-            .id(Id::new(("workbench-outgoing-message-window", row_index)))
-            .order(order_for(focused.flatten() == Some(row_index)))
+            .id(Id::new(("workbench-outgoing-message-window", message_id)))
+            .order(order_for(focused.flatten() == Some(message_id)))
             .open(&mut open)
             .default_width(480.0)
             .default_height(260.0)
@@ -87,7 +93,7 @@ fn show_outgoing(ctx: &Context, snapshot: &AppSnapshot, tokens: ThemeTokens) {
                 workbench_detail::outgoing_window_content(ui, row, tokens);
             });
         if open {
-            retained.push(row_index);
+            retained.push(message_id);
         }
     }
     ctx.data_mut(|data| data.insert_temp(outgoing_ids_id(), retained));
@@ -105,7 +111,7 @@ fn incoming_ids(ctx: &Context) -> Vec<u32> {
     ctx.data_mut(|data| data.get_temp(incoming_ids_id()).unwrap_or_default())
 }
 
-fn outgoing_ids(ctx: &Context) -> Vec<usize> {
+fn outgoing_ids(ctx: &Context) -> Vec<u32> {
     ctx.data_mut(|data| data.get_temp(outgoing_ids_id()).unwrap_or_default())
 }
 

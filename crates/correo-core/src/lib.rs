@@ -7,6 +7,7 @@ mod mqtt;
 mod runtime;
 mod samples;
 mod scripting;
+mod scripting_mqtt;
 #[cfg(test)]
 mod scripting_tests;
 mod settings_persistence;
@@ -34,4 +35,7 @@ pub enum CoreError {
     #[error("connection is not open: {0}")]
     ConnectionNotOpen(ConnectionId),
 }
-pub use bootstrap::{startup_state_from_current, startup_state_from_migration, StartupState};
+pub use bootstrap::{
+    startup_state_from_current, startup_state_from_current_with_workbenches,
+    startup_state_from_migration, StartupState,
+};

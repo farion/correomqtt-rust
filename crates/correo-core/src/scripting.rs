@@ -6,12 +6,12 @@ use std::{
         mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc,
     },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use correo_scripting::{
-    ScriptCancellationToken, ScriptExecutionRequest, ScriptHost, ScriptLogEntry, ScriptRuntime,
-    ScriptingError,
+    ScriptCancellationToken, ScriptExecutionRequest, ScriptHost, ScriptLogEntry, ScriptMqttClient,
+    ScriptRuntime, ScriptingError,
 };
 use correo_storage::current::{
     ScriptExecution as StoredExecution, ScriptExecutionError as StoredExecutionError,
@@ -19,9 +19,11 @@ use correo_storage::current::{
     ScriptStore,
 };
 use thiserror::Error;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use crate::{
-    ScriptExecutionError, ScriptExecutionErrorKind, ScriptExecutionStatus, ScriptLogLevel,
+    MqttCommandSender, ScriptExecutionError, ScriptExecutionErrorKind, ScriptExecutionStatus,
+    ScriptLogLevel,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +43,9 @@ pub enum ScriptingCommand {
     Delete {
         path: String,
     },
+    ClearFinished {
+        executions: Vec<(String, String)>,
+    },
     Run {
         execution_id: String,
         script_name: String,
@@ -59,6 +64,7 @@ pub enum ScriptingAction {
     Save,
     Rename,
     Delete,
+    ClearFinished,
     Run,
     Cancel,
 }
@@ -70,6 +76,7 @@ impl ScriptingAction {
             Self::Save => "save script",
             Self::Rename => "rename script",
             Self::Delete => "delete script",
+            Self::ClearFinished => "clear finished script logs",
             Self::Run => "run script",
             Self::Cancel => "cancel script",
         }
@@ -115,10 +122,17 @@ pub struct ScriptingWorker {
 
 impl ScriptingWorker {
     pub fn start(root: impl Into<PathBuf>) -> Self {
+        Self::start_with_mqtt_sender(root, None)
+    }
+
+    pub fn start_with_mqtt_sender(
+        root: impl Into<PathBuf>,
+        mqtt_sender: Option<MqttCommandSender>,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel();
         let (events_sender, events) = mpsc::channel();
         let store = ScriptStore::new(root.into());
-        std::thread::spawn(move || run_worker(store, receiver, events_sender));
+        std::thread::spawn(move || run_worker(store, receiver, events_sender, mqtt_sender));
         Self { sender, events }
     }
 
@@ -144,6 +158,7 @@ fn run_worker(
     store: ScriptStore,
     receiver: Receiver<ScriptingCommand>,
     events: Sender<ScriptingEvent>,
+    mqtt_sender: Option<MqttCommandSender>,
 ) {
     let mut cancellations = HashMap::<String, ScriptCancellationToken>::new();
     while let Ok(command) = receiver.recv() {
@@ -168,6 +183,19 @@ fn run_worker(
                     store.delete_script(&path)
                 });
             }
+            ScriptingCommand::ClearFinished { executions } => {
+                emit_storage_result(
+                    &events,
+                    ScriptingAction::ClearFinished,
+                    "finished executions".to_owned(),
+                    || {
+                        for (script_path, execution_id) in &executions {
+                            store.delete_execution_artifacts(script_path, execution_id)?;
+                        }
+                        Ok(())
+                    },
+                );
+            }
             ScriptingCommand::Run {
                 execution_id,
                 script_name,
@@ -185,6 +213,7 @@ fn run_worker(
                     script_path,
                     source,
                     connection_id,
+                    mqtt_sender.clone(),
                     cancellation,
                 );
             }
@@ -209,6 +238,7 @@ fn spawn_script_run(
     script_path: String,
     source: String,
     connection_id: Option<String>,
+    mqtt_sender: Option<MqttCommandSender>,
     cancellation: ScriptCancellationToken,
 ) {
     std::thread::spawn(move || {
@@ -233,6 +263,7 @@ fn spawn_script_run(
             events.clone(),
             execution_id.clone(),
             script_path.clone(),
+            crate::scripting_mqtt::client(connection_id.clone(), mqtt_sender),
         ));
         let outcome = ScriptRuntime::new(host).execute(
             ScriptExecutionRequest::new(script_name.clone(), source),
@@ -269,6 +300,7 @@ struct WorkerScriptHost {
     execution_id: String,
     script_path: String,
     sequence: AtomicU64,
+    mqtt_client: Option<Arc<dyn ScriptMqttClient>>,
 }
 
 impl WorkerScriptHost {
@@ -277,6 +309,7 @@ impl WorkerScriptHost {
         events: Sender<ScriptingEvent>,
         execution_id: String,
         script_path: String,
+        mqtt_client: Option<Arc<dyn ScriptMqttClient>>,
     ) -> Self {
         Self {
             store,
@@ -284,11 +317,16 @@ impl WorkerScriptHost {
             execution_id,
             script_path,
             sequence: AtomicU64::new(0),
+            mqtt_client,
         }
     }
 }
 
 impl ScriptHost for WorkerScriptHost {
+    fn mqtt_client(&self) -> Option<Arc<dyn ScriptMqttClient>> {
+        self.mqtt_client.clone()
+    }
+
     fn log(&self, entry: ScriptLogEntry) {
         let timestamp = timestamp();
         let level = script_log_level(entry.level);
@@ -422,11 +460,9 @@ fn stored_log_level(level: ScriptLogLevel) -> correo_storage::current::ScriptLog
 }
 
 fn timestamp() -> String {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    seconds.to_string()
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 fn format_duration(duration_ms: u64) -> String {

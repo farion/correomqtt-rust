@@ -3,7 +3,7 @@ use correo_ui::theme;
 use image::{Rgba, RgbaImage};
 
 pub(super) fn fallback_shell_capture(capture: Capture) -> RgbaImage {
-    let tokens = theme::static_tokens(capture.mode);
+    let tokens = theme::static_tokens(&capture.mode);
     let (width, height) = capture.size;
     let mut image = RgbaImage::from_pixel(width, height, px(tokens.window_bg));
 

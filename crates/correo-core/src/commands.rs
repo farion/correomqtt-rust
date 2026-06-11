@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use correo_mqtt::ConnectionId;
 use thiserror::Error;
 
@@ -35,8 +37,8 @@ pub enum AppCommand {
     AddConnection,
     ImportConnections,
     ExportConnections,
-    ChooseConnectionImportFile,
-    SubmitConnectionImportPassword,
+    ChooseConnectionImportFile(PathBuf),
+    SubmitConnectionImportPassword(String),
     ClearConnectionImportError,
     SelectConnectionImportRow {
         row_id: String,
@@ -51,9 +53,14 @@ pub enum AppCommand {
     UpdateConnectionExportPath(String),
     StartConnectionExport,
     ImportMessages,
+    ImportMessagesFromPath(PathBuf),
     ExportMessages,
-    ExportPublishHistoryMessage(String),
+    ExportPublishHistoryMessage(u32),
     ExportIncomingMessage(u32),
+    CopyPublishHistoryMessageToPublishForm(u32),
+    CopyIncomingMessageToPublishForm(u32),
+    ClearPublishHistory,
+    ClearIncomingMessages,
     MigrationRecovery(MigrationRecoveryCommand),
     SelectWorkbenchTab(WorkbenchTab),
     UpdatePublishTopic(String),
@@ -61,6 +68,7 @@ pub enum AppCommand {
     UpdatePublishQos(QosLevel),
     SetPublishRetained(bool),
     SearchPublishHistory(String),
+    SelectPublishHistoryMessage(u32),
     Publish,
     UpdateSubscribeTopic(String),
     UpdateSubscribeQos(QosLevel),
@@ -69,6 +77,16 @@ pub enum AppCommand {
     UnsubscribeAll,
     CancelUnsubscribeAll,
     ConfirmUnsubscribeAll,
+    SetSubscriptionMessagesVisible {
+        topic_filter: String,
+        visible: bool,
+    },
+    SetAllSubscriptionMessagesVisible(bool),
+    SelectSubscription {
+        topic_filter: String,
+        extend: bool,
+        toggle: bool,
+    },
     SearchMessages(String),
     SelectMessage(u32),
     SelectInspectorTab(MessageInspectorTab),
@@ -119,7 +137,9 @@ pub enum AppCommand {
     SearchScripts(String),
     SelectScriptConnection(String),
     SelectScript(String),
+    RequestCreateScript,
     UpdateNewScriptName(String),
+    CancelCreateScript,
     CreateScript,
     UpdateScriptSource(String),
     SaveScript,

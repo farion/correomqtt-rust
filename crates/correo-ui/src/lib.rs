@@ -7,14 +7,20 @@ mod i18n;
 mod icons;
 mod migration_recovery;
 mod nav;
+mod payload_highlight;
 mod plugins;
 mod scripts;
 mod settings;
 mod shell;
-mod skeletons;
-pub mod theme;
+mod time_format;
+mod toasts;
+mod transfer_wizard;
+mod transfer_wizard_rows;
 mod widgets;
 mod workbench;
+mod workbench_connection_messages;
+mod workbench_connection_messages_filters;
+mod workbench_connection_messages_text;
 mod workbench_detail;
 mod workbench_dialogs;
 mod workbench_header;
@@ -26,3 +32,10 @@ mod workbench_subscribe;
 mod workspace;
 
 pub use shell::{stored_theme, CorreoUi, THEME_KEY};
+
+pub mod theme {
+    pub use correo_style::layout::{
+        button_padding, control_margin, control_padding, CONTROL_HEIGHT, CONTROL_PADDING,
+    };
+    pub use correo_style::*;
+}

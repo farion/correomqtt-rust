@@ -11,7 +11,8 @@ const FOOTER_HEIGHT: f32 = 28.0;
 const MIN_PANE_WIDTH: f32 = 180.0;
 const MIN_UPPER_HEIGHT: f32 = 220.0;
 const MIN_LOWER_HEIGHT: f32 = 160.0;
-const PANE_PADDING: f32 = 10.0;
+const PANE_PADDING_X: f32 = 10.0;
+const PANE_PADDING_BOTTOM: f32 = 10.0;
 
 pub(super) fn four_pane(
     ui: &mut Ui,
@@ -122,7 +123,13 @@ fn horizontal_split(
 }
 
 fn pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
-    let content_rect = rect.shrink(PANE_PADDING);
+    let content_rect = Rect::from_min_max(
+        pos2(rect.left() + PANE_PADDING_X, rect.top()),
+        pos2(
+            rect.right() - PANE_PADDING_X,
+            rect.bottom() - PANE_PADDING_BOTTOM,
+        ),
+    );
     let mut child = ui.new_child(
         UiBuilder::new()
             .max_rect(content_rect)

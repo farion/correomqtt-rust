@@ -20,6 +20,10 @@ pub struct ScriptSurfaceSnapshot {
     pub selected_script: String,
     pub script_filter: String,
     pub new_script_name: String,
+    #[serde(default)]
+    pub create_dialog_open: bool,
+    #[serde(default)]
+    pub create_error: Option<String>,
     pub rename_script_name: String,
     pub active_tab: ScriptDetailTab,
     pub scripts: Vec<ScriptRow>,
@@ -31,6 +35,7 @@ pub struct ScriptSurfaceSnapshot {
     pub feedback: Option<ScriptFeedback>,
     pub last_error: Option<ScriptExecutionError>,
     pub rename_dialog_open: bool,
+    pub rename_error: Option<String>,
     pub delete_confirmation_open: bool,
 }
 
@@ -43,7 +48,7 @@ impl ScriptSurfaceSnapshot {
 
     pub fn selected_script_is_dirty(&self) -> bool {
         self.selected_script()
-            .map(ScriptRow::is_dirty)
+            .map(ScriptRow::needs_save)
             .unwrap_or(false)
     }
 
@@ -77,6 +82,15 @@ impl ScriptSurfaceSnapshot {
                     .map(|execution| execution.execution_id.as_str())
             })
     }
+
+    pub fn running_execution_id(&self) -> Option<&str> {
+        self.active_execution_id.as_deref().or_else(|| {
+            self.executions
+                .iter()
+                .find(|execution| !execution.status.is_terminal())
+                .map(|execution| execution.execution_id.as_str())
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,12 +101,22 @@ pub struct ScriptRow {
     pub execution_count: usize,
     pub source: String,
     pub saved_source: String,
+    #[serde(default = "default_script_persisted")]
+    pub persisted: bool,
 }
 
 impl ScriptRow {
     pub fn is_dirty(&self) -> bool {
         self.source != self.saved_source
     }
+
+    pub fn needs_save(&self) -> bool {
+        !self.persisted || self.is_dirty()
+    }
+}
+
+fn default_script_persisted() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

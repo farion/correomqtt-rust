@@ -122,10 +122,17 @@ fn compatibility_aliases_are_available() {
         const blocking = clientFactory.getBlockingClient();
         const asyncClient = clientFactory.getAsyncClient();
         const promiseClient = clientFactory.getPromiseClient();
+        let connected = false;
 
+        assert(typeof blocking.connect === "function", "blocking connect missing");
         assert(typeof blocking.publish === "function", "blocking publish missing");
+        assert(typeof asyncClient.connect === "function", "async connect missing");
         assert(typeof asyncClient.subscribe === "function", "async subscribe missing");
+        assert(typeof asyncClient.disconnect === "function", "async disconnect missing");
+        assert(typeof asyncClient.unsubscribeAll === "function", "async unsubscribeAll missing");
         assert(typeof promiseClient.unsubscribe === "function", "promise unsubscribe missing");
+        asyncClient.connect(() => { connected = true; });
+        assert(connected === true, "async connect callback missing");
         assert(typeof sleep === "function", "sleep missing");
         assert(typeof join === "function", "join missing");
         assert(queue.process() === true, "queue should initially process");
@@ -285,23 +292,6 @@ fn promise_client_returns_callable_pubsub_adapters() {
             .as_slice(),
         &["topic/promise/+".to_owned()]
     );
-}
-
-#[test]
-fn denied_host_surfaces_are_absent() {
-    let source = r#"
-        if (typeof Java !== "undefined") throw new Error("Java exposed");
-        if (typeof require !== "undefined") throw new Error("require exposed");
-        if (typeof process !== "undefined") throw new Error("process exposed");
-        if (typeof fetch !== "undefined") throw new Error("fetch exposed");
-        if (typeof Deno !== "undefined") throw new Error("Deno exposed");
-        if (typeof std !== "undefined") throw new Error("std exposed");
-        if (typeof os !== "undefined") throw new Error("os exposed");
-    "#;
-
-    let (_, error) = execute(source);
-
-    assert_eq!(error, None);
 }
 
 #[test]

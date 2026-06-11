@@ -80,6 +80,13 @@ pub(super) fn remove_dir_if_exists(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn remove_file_if_exists(path: PathBuf) -> Result<()> {
+    if path.exists() {
+        fs::remove_file(&path).map_err(|source| StorageError::Delete { path, source })?;
+    }
+    Ok(())
+}
+
 pub(super) fn write_text(path: &Path, text: &str) -> Result<()> {
     fs::write(path, text).map_err(|source| StorageError::Write {
         path: path.to_path_buf(),

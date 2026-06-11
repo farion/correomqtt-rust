@@ -1,4 +1,4 @@
-use correo_core::{AppSnapshot, Diagnostic};
+use correo_core::{AppSnapshot, Diagnostic, DiagnosticSeverity};
 use egui::{RichText, ScrollArea, Ui};
 
 use crate::i18n::I18n;
@@ -20,12 +20,20 @@ pub fn workspace(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, i18n:
                     egui::Label::new(
                         RichText::new(log_line(diagnostic))
                             .monospace()
-                            .color(tokens.severity(diagnostic.severity)),
+                            .color(severity_color(tokens, diagnostic.severity)),
                     )
                     .wrap(),
                 );
             }
         });
+}
+
+fn severity_color(tokens: ThemeTokens, severity: DiagnosticSeverity) -> egui::Color32 {
+    match severity {
+        DiagnosticSeverity::Info => tokens.accent,
+        DiagnosticSeverity::Warning => tokens.warning,
+        DiagnosticSeverity::Error => tokens.danger,
+    }
 }
 
 fn log_line(diagnostic: &Diagnostic) -> String {

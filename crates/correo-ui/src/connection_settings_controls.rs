@@ -2,9 +2,14 @@ use correo_core::{
     AppCommand, AppCommandSender, ConnectionSecretField, ConnectionSettingField,
     ConnectionSettingFlag, SecretInput,
 };
-use egui::{ComboBox, Frame, RichText, Stroke, TextEdit, Ui};
+use correo_style::layout;
+use egui::{Button, ComboBox, RichText, TextEdit, Ui};
 
-use crate::theme::ThemeTokens;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+
+pub(super) const FORM_MAX_WIDTH: f32 = LABEL_WIDTH + layout::TOOLBAR_GAP + CONTROL_MAX_WIDTH;
+const LABEL_WIDTH: f32 = 180.0;
+const CONTROL_MAX_WIDTH: f32 = layout::SETTINGS_CONTROL_WIDTH;
 
 pub(super) fn field(
     ui: &mut Ui,
@@ -13,16 +18,11 @@ pub(super) fn field(
     field: ConnectionSettingField,
     commands: &AppCommandSender,
 ) {
-    ui.horizontal(|ui| {
-        ui.set_min_height(crate::theme::CONTROL_HEIGHT);
-        ui.label(label);
+    row(ui, label, |ui| {
         let mut edited = value.to_owned();
         if ui
             .add_sized(
-                [
-                    (ui.available_width() - 8.0).max(160.0),
-                    crate::theme::CONTROL_HEIGHT,
-                ],
+                [control_width(ui), CONTROL_HEIGHT],
                 crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited)),
             )
             .changed()
@@ -47,16 +47,13 @@ pub(super) fn field_with_button(
     command: AppCommand,
     commands: &AppCommandSender,
 ) {
-    ui.horizontal(|ui| {
-        ui.set_min_height(crate::theme::CONTROL_HEIGHT);
-        ui.label(label);
+    row(ui, label, |ui| {
         let mut edited = value.to_owned();
+        let button_width = row_button_width(ui, button);
+        let field_width = (control_width(ui) - button_width - ui.spacing().item_spacing.x).max(0.0);
         if ui
             .add_sized(
-                [
-                    (ui.available_width() - 96.0).max(160.0),
-                    crate::theme::CONTROL_HEIGHT,
-                ],
+                [field_width, CONTROL_HEIGHT],
                 crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited)),
             )
             .changed()
@@ -69,7 +66,10 @@ pub(super) fn field_with_button(
                 },
             );
         }
-        if ui.button(button).clicked() {
+        if ui
+            .add_sized([button_width, CONTROL_HEIGHT], Button::new(button))
+            .clicked()
+        {
             send(commands, command);
         }
     });
@@ -83,13 +83,11 @@ pub(super) fn combo(
     options: &[&str],
     commands: &AppCommandSender,
 ) {
-    ui.horizontal(|ui| {
-        ui.set_min_height(crate::theme::CONTROL_HEIGHT);
-        ui.label(label);
+    row(ui, label, |ui| {
         let mut selected = value.to_owned();
         ComboBox::from_id_salt(label)
             .selected_text(value)
-            .width((ui.available_width() - 8.0).max(160.0))
+            .width(control_width(ui))
             .show_ui(ui, |ui| {
                 for option in options {
                     ui.selectable_value(&mut selected, (*option).to_owned(), *option);
@@ -115,12 +113,14 @@ pub(super) fn flag(
     commands: &AppCommandSender,
 ) {
     let mut enabled = value;
-    if crate::widgets::checkbox(ui, &mut enabled, label).changed() {
-        send(
-            commands,
-            AppCommand::SetConnectionSettingFlag { flag, enabled },
-        );
-    }
+    row(ui, label, |ui| {
+        if crate::widgets::checkbox(ui, &mut enabled, "").changed() {
+            send(
+                commands,
+                AppCommand::SetConnectionSettingFlag { flag, enabled },
+            );
+        }
+    });
 }
 
 pub(super) fn secret_field(
@@ -146,16 +146,11 @@ pub(super) fn secret_field_enabled(
     commands: &AppCommandSender,
 ) {
     ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.set_min_height(crate::theme::CONTROL_HEIGHT);
-            ui.label(label);
+        row(ui, label, |ui| {
             let mut edited = value.expose_for_ui().to_owned();
             if ui
                 .add_sized(
-                    [
-                        (ui.available_width() - 8.0).max(160.0),
-                        crate::theme::CONTROL_HEIGHT,
-                    ],
+                    [control_width(ui), CONTROL_HEIGHT],
                     crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited))
                         .password(true),
                 )
@@ -172,7 +167,9 @@ pub(super) fn secret_field_enabled(
         });
     });
     if !status.is_empty() {
-        ui.label(RichText::new(status).color(tokens.text_secondary));
+        row(ui, "", |ui| {
+            ui.label(RichText::new(status).color(tokens.text_secondary));
+        });
     }
 }
 
@@ -185,16 +182,14 @@ pub(super) fn file_field(
     commands: &AppCommandSender,
 ) {
     ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.set_min_height(crate::theme::CONTROL_HEIGHT);
-            ui.label(label);
+        row(ui, label, |ui| {
             let mut edited = value.to_owned();
+            let button_width = row_button_width(ui, "Choose...");
+            let field_width =
+                (control_width(ui) - button_width - ui.spacing().item_spacing.x).max(0.0);
             if ui
                 .add_sized(
-                    [
-                        (ui.available_width() - 96.0).max(160.0),
-                        crate::theme::CONTROL_HEIGHT,
-                    ],
+                    [field_width, CONTROL_HEIGHT],
                     crate::widgets::padded_text_edit(TextEdit::singleline(&mut edited)),
                 )
                 .changed()
@@ -207,7 +202,10 @@ pub(super) fn file_field(
                     },
                 );
             }
-            if ui.button("Choose...").clicked() {
+            if ui
+                .add_sized([button_width, CONTROL_HEIGHT], Button::new("Choose..."))
+                .clicked()
+            {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
                     send(
                         commands,
@@ -222,11 +220,40 @@ pub(super) fn file_field(
     });
 }
 
-pub(super) fn panel(tokens: ThemeTokens) -> Frame {
-    Frame::NONE
-        .fill(tokens.panel_bg)
-        .stroke(Stroke::new(1.0, tokens.border))
-        .inner_margin(egui::Margin::same(10))
+pub(super) fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
+    ui.horizontal(|ui| {
+        ui.set_min_height(CONTROL_HEIGHT);
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(label_width(ui), CONTROL_HEIGHT),
+            egui::Sense::hover(),
+        );
+        ui.painter().text(
+            egui::pos2(rect.left(), rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::TextStyle::Body.resolve(ui.style()),
+            ui.visuals().text_color(),
+        );
+        add(ui);
+    });
+}
+
+pub(super) fn control_width(ui: &Ui) -> f32 {
+    ui.available_width().min(CONTROL_MAX_WIDTH).max(0.0)
+}
+
+fn label_width(ui: &Ui) -> f32 {
+    LABEL_WIDTH.min((ui.available_width() * 0.4).max(120.0))
+}
+
+fn row_button_width(ui: &Ui, label: &str) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let text_width = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), font, ui.visuals().text_color())
+        .size()
+        .x;
+    (text_width + ui.spacing().button_padding.x * 2.0).max(96.0)
 }
 
 pub(super) fn send(commands: &AppCommandSender, command: AppCommand) {

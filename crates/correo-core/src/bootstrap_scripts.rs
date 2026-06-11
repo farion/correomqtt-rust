@@ -30,9 +30,16 @@ pub(super) fn script_surface(scripts: &ScriptPersistenceSnapshot) -> ScriptSurfa
     let selected_execution_id = executions
         .first()
         .map(|execution| execution.execution_id.clone());
+    let active_execution_id = executions
+        .iter()
+        .find(|execution| !execution.status.is_terminal())
+        .map(|execution| execution.execution_id.clone());
+    let running = active_execution_id.is_some();
     ScriptSurfaceSnapshot {
         selected_script,
         scripts: rows,
+        running,
+        active_execution_id,
         selected_execution_id,
         executions,
         log_lines: scripts.logs.iter().map(script_log_line).collect(),
@@ -70,6 +77,7 @@ fn script_row(
         execution_count,
         source: file.source.clone(),
         saved_source: file.source.clone(),
+        persisted: true,
     }
 }
 

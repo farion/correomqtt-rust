@@ -2,6 +2,8 @@ mod bindings;
 mod cancellation;
 mod client_args;
 mod client_bindings;
+mod client_callbacks;
+mod client_results;
 mod error;
 mod executor;
 mod host;

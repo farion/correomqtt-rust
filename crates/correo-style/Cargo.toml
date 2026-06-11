@@ -1,0 +1,18 @@
+[package]
+name = "correo-style"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+egui = ["dep:egui", "dep:egui-phosphor"]
+
+[dependencies]
+egui = { workspace = true, optional = true }
+egui-phosphor = { workspace = true, optional = true }
+serde.workspace = true
+
+[lints]
+workspace = true

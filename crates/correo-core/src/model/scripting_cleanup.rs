@@ -6,8 +6,9 @@ use super::AppModel;
 
 impl AppModel {
     pub(super) fn clear_finished_script_executions(&mut self) {
-        let scripts = &mut self.snapshot.scripts;
-        let finished_ids = scripts
+        let finished_ids = self
+            .snapshot
+            .scripts
             .executions
             .iter()
             .filter(|execution| execution.status.is_terminal())
@@ -15,11 +16,12 @@ impl AppModel {
             .collect::<HashSet<_>>();
 
         if finished_ids.is_empty() {
-            scripts.feedback = Some(ScriptFeedback::info("No finished execution logs to clear."));
+            self.set_script_feedback(ScriptFeedback::info("No finished execution logs to clear."));
             return;
         }
 
         let cleared = finished_ids.len();
+        let scripts = &mut self.snapshot.scripts;
         scripts
             .executions
             .retain(|execution| !finished_ids.contains(&execution.execution_id));
@@ -55,7 +57,7 @@ impl AppModel {
         {
             scripts.last_error = None;
         }
-        scripts.feedback = Some(ScriptFeedback::info(format!(
+        self.set_script_feedback(ScriptFeedback::info(format!(
             "Cleared {cleared} finished execution log(s)."
         )));
     }

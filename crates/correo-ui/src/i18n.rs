@@ -93,11 +93,13 @@ impl I18n {
         })
     }
 
-    pub(crate) fn theme_label(&self, mode: ThemeMode) -> String {
-        self.text(match mode {
-            ThemeMode::System => "theme-system",
-            ThemeMode::Light => "theme-light",
-            ThemeMode::Dark => "theme-dark",
+    pub(crate) fn theme_label(&self, mode: &ThemeMode) -> String {
+        self.text(if matches!(mode, ThemeMode::System) {
+            "theme-system"
+        } else if mode.is_light() {
+            "theme-light"
+        } else {
+            "theme-dark"
         })
     }
 
@@ -217,7 +219,7 @@ mod tests {
         assert_eq!(i18n.text("common-save"), "Speichern");
         assert_eq!(i18n.text("plugin-header"), "Plugins für CorreoMQTT");
         assert_eq!(i18n.workspace_label(Workspace::Settings), "Einstellungen");
-        assert_eq!(i18n.theme_label(ThemeMode::Dark), "Dunkel");
+        assert_eq!(i18n.theme_label(&ThemeMode::Dark), "Dunkel");
     }
 
     #[test]

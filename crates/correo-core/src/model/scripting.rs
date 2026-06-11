@@ -1,8 +1,9 @@
 use crate::{
     redact_sensitive, Diagnostic, ScriptDetailTab, ScriptExecutionError, ScriptExecutionErrorKind,
-    ScriptExecutionRow, ScriptExecutionStatus, ScriptFeedback, ScriptFileStatus, ScriptLogLevel,
-    ScriptLogLine, ScriptRow,
+    ScriptExecutionRow, ScriptExecutionStatus, ScriptFeedback, ScriptFeedbackSeverity,
+    ScriptFileStatus, ScriptLogLevel, ScriptLogLine, ScriptRow,
 };
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use super::AppModel;
 
@@ -25,8 +26,7 @@ impl AppModel {
             .iter()
             .find(|connection| connection.id.to_string() == connection_id)
         else {
-            self.snapshot.scripts.feedback =
-                Some(ScriptFeedback::warning("Select an available connection."));
+            self.set_script_feedback(ScriptFeedback::warning("Select an available connection."));
             return;
         };
         self.snapshot.scripts.selected_connection_id = Some(connection.id.to_string());
@@ -34,27 +34,39 @@ impl AppModel {
         self.snapshot.scripts.feedback = None;
     }
 
+    pub(super) fn request_create_script(&mut self) {
+        self.snapshot.scripts.new_script_name = self.next_default_script_name();
+        self.snapshot.scripts.create_error = None;
+        self.snapshot.scripts.create_dialog_open = true;
+    }
+
     pub(super) fn update_new_script_name(&mut self, name: String) {
         self.snapshot.scripts.new_script_name = name;
+        self.snapshot.scripts.create_error = None;
+    }
+
+    pub(super) fn cancel_create_script(&mut self) {
+        self.snapshot.scripts.create_dialog_open = false;
+        self.snapshot.scripts.new_script_name.clear();
+        self.snapshot.scripts.create_error = None;
     }
 
     pub(super) fn create_script(&mut self) {
         let draft_name = self.snapshot.scripts.new_script_name.trim();
-        let name = if draft_name.is_empty() {
-            self.next_default_script_name()
-        } else {
-            match normalize_script_path(draft_name) {
-                Ok(name) => name,
-                Err(message) => {
-                    self.snapshot.scripts.feedback = Some(ScriptFeedback::error(message));
-                    return;
-                }
+        let name = match normalize_script_path(draft_name) {
+            Ok(name) => name,
+            Err(message) => {
+                self.snapshot.scripts.create_error = Some(message.clone());
+                self.snapshot.scripts.create_dialog_open = true;
+                self.set_script_feedback(ScriptFeedback::error(message));
+                return;
             }
         };
         if self.script_index(&name).is_some() {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::error(format!(
-                "Script already exists: {name}"
-            )));
+            let message = format!("Script already exists: {name}");
+            self.snapshot.scripts.create_error = Some(message.clone());
+            self.snapshot.scripts.create_dialog_open = true;
+            self.set_script_feedback(ScriptFeedback::error(message));
             return;
         }
 
@@ -65,11 +77,14 @@ impl AppModel {
             status: ScriptFileStatus::Ready,
             execution_count: 0,
             saved_source: source.clone(),
+            persisted: true,
             source,
         });
         self.snapshot.scripts.selected_script = name.clone();
+        self.snapshot.scripts.create_dialog_open = false;
+        self.snapshot.scripts.create_error = None;
         self.snapshot.scripts.new_script_name.clear();
-        self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!("Created {name}.")));
+        self.set_script_feedback(ScriptFeedback::info(format!("Created {name}.")));
     }
 
     fn next_default_script_name(&self) -> String {
@@ -95,6 +110,8 @@ impl AppModel {
         if script.status != ScriptFileStatus::Running {
             script.status = if script.is_dirty() {
                 ScriptFileStatus::Dirty
+            } else if !script.persisted {
+                ScriptFileStatus::Dirty
             } else {
                 ScriptFileStatus::Ready
             };
@@ -103,23 +120,22 @@ impl AppModel {
 
     pub(super) fn save_script(&mut self) {
         let Some(index) = self.selected_script_index() else {
-            self.snapshot.scripts.feedback =
-                Some(ScriptFeedback::warning("Select a script before saving."));
+            self.set_script_feedback(ScriptFeedback::warning("Select a script before saving."));
             return;
         };
         let script = &mut self.snapshot.scripts.scripts[index];
         script.saved_source = script.source.clone();
+        script.persisted = true;
         if script.status != ScriptFileStatus::Running {
             script.status = ScriptFileStatus::Ready;
         }
-        self.snapshot.scripts.feedback =
-            Some(ScriptFeedback::info(format!("Saved {}.", script.name)));
-        self.push_diagnostic(Diagnostic::info("Script save command queued."));
+        let name = script.name.clone();
+        self.set_script_feedback(ScriptFeedback::info(format!("Saved {name}.")));
     }
 
     pub(super) fn discard_script_changes(&mut self) {
         let Some(index) = self.selected_script_index() else {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(
+            self.set_script_feedback(ScriptFeedback::warning(
                 "Select a script before discarding changes.",
             ));
             return;
@@ -127,31 +143,38 @@ impl AppModel {
         let script = &mut self.snapshot.scripts.scripts[index];
         script.source = script.saved_source.clone();
         if script.status != ScriptFileStatus::Running {
-            script.status = ScriptFileStatus::Ready;
+            script.status = if script.persisted {
+                ScriptFileStatus::Ready
+            } else {
+                ScriptFileStatus::Dirty
+            };
         }
-        self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
+        let name = script.name.clone();
+        self.set_script_feedback(ScriptFeedback::info(format!(
             "Discarded changes to {}.",
-            script.name
+            name
         )));
     }
 
     pub(super) fn request_rename_script(&mut self) {
         if self.snapshot.scripts.selected_script().is_none() {
-            self.snapshot.scripts.feedback =
-                Some(ScriptFeedback::warning("Select a script before renaming."));
+            self.set_script_feedback(ScriptFeedback::warning("Select a script before renaming."));
             return;
         }
         self.snapshot.scripts.rename_script_name = self.snapshot.scripts.selected_script.clone();
+        self.snapshot.scripts.rename_error = None;
         self.snapshot.scripts.rename_dialog_open = true;
     }
 
     pub(super) fn update_rename_script_name(&mut self, name: String) {
         self.snapshot.scripts.rename_script_name = name;
+        self.snapshot.scripts.rename_error = None;
     }
 
     pub(super) fn cancel_rename_script(&mut self) {
         self.snapshot.scripts.rename_dialog_open = false;
         self.snapshot.scripts.rename_script_name.clear();
+        self.snapshot.scripts.rename_error = None;
     }
 
     pub(super) fn confirm_rename_script(&mut self) {
@@ -162,7 +185,8 @@ impl AppModel {
         let name = match normalize_script_path(&self.snapshot.scripts.rename_script_name) {
             Ok(name) => name,
             Err(message) => {
-                self.snapshot.scripts.feedback = Some(ScriptFeedback::error(message));
+                self.snapshot.scripts.rename_error = Some(message.clone());
+                self.set_script_feedback(ScriptFeedback::error(message));
                 return;
             }
         };
@@ -170,9 +194,9 @@ impl AppModel {
             .script_index(&name)
             .is_some_and(|existing| existing != index)
         {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::error(format!(
-                "Script already exists: {name}"
-            )));
+            let message = format!("Script already exists: {name}");
+            self.snapshot.scripts.rename_error = Some(message.clone());
+            self.set_script_feedback(ScriptFeedback::error(message));
             return;
         }
 
@@ -181,15 +205,15 @@ impl AppModel {
         self.snapshot.scripts.scripts[index].relative_path = name.clone();
         self.snapshot.scripts.selected_script = name.clone();
         self.snapshot.scripts.rename_dialog_open = false;
-        self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
+        self.snapshot.scripts.rename_error = None;
+        self.set_script_feedback(ScriptFeedback::info(format!(
             "Renamed {old_name} to {name}."
         )));
     }
 
     pub(super) fn request_delete_script(&mut self) {
         if self.snapshot.scripts.selected_script().is_none() {
-            self.snapshot.scripts.feedback =
-                Some(ScriptFeedback::warning("Select a script before deleting."));
+            self.set_script_feedback(ScriptFeedback::warning("Select a script before deleting."));
             return;
         }
         self.snapshot.scripts.delete_confirmation_open = true;
@@ -201,7 +225,7 @@ impl AppModel {
 
     pub(super) fn confirm_delete_script(&mut self) {
         if self.snapshot.scripts.running {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(
+            self.set_script_feedback(ScriptFeedback::warning(
                 "Cancel the running script before deleting it.",
             ));
             return;
@@ -222,7 +246,7 @@ impl AppModel {
             self.snapshot.scripts.selected_execution_id = None;
         }
         self.snapshot.scripts.delete_confirmation_open = false;
-        self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(format!(
+        self.set_script_feedback(ScriptFeedback::warning(format!(
             "Deleted {deleted}; script sidecars will be removed by storage."
         )));
     }
@@ -245,19 +269,19 @@ impl AppModel {
 
     pub(super) fn run_script(&mut self) {
         if self.snapshot.scripts.running {
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::warning(
+            self.set_script_feedback(ScriptFeedback::warning(
                 "A script execution is already running.",
             ));
             return;
         }
         let Some(index) = self.selected_script_index() else {
-            self.snapshot.scripts.feedback =
-                Some(ScriptFeedback::warning("Select a script before running."));
+            self.set_script_feedback(ScriptFeedback::warning("Select a script before running."));
             return;
         };
 
         let script_name = self.snapshot.scripts.scripts[index].name.clone();
         let execution_id = format!("script-exec-{}", self.snapshot.scripts.executions.len() + 1);
+        let timestamp = current_timestamp();
         self.snapshot.scripts.running = true;
         self.snapshot.scripts.active_execution_id = Some(execution_id.clone());
         self.snapshot.scripts.selected_execution_id = Some(execution_id.clone());
@@ -271,7 +295,7 @@ impl AppModel {
                 script_name: script_name.clone(),
                 status: ScriptExecutionStatus::Running,
                 duration: "running".to_owned(),
-                timestamp: "now".to_owned(),
+                timestamp: timestamp.clone(),
                 error: None,
             },
         );
@@ -282,24 +306,27 @@ impl AppModel {
                 "{script_name} execution queued for {}",
                 self.snapshot.scripts.selected_connection
             ),
-            "now".to_owned(),
+            timestamp,
         );
-        self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
-            "Run command queued for {script_name}."
-        )));
     }
 
     pub(super) fn cancel_script(&mut self) {
-        let Some(execution_id) = self.snapshot.scripts.active_execution_id.clone() else {
-            self.snapshot.scripts.feedback =
-                Some(ScriptFeedback::warning("No running script to cancel."));
+        let Some(execution_id) = self
+            .snapshot
+            .scripts
+            .running_execution_id()
+            .map(str::to_owned)
+        else {
+            self.set_script_feedback(ScriptFeedback::warning("No running script to cancel."));
             return;
         };
+        self.snapshot.scripts.active_execution_id = Some(execution_id.clone());
+        self.snapshot.scripts.running = true;
         self.append_script_log(
             execution_id.clone(),
             ScriptLogLevel::Warning,
             "Cancellation requested by user.".to_owned(),
-            "now".to_owned(),
+            current_timestamp(),
         );
         self.update_script_execution(
             execution_id,
@@ -370,15 +397,11 @@ impl AppModel {
                 execution_id,
                 ScriptLogLevel::Error,
                 format!("{}: {}", error.kind.label(), error.message),
-                "now".to_owned(),
+                current_timestamp(),
             );
             self.snapshot.scripts.last_error = Some(error);
         } else if status.is_terminal() {
             self.snapshot.scripts.last_error = None;
-            self.snapshot.scripts.feedback = Some(ScriptFeedback::info(format!(
-                "Execution {}.",
-                status.label()
-            )));
         }
     }
 
@@ -393,6 +416,22 @@ impl AppModel {
             .iter()
             .position(|script| script.name == name)
     }
+
+    pub(super) fn set_script_feedback(&mut self, feedback: ScriptFeedback) {
+        let diagnostic = match feedback.severity {
+            ScriptFeedbackSeverity::Info => Diagnostic::info(feedback.message.clone()),
+            ScriptFeedbackSeverity::Warning => Diagnostic::warning(feedback.message.clone()),
+            ScriptFeedbackSeverity::Error => Diagnostic::error(feedback.message.clone()),
+        };
+        self.snapshot.scripts.feedback = Some(feedback);
+        self.push_diagnostic(diagnostic);
+    }
+}
+
+fn current_timestamp() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 fn normalize_script_path(input: &str) -> Result<String, String> {

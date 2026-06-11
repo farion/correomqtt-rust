@@ -76,7 +76,10 @@ impl ConnectionImportSnapshot {
     }
 
     pub fn selected_count(&self) -> usize {
-        self.rows.iter().filter(|row| row.selected).count()
+        self.rows
+            .iter()
+            .filter(|row| row.selected && row.status.importable())
+            .count()
     }
 }
 
@@ -210,6 +213,10 @@ pub enum TransferConnectionStatus {
 }
 
 impl TransferConnectionStatus {
+    pub fn importable(self) -> bool {
+        matches!(self, Self::New | Self::MissingSecret)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::New => "New",

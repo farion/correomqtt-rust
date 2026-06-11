@@ -80,7 +80,7 @@ fn capture(capture: Capture) -> ScreenshotArtifact {
     ScreenshotArtifact {
         file_name: capture.file_name,
         surface: capture.scenario.label().to_owned(),
-        mode: capture.mode,
+        mode: capture.mode.clone(),
         size: capture.size,
         renderer,
     }
@@ -99,7 +99,7 @@ fn capture_recovery(capture: migration_recovery_scenarios::RecoveryCapture) -> S
     ScreenshotArtifact {
         file_name: capture.file_name,
         surface: capture.scenario.label().to_owned(),
-        mode: capture.mode,
+        mode: capture.mode.clone(),
         size: capture.size,
         renderer,
     }
@@ -216,7 +216,7 @@ fn write_manifest(artifacts: &[ScreenshotArtifact]) {
             "- file: {}\n  surface: {}\n  mode: {}\n  size: {}x{}\n  renderer: {renderer}\n",
             artifact.file_name,
             artifact.surface,
-            mode_slug(artifact.mode),
+            mode_slug(&artifact.mode),
             artifact.size.0,
             artifact.size.1
         ));

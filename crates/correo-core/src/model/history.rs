@@ -1,5 +1,6 @@
 use correo_mqtt::{ConnectionId, Qos};
 use correo_storage::current::{Message, MessageType, PublishStatus};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use crate::{AppModel, HistoryPersistenceCommand, MqttEvent};
 
@@ -22,7 +23,7 @@ impl AppModel {
                     payload: Some(String::from_utf8_lossy(payload).into_owned()),
                     retained: *retain,
                     qos: Some(storage_qos(*qos)),
-                    date_time: Some("now".to_owned()),
+                    date_time: Some(current_timestamp()),
                     message_id: None,
                     message_type: Some(MessageType::Outgoing),
                     publish_status: Some(PublishStatus::Succeeded),
@@ -40,12 +41,18 @@ impl AppModel {
         }
     }
 
-    fn storage_connection_id(&self, connection_id: ConnectionId) -> String {
+    pub(super) fn storage_connection_id(&self, connection_id: ConnectionId) -> String {
         self.storage_connection_ids
             .get(&connection_id)
             .cloned()
             .unwrap_or_else(|| connection_id.to_string())
     }
+}
+
+fn current_timestamp() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| OffsetDateTime::now_utc().unix_timestamp().to_string())
 }
 
 fn storage_qos(qos: Qos) -> correo_storage::current::Qos {
