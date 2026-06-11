@@ -1,5 +1,5 @@
 manifest_version = 1
-id = "builtin.base64"
+id = "org.correomqtt.plugins.base64"
 name = "Base64 Transform"
 version = "0.1.0"
 description = "Encodes outgoing payloads and decodes incoming payloads with Base64."

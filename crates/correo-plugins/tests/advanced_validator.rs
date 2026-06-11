@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 #[test]
 fn advanced_validator_composes_legacy_contains_string_extensions() {
-    let plugin = bundled_plugin_by_id("builtin.advanced-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.advanced-validator").unwrap();
     let mut request = MessageValidatorRequest::new(MessageDto::new(
         "demo/topic",
         b"Test payload with another okay".to_vec(),
@@ -36,7 +36,7 @@ fn advanced_validator_composes_legacy_contains_string_extensions() {
 
 #[test]
 fn advanced_validator_rejects_when_required_and_rule_fails() {
-    let plugin = bundled_plugin_by_id("builtin.advanced-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.advanced-validator").unwrap();
     let mut request =
         MessageValidatorRequest::new(MessageDto::new("demo/topic", b"Test payload".to_vec()));
     request.config = json!({

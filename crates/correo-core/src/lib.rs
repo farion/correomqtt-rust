@@ -36,6 +36,6 @@ pub enum CoreError {
     ConnectionNotOpen(ConnectionId),
 }
 pub use bootstrap::{
-    startup_state_from_current, startup_state_from_current_with_workbenches,
-    startup_state_from_migration, StartupState,
+    startup_state_from_current, startup_state_from_current_with_plugins,
+    startup_state_from_current_with_workbenches, startup_state_from_migration, StartupState,
 };

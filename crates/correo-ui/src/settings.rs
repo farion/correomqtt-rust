@@ -19,7 +19,7 @@ pub fn show(
 ) {
     let settings = &snapshot.global_settings;
     ui.heading(i18n.text("settings-header"));
-    ui.add_space(8.0);
+    ui.add_space(12.0);
 
     ScrollArea::vertical()
         .id_salt("global-settings-scroll")
@@ -61,14 +61,14 @@ pub fn show(
 }
 
 fn section(ui: &mut Ui, title: String, tokens: ThemeTokens, add: impl FnOnce(&mut Ui)) {
-    ui.add_space(10.0);
+    ui.add_space(14.0);
     ui.label(
         RichText::new(title)
             .strong()
-            .size(15.0)
+            .size(18.0)
             .color(tokens.text_primary),
     );
-    ui.add_space(6.0);
+    ui.add_space(8.0);
     add(ui);
     ui.add_space(14.0);
 }
@@ -98,7 +98,7 @@ fn search(
 fn keyring(
     ui: &mut Ui,
     settings: &GlobalSettingsSnapshot,
-    tokens: ThemeTokens,
+    _tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
@@ -114,16 +114,6 @@ fn keyring(
             },
             commands,
             i18n,
-        );
-    });
-    ui.add_space(8.0);
-    row(ui, &i18n.text("settings-sensitive-data"), |ui| {
-        ui.label(RichText::new(&settings.cleanup_status).color(tokens.text_secondary));
-    });
-    button_row(ui, |ui| {
-        ui.add_enabled(
-            false,
-            Button::new(i18n.text("settings-delete-sensitive-data")),
         );
     });
 }
@@ -167,23 +157,6 @@ fn plugins(
         GlobalSettingFlag::InstallBundledPlugins,
         commands,
     );
-    row(ui, &i18n.text("settings-bundled-url"), |ui| {
-        let mut url = settings.bundled_plugins_url.clone();
-        let response = ui.add_sized(
-            [layout::SETTINGS_CONTROL_WIDTH, CONTROL_HEIGHT],
-            padded_text_edit(TextEdit::singleline(&mut url)),
-        );
-        if response.changed() {
-            send_and_save(
-                commands,
-                AppCommand::UpdateGlobalSetting {
-                    field: GlobalSettingField::BundledPluginsUrl,
-                    value: url,
-                },
-            );
-        }
-    });
-    ui.add_space(6.0);
     if settings.plugin_repositories.is_empty() {
         row(ui, &i18n.text("settings-plugin-repositories"), |ui| {
             add_repository_button(ui, commands, i18n);

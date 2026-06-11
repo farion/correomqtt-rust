@@ -4,8 +4,8 @@ use crate::{
     AppCommand, AppCommandSender, AppEvent, AppEventSender, AppModel, AppSnapshot, Diagnostic,
     HistoryPersistenceEvent, HistoryPersistenceKind, HistoryPersistenceWorker,
     MigrationPersistenceCommand, MigrationPersistenceWorker, MqttCommandSender, MqttService,
-    NoopPluginHookExecutor, PluginHookExecutor, ScriptingWorker, SettingsPersistenceCommand,
-    SettingsPersistenceEvent, SettingsPersistenceWorker, StartupState,
+    NoopPluginHookExecutor, PluginHookExecutor, PluginInstaller, ScriptingWorker,
+    SettingsPersistenceCommand, SettingsPersistenceEvent, SettingsPersistenceWorker, StartupState,
 };
 
 mod plugin_helpers;
@@ -23,6 +23,7 @@ pub struct AppRuntime {
     history_worker: Option<HistoryPersistenceWorker>,
     migration_worker: Option<MigrationPersistenceWorker>,
     plugin_hooks: Arc<dyn PluginHookExecutor>,
+    plugin_installer: Option<Arc<dyn PluginInstaller>>,
     settings_worker: Option<SettingsPersistenceWorker>,
     scripting_worker: Option<ScriptingWorker>,
     shutdown_requested: bool,
@@ -54,6 +55,7 @@ impl AppRuntime {
             history_worker: None,
             migration_worker: None,
             plugin_hooks: Arc::new(NoopPluginHookExecutor),
+            plugin_installer: None,
             settings_worker: None,
             scripting_worker: None,
             shutdown_requested: false,
@@ -86,6 +88,10 @@ impl AppRuntime {
 
     pub fn attach_plugin_hook_executor(&mut self, executor: impl PluginHookExecutor) {
         self.plugin_hooks = Arc::new(executor);
+    }
+
+    pub fn attach_plugin_installer(&mut self, installer: impl PluginInstaller) {
+        self.plugin_installer = Some(Arc::new(installer));
     }
 
     pub fn attach_settings_worker(&mut self, worker: SettingsPersistenceWorker) {
@@ -156,7 +162,16 @@ impl AppRuntime {
             }
             self.forward_mqtt_commands(&command);
             self.forward_migration_command(&command);
+            let plugin_file_result = self.apply_plugin_file_command(&command);
+            if !plugin_file_result.proceed {
+                report.commands_processed += 1;
+                continue;
+            }
             self.model.apply_command(command.clone());
+            if let Some((plugin_id, installed_path)) = plugin_file_result.installed_path {
+                self.model
+                    .set_plugin_installed_path(&plugin_id, installed_path);
+            }
             if self.should_refresh_detail_for_command(&command) {
                 self.refresh_message_detail();
             }
@@ -379,6 +394,94 @@ impl AppRuntime {
                         error.to_string(),
                     )));
             }
+        }
+    }
+
+    fn apply_plugin_file_command(&self, command: &AppCommand) -> PluginFileCommandResult {
+        match command {
+            AppCommand::InstallMarketplacePlugin {
+                marketplace_plugin_id,
+            } => {
+                let Some(installer) = &self.plugin_installer else {
+                    let _ =
+                        self.event_sender
+                            .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                                "Plugin installer is not running.",
+                            )));
+                    return PluginFileCommandResult::proceed();
+                };
+                let Some(plugin) = self
+                    .model
+                    .snapshot()
+                    .plugins
+                    .marketplace_plugins
+                    .iter()
+                    .find(|plugin| &plugin.id == marketplace_plugin_id)
+                else {
+                    return PluginFileCommandResult::proceed();
+                };
+                match installer.install(plugin) {
+                    Ok(installed_path) => PluginFileCommandResult {
+                        proceed: true,
+                        installed_path: Some((marketplace_plugin_id.clone(), installed_path)),
+                    },
+                    Err(error) => {
+                        let _ =
+                            self.event_sender
+                                .emit(AppEvent::DiagnosticRaised(Diagnostic::error(format!(
+                                    "Plugin install failed: {error}"
+                                ))));
+                        PluginFileCommandResult::stop()
+                    }
+                }
+            }
+            AppCommand::UninstallPlugin { plugin_id } => {
+                if self
+                    .model
+                    .snapshot()
+                    .plugins
+                    .plugins
+                    .iter()
+                    .find(|plugin| &plugin.id == plugin_id)
+                    .is_some_and(|plugin| !plugin.can_uninstall())
+                {
+                    return PluginFileCommandResult::proceed();
+                }
+                if let Some(installer) = &self.plugin_installer {
+                    if let Err(error) = installer.uninstall(plugin_id) {
+                        let _ =
+                            self.event_sender
+                                .emit(AppEvent::DiagnosticRaised(Diagnostic::error(format!(
+                                    "Plugin uninstall failed: {error}"
+                                ))));
+                        return PluginFileCommandResult::stop();
+                    }
+                }
+                PluginFileCommandResult::proceed()
+            }
+            _ => PluginFileCommandResult::proceed(),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct PluginFileCommandResult {
+    proceed: bool,
+    installed_path: Option<(String, String)>,
+}
+
+impl PluginFileCommandResult {
+    fn proceed() -> Self {
+        Self {
+            proceed: true,
+            installed_path: None,
+        }
+    }
+
+    fn stop() -> Self {
+        Self {
+            proceed: false,
+            installed_path: None,
         }
     }
 }

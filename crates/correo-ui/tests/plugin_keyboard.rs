@@ -31,7 +31,7 @@ fn plugin_manager_keyboard_flow_is_command_driven() {
             .snapshot()
             .plugins
             .selected_plugin_id,
-        "builtin.base64-transform"
+        "org.correomqtt.plugins.base64"
     );
 
     harness.press_key(Key::Space);

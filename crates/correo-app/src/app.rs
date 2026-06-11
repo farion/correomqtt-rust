@@ -3,6 +3,7 @@ use correo_core::{
     RumqttSessionFactory, ScriptingWorker, SettingsPersistenceWorker,
 };
 
+use crate::plugins::{InstalledPluginExecutor, PluginFileInstaller};
 use crate::startup::{history_root, load_startup_state};
 
 pub fn run() -> eframe::Result {
@@ -55,9 +56,16 @@ struct CorreoDesktopApp {
 impl CorreoDesktopApp {
     fn new(creation_context: &eframe::CreationContext<'_>) -> Self {
         let theme_mode = correo_ui::stored_theme(creation_context);
-        let mut runtime = AppRuntime::with_startup_state(load_startup_state(theme_mode));
-        let mqtt_runtime = attach_mqtt_service(&mut runtime);
+        let loaded = load_startup_state(theme_mode);
+        let mut runtime = AppRuntime::with_startup_state(loaded.state);
         let storage_root = history_root();
+        runtime.attach_plugin_installer(PluginFileInstaller::new(storage_root.clone()));
+        attach_plugin_executor(
+            &mut runtime,
+            storage_root.clone(),
+            &loaded.plugins.installed_package_dirs,
+        );
+        let mqtt_runtime = attach_mqtt_service(&mut runtime);
         runtime.attach_history_worker(HistoryPersistenceWorker::start(storage_root.clone()));
         runtime.attach_migration_worker(MigrationPersistenceWorker::start(storage_root.clone()));
         runtime.attach_settings_worker(SettingsPersistenceWorker::start(storage_root.clone()));
@@ -86,6 +94,20 @@ impl CorreoDesktopApp {
         if report.shutdown_requested {
             context.send_viewport_cmd(eframe::egui::ViewportCommand::Close);
         }
+    }
+}
+
+fn attach_plugin_executor(
+    runtime: &mut AppRuntime,
+    config_root: std::path::PathBuf,
+    package_dirs: &[std::path::PathBuf],
+) {
+    match InstalledPluginExecutor::load(config_root, package_dirs) {
+        Ok(executor) => runtime.attach_plugin_hook_executor(executor),
+        Err(error) => record_startup_diagnostic(
+            runtime,
+            format!("Plugin runtime could not load installed plugins: {error}"),
+        ),
     }
 }
 

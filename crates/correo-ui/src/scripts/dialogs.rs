@@ -1,42 +1,46 @@
 use correo_core::{AppCommand, AppCommandSender, ScriptSurfaceSnapshot};
 use egui::{Id, Modal, TextEdit, Ui};
 
-use crate::{theme::CONTROL_HEIGHT, widgets::padded_text_edit};
+use crate::{modal_style, theme::ThemeTokens, theme::CONTROL_HEIGHT, widgets::padded_text_edit};
 
 pub(super) fn create_dialog(
     ui: &mut Ui,
     scripts: &ScriptSurfaceSnapshot,
+    tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
     if !scripts.create_dialog_open {
         return;
     }
-    let response = Modal::new(Id::new("create-script-modal")).show(ui.ctx(), |ui| {
-        ui.set_width(360.0);
-        ui.heading("New Script");
-        let mut name = scripts.new_script_name.clone();
-        if ui
-            .add_sized(
-                [ui.available_width(), CONTROL_HEIGHT],
-                padded_text_edit(TextEdit::singleline(&mut name)),
-            )
-            .changed()
-        {
-            send(commands, AppCommand::UpdateNewScriptName(name));
-        }
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), CONTROL_HEIGHT),
-            egui::Layout::right_to_left(egui::Align::Center),
-            |ui| {
-                if ui.button("Save").clicked() {
-                    send(commands, AppCommand::CreateScript);
-                }
-                if ui.button("Cancel").clicked() {
-                    send(commands, AppCommand::CancelCreateScript);
-                }
-            },
-        );
-    });
+    let response = modal_style::style(Modal::new(Id::new("create-script-modal")), tokens).show(
+        ui.ctx(),
+        |ui| {
+            ui.set_width(360.0);
+            ui.heading("New Script");
+            let mut name = scripts.new_script_name.clone();
+            if ui
+                .add_sized(
+                    [ui.available_width(), CONTROL_HEIGHT],
+                    padded_text_edit(TextEdit::singleline(&mut name)),
+                )
+                .changed()
+            {
+                send(commands, AppCommand::UpdateNewScriptName(name));
+            }
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), CONTROL_HEIGHT),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    if ui.button("Save").clicked() {
+                        send(commands, AppCommand::CreateScript);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        send(commands, AppCommand::CancelCreateScript);
+                    }
+                },
+            );
+        },
+    );
     if response.should_close() {
         send(commands, AppCommand::CancelCreateScript);
     }

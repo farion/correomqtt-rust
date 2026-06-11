@@ -1,5 +1,5 @@
 manifest_version = 1
-id = "builtin.xml-format"
+id = "org.correomqtt.plugins.xml-format"
 name = "XML Formatter"
 version = "0.1.0"
 description = "Formats XML-like payloads for the message detail view."

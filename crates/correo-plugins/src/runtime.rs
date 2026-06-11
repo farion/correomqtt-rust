@@ -71,6 +71,11 @@ impl WasmtimePluginRuntime {
         let mut config = Config::new();
         config.consume_fuel(true);
         config.epoch_interruption(true);
+        if let Err(error) = config.cache_config_load_default() {
+            eprintln!(
+                "plugin: runtime: Wasmtime compilation cache disabled because cache config could not be loaded: {error}"
+            );
+        }
         let engine = Engine::new(&config).map_err(RuntimeLoadError::Engine)?;
 
         Ok(Self { engine, limits })

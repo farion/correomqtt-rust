@@ -147,7 +147,7 @@ After successful migration, new secrets should be stored under stable keys deriv
 
 Do not load Rust dynamic libraries as first-class plugins. Rust ABI stability and unsafe process-level access make that too brittle for this app.
 
-Use a Wasmtime-based plugin runtime for portable, sandboxed plugins. The first plugin ABI should cover non-UI extension points:
+Use a Wasmtime-based plugin runtime for portable, sandboxed plugins. Plugin code is built and shipped as separate files, not embedded into the desktop binary. The first plugin ABI should cover non-UI extension points:
 
 - outgoing message transform
 - incoming message transform
@@ -157,12 +157,20 @@ Use a Wasmtime-based plugin runtime for portable, sandboxed plugins. The first p
 
 Defer full UI plugin injection until the egui shell stabilizes. UI plugin work should use constrained contributions such as toolbar actions, detail panels, and formatter panels rather than arbitrary widget mutation.
 
-New plugin package layout:
+Plugin package layout:
 
 ```text
 plugin.toml
 plugin.wasm
 assets/
+```
+
+`plugin.toml` and `plugin.wasm` are required. `assets/` is optional. Installed plugins are stored under the current profile data directory:
+
+```text
+plugins/<plugin-id>/plugin.toml
+plugins/<plugin-id>/plugin.wasm
+plugins/<plugin-id>/assets/
 ```
 
 Manifest fields:
@@ -183,7 +191,18 @@ Host guarantees:
 - Plugins receive JSON-serializable DTOs, not internal Rust structs.
 - Plugins cannot access files, network, keyring, or MQTT unless the manifest requests a capability and the host grants it.
 - Plugin errors are isolated and become user-visible diagnostics.
-- Bundled Java plugins should be reimplemented as built-in Rust or WASM plugins during migration.
+- Bundled Java plugins should be reimplemented as WASM plugin packages during migration.
+
+Repository and install model:
+
+- Build/package automation compiles plugin crates to `wasm32-unknown-unknown` and stages package directories next to the executable.
+- Build/package automation generates `local-repo.json` next to the executable. Its entries use `local_package` paths relative to that executable directory.
+- The binary embeds only `bundled.json`, a list of plugin ids that should be installed automatically. It must not embed plugin manifests or WASM bytes.
+- Startup loads repository metadata from `local-repo.json`, configured plugin repositories, and the default repository `https://github.com/EXXETA/correomqtt/releases/download/latest/default-repo.json` when default repositories are enabled.
+- Missing, unreachable, or invalid repositories are logged to CLI/tracing and ignored. Repository failures must not abort startup.
+- Remote repositories may use archive install sources with `url` and `sha256`; the app downloads, verifies, and extracts them into the profile plugin directory.
+- On startup, bundled plugin ids from `bundled.json` are installed automatically when matching repository entries exist and the plugin is not already installed.
+- Marketplace install copies local packages or extracts verified archives into the profile plugin directory. Marketplace uninstall removes the installed package directory.
 
 ### AD-007: Embedded JavaScript scripting with explicit host API
 
@@ -282,8 +301,10 @@ Startup:
 4. Detect old Java data files.
 5. Run migration if needed, with backup and report.
 6. Load current config and secrets metadata.
-7. Start plugin registry and built-ins.
-8. Start eframe UI.
+7. Load plugin repositories from `local-repo.json`, configured repositories, and the default repository when enabled.
+8. Auto-install bundled plugin ids from embedded `bundled.json` into the profile plugin directory.
+9. Start the plugin registry from installed plugin package directories.
+10. Start eframe UI.
 
 Connection flow:
 
@@ -407,12 +428,17 @@ Acceptance:
 Deliverables:
 
 - WASM plugin manifest and loader.
-- Built-in replacements for bundled formatters/manipulators/validators.
+- Separate WASM plugin package build outputs for bundled formatters/manipulators/validators.
+- `local-repo.json` generation next to the executable during packaging.
+- Embedded `bundled.json` listing plugin ids to auto-install.
+- Marketplace repository loading from `local-repo.json`, configured repositories, and the default repository.
 - Plugin config UI sufficient for message transforms and validators.
 
 Acceptance:
 
 - Incoming/outgoing transforms, validators, and detail formatters work without Java plugins.
+- Bundled plugins auto-install from package files on startup without embedding WASM bytes in the binary.
+- Invalid or unavailable repositories are logged and ignored without failing startup.
 - Old plugin folders can be deleted or left unused without breaking startup.
 
 ### M7: Import/export and settings parity

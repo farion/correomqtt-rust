@@ -16,7 +16,7 @@ fn zip_manipulator_wasm_package_declares_minimal_capabilities_and_runs_hook() {
     let package = PluginPackage::load(package_dir.path()).unwrap();
     let manifest = package.manifest();
 
-    assert_eq!(manifest.id, "builtin.zip-manipulator");
+    assert_eq!(manifest.id, "org.correomqtt.plugins.zip-manipulator");
     assert_eq!(
         manifest
             .capabilities

@@ -6,6 +6,7 @@ use egui::{Button, Id, Modal, RichText, TextEdit, Ui};
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
+use crate::modal_style;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::transfer_wizard_rows::{connection_list, select_buttons};
 use crate::widgets::{checkbox, padded_text_edit};
@@ -37,10 +38,10 @@ pub(crate) fn show(
     }
 
     let content_size = modal_content_size(context);
-    let response = Modal::new(Id::new("connection-transfer-modal"))
+    let response = modal_style::style(Modal::new(Id::new("connection-transfer-modal")), tokens)
         .frame(
             egui::Frame::NONE
-                .fill(tokens.window_bg)
+                .fill(modal_bg(tokens))
                 .corner_radius(egui::CornerRadius::same(4))
                 .inner_margin(egui::Margin::same(DIALOG_INNER_PADDING)),
         )
@@ -446,4 +447,9 @@ fn modal_content_size(context: &egui::Context) -> egui::Vec2 {
     let outer_height = outer_width / DIALOG_RATIO;
     let padding = f32::from(DIALOG_INNER_PADDING) * 2.0;
     egui::vec2(outer_width - padding, outer_height - padding)
+}
+
+fn modal_bg(tokens: ThemeTokens) -> egui::Color32 {
+    let color = tokens.window_bg;
+    egui::Color32::from_rgb(color.r(), color.g(), color.b())
 }

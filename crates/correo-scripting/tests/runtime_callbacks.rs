@@ -139,6 +139,146 @@ fn async_client_dispatches_script_publish_to_matching_subscribe_callback() {
 }
 
 #[test]
+fn blocking_client_supports_legacy_incoming_message_and_base64_helpers() {
+    let mqtt = Arc::new(RecordingMqttClient::default());
+    let source = r##"
+        var client = clientFactory.getBlockingClient();
+
+        client.connect();
+        logger.info("{}", plugins.base64.decode("Zm9v"));
+
+        client.subscribe("/step1", 1, (msg) => {
+            logger.info("{}", 1);
+            client.publish("/step2", 1, "Zm9vMg==");
+        });
+
+        client.onIncomingMessage("/step2", (payload) => {
+            return plugins.base64.decode(payload);
+        });
+
+        client.subscribe("/step2", 1, (msg) => {
+            logger.info("{}", msg);
+        });
+
+        client.publish("/step1", 1, "foo1");
+        queue.process();
+        client.unsubscribeAll();
+        client.disconnect();
+        logger.info("Finished");
+    "##;
+
+    let (host, error) = execute_with_mqtt(source, mqtt.clone());
+
+    assert_eq!(error, None);
+    let logs = host
+        .logs()
+        .into_iter()
+        .map(|log| log.message)
+        .collect::<Vec<_>>();
+    assert_eq!(logs, ["foo", "1", "foo2", "Finished"]);
+    assert_eq!(
+        mqtt.publishes
+            .lock()
+            .expect("publishes lock poisoned")
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn promise_client_supports_legacy_constructor_and_subscription_callbacks() {
+    let mqtt = Arc::new(RecordingMqttClient::default());
+    let source = r##"
+        var client = new ClientFactory().getPromiseClient();
+
+        new Promise(client.connect()).then(() => {
+            new Promise(client.subscribe("/step1", 1, (msg) => {
+                logger.info("{}", 1);
+                new Promise(client.publish("/step2", 1, "foo2"));
+            }));
+
+            new Promise(client.subscribe("/step2", 1, (msg) => {
+                logger.info("{}", msg);
+                queue.jumpOut();
+            }));
+
+            new Promise(client.publish("/step1", 1, "foo1")).then(() => {
+                queue.process();
+                new Promise(client.unsubscribeAll());
+                new Promise(client.disconnect());
+                logger.info("Finished");
+            });
+        });
+    "##;
+
+    let (host, error) = execute_with_mqtt(source, mqtt.clone());
+
+    assert_eq!(error, None);
+    let logs = host
+        .logs()
+        .into_iter()
+        .map(|log| log.message)
+        .collect::<Vec<_>>();
+    assert_eq!(logs, ["1", "foo2", "Finished"]);
+    assert_eq!(
+        mqtt.publishes
+            .lock()
+            .expect("publishes lock poisoned")
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn mixed_client_supports_top_level_await_and_mode_conversion() {
+    let mqtt = Arc::new(RecordingMqttClient::default());
+    let source = r##"
+        var client = new ClientFactory().getBlockingClient();
+
+        client.connect();
+        client = client.toPromised();
+
+        await new Promise(client.subscribe("/step1", 1, (msg) => {
+            logger.info("{}", 1);
+            new Promise(client.publish("/step2", 1, "foo2"));
+        }));
+
+        await new Promise(client.subscribe("/step2", 1, (msg) => {
+            logger.info("{}", msg);
+            queue.jumpOut();
+        }));
+
+        await new Promise(client.publish("/step1", 1, "foo1")).then(() => {
+            queue.process();
+            new Promise(client.unsubscribeAll());
+            new Promise(client.disconnect());
+            logger.info("Finished");
+        });
+
+        client = client.toBlocking();
+        client.unsubscribeAll();
+        client.disconnect();
+    "##;
+
+    let (host, error) = execute_with_mqtt(source, mqtt.clone());
+
+    assert_eq!(error, None);
+    let logs = host
+        .logs()
+        .into_iter()
+        .map(|log| log.message)
+        .collect::<Vec<_>>();
+    assert_eq!(logs, ["1", "foo2", "Finished"]);
+    assert_eq!(
+        mqtt.publishes
+            .lock()
+            .expect("publishes lock poisoned")
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn denied_host_surfaces_are_absent() {
     let source = r#"
         if (typeof Java !== "undefined") throw new Error("Java exposed");

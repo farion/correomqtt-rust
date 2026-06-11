@@ -13,6 +13,7 @@ fn main() -> Result<(), XtaskError> {
         Some("test") => cargo(&["test", "--workspace"]),
         Some("package") => package::run(args.collect()),
         Some("package-smoke") => package::smoke(args.collect()),
+        Some("plugin-release") => plugin_repository::release(args.collect()),
         Some("plugin-repository") => plugin_repository::run(args.collect()),
         Some("migrate-fixtures") => migrate_fixtures(),
         Some(command) => Err(XtaskError::UnknownCommand(command.to_owned())),
@@ -65,12 +66,15 @@ fn ensure_success(status: ExitStatus, args: &[&str]) -> Result<(), XtaskError> {
 
 fn print_help() {
     println!(
-        "Usage: cargo xtask <check|test|package|package-smoke|plugin-repository|migrate-fixtures>"
+        "Usage: cargo xtask <check|test|package|package-smoke|plugin-release|plugin-repository|migrate-fixtures>"
     );
     println!();
     println!("Package options:");
     println!("  cargo xtask package [--target <triple>] [--out-dir <dir>] [--no-build]");
     println!("  cargo xtask package-smoke [--target <triple>] [--out-dir <dir>] [--no-build]");
+    println!(
+        "  cargo xtask plugin-release [--out-dir <dir>] [--asset-base-url <url>] [--no-build]"
+    );
     println!("  cargo xtask plugin-repository [--out-dir <dir>]");
 }
 

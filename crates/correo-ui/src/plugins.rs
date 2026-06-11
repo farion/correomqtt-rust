@@ -149,8 +149,15 @@ pub(super) fn plugin_detail(
     );
     metadata_row(
         ui,
+        &i18n.text("plugin-origin"),
+        &plugin.origin,
+        tokens,
+        i18n,
+    );
+    metadata_row(
+        ui,
         &i18n.text("plugin-path"),
-        &plugin.location,
+        &plugin.installed_path,
         tokens,
         i18n,
     );
@@ -215,7 +222,7 @@ pub(super) fn plugin_action_bar(
                 },
             );
         }
-        if ui.add(Button::new(i18n.text("plugin-uninstall"))).clicked() {
+        if plugin.can_uninstall() && ui.add(Button::new(i18n.text("plugin-uninstall"))).clicked() {
             send(
                 commands,
                 AppCommand::UninstallPlugin {

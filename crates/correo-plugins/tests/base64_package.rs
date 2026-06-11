@@ -15,7 +15,7 @@ fn base64_wasm_package_declares_minimal_capabilities_and_runs_supported_hooks() 
     let package = PluginPackage::load(package_dir.path()).unwrap();
     let manifest = package.manifest();
 
-    assert_eq!(manifest.id, "builtin.base64");
+    assert_eq!(manifest.id, "org.correomqtt.plugins.base64");
     assert_eq!(
         manifest
             .capabilities

@@ -130,7 +130,7 @@ fn selected_detail(
     );
     metadata_row(
         ui,
-        &i18n.text("plugin-path"),
+        &i18n.text("plugin-origin"),
         &plugin.location,
         tokens,
         i18n,

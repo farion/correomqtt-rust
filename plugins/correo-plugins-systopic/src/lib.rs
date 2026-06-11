@@ -5,7 +5,7 @@ mod topics;
 use topics::{metadata_for_topic, SysTopicMetadata};
 
 pub const ABI_VERSION: u16 = 1;
-pub const PLUGIN_ID: &str = "builtin.system-topic";
+pub const PLUGIN_ID: &str = "org.correomqtt.plugins.system-topic";
 pub const LEGACY_PLUGIN_ID: &str = "systopic";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

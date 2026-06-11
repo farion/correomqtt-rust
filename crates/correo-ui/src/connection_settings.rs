@@ -23,8 +23,9 @@ use controls::{
 const MODAL_MAX_WIDTH: f32 = controls::FORM_MAX_WIDTH + 24.0;
 const MODAL_HEIGHT_SCALE: f32 = 0.9;
 const MODAL_MAX_HEIGHT: f32 = 720.0;
-const SCRIM_ALPHA: u8 = 112;
+const SCRIM_ALPHA: u8 = 176;
 const MODAL_RADIUS: u8 = 4;
+const MODAL_PADDING: i8 = 12;
 
 pub fn show(
     ui: &mut Ui,
@@ -76,7 +77,17 @@ pub fn overlay(
         send(commands, AppCommand::DiscardConnectionSettings);
     }
 
-    let overlay_rect = ui.max_rect().expand2(egui::vec2(padding, 0.0));
+    let content_rect = ui.max_rect();
+    let overlay_rect = Rect::from_min_max(
+        egui::pos2(
+            content_rect.left() - padding,
+            content_rect.top() - f32::from(correo_style::layout::CENTRAL_MARGIN),
+        ),
+        egui::pos2(
+            content_rect.right() + padding,
+            content_rect.bottom() + padding,
+        ),
+    );
     let modal_size = egui::vec2(
         (overlay_rect.width() * 0.95).min(MODAL_MAX_WIDTH),
         (overlay_rect.height() * MODAL_HEIGHT_SCALE).min(MODAL_MAX_HEIGHT),
@@ -100,13 +111,14 @@ pub fn overlay(
         ui.painter().rect_filled(
             modal_rect,
             CornerRadius::same(MODAL_RADIUS),
-            tokens.window_bg,
+            modal_bg(tokens),
         );
 
-        let content_rect = modal_rect.shrink(12.0);
+        let content_rect = modal_rect.shrink(f32::from(MODAL_PADDING));
         let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
         content_ui.set_min_size(content_rect.size());
         content_ui.set_max_size(content_rect.size());
+        content_ui.set_clip_rect(content_rect);
         let body_id = egui::Id::new(("connection-settings-overlay-body", editor_id.to_string()));
         content_ui.vertical(|ui| {
             modal_header(ui, commands, i18n);
@@ -133,6 +145,11 @@ pub fn overlay(
 
 fn header(ui: &mut Ui, i18n: &I18n) {
     ui.heading(i18n.text("connection-settings-title"));
+}
+
+fn modal_bg(tokens: ThemeTokens) -> Color32 {
+    let color = tokens.window_bg;
+    Color32::from_rgb(color.r(), color.g(), color.b())
 }
 
 fn modal_header(ui: &mut Ui, commands: &AppCommandSender, i18n: &I18n) {

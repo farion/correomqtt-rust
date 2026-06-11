@@ -1,5 +1,5 @@
 manifest_version = 1
-id = "builtin.advanced-validator"
+id = "org.correomqtt.plugins.advanced-validator"
 name = "Advanced Validator"
 version = "0.1.0"
 description = "Composes configured validator rules with AND and OR groups."

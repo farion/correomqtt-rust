@@ -27,6 +27,11 @@ impl AppModel {
         self.snapshot.active_workspace = Workspace::Connections;
         self.snapshot.connection_surface = ConnectionSurface::Transfer;
         self.snapshot.transfer.active_section = TransferSection::Export;
+        self.snapshot.transfer.export.rows =
+            self.snapshot.connections.iter().map(export_row).collect();
+        self.snapshot.transfer.selected_connections =
+            self.snapshot.transfer.export.selected_count();
+        self.snapshot.transfer.export.outcome = None;
         self.snapshot.transfer.export.feedback = Some(TransferFeedback::info(
             "Connection export is ready. Plain exports omit sensitive auth values.",
         ));
@@ -398,6 +403,17 @@ fn stored_mqtt_version(version: StoredMqttVersion) -> String {
     match version {
         StoredMqttVersion::Mqtt311 => "MQTT 3.1.1".to_owned(),
         StoredMqttVersion::Mqtt50 => "MQTT v5".to_owned(),
+    }
+}
+
+fn export_row(connection: &ConnectionSummary) -> TransferConnectionRow {
+    TransferConnectionRow {
+        id: connection.id.to_string(),
+        name: connection.name.clone(),
+        endpoint: connection.endpoint.clone(),
+        mqtt_version: connection.mqtt_version.clone(),
+        selected: false,
+        status: TransferConnectionStatus::Exportable,
     }
 }
 

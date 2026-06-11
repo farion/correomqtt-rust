@@ -1,30 +1,50 @@
 use crate::{
-    marketplace_rows_from_repository_json, PluginFeedback, PluginLoadState, PluginSurfaceSnapshot,
-    PluginSurfaceTab,
+    marketplace_rows_from_repository_json, PluginFeedback, PluginLoadState, PluginSource,
+    PluginSurfaceSnapshot, PluginSurfaceTab,
 };
 
-const LOCAL_PLUGIN_REPOSITORY_JSON: &str =
-    include_str!("../../correo-plugins/tests/fixtures/repository.json");
-
-pub(super) fn plugin_surface(install_bundled_plugins: bool) -> PluginSurfaceSnapshot {
-    let Ok(mut marketplace_plugins) =
-        marketplace_rows_from_repository_json(LOCAL_PLUGIN_REPOSITORY_JSON)
-    else {
-        return PluginSurfaceSnapshot {
-            load_state: PluginLoadState::Empty,
-            feedback: Some(PluginFeedback::error(
-                "The bundled plugin repository catalog could not be loaded.",
-            )),
-            ..PluginSurfaceSnapshot::default()
-        };
-    };
+pub(super) fn plugin_surface(
+    install_bundled_plugins: bool,
+    repository_jsons: &[String],
+    bundled_plugin_ids: &[String],
+    installed_plugin_ids: &[String],
+    installed_plugin_paths: &[(String, String)],
+) -> PluginSurfaceSnapshot {
+    let mut marketplace_plugins = Vec::new();
+    let mut feedback = None;
+    for repository_json in repository_jsons {
+        match marketplace_rows_from_repository_json(repository_json) {
+            Ok(rows) => merge_marketplace_plugins(&mut marketplace_plugins, rows),
+            Err(error) => {
+                feedback = Some(PluginFeedback::warning(format!(
+                    "A plugin repository was ignored: {error}"
+                )));
+            }
+        }
+    }
 
     let mut plugins = Vec::new();
-    if install_bundled_plugins {
+    if install_bundled_plugins || !installed_plugin_ids.is_empty() {
         for marketplace_plugin in &mut marketplace_plugins {
-            if marketplace_plugin.install_source.is_bundled() {
+            let should_install = (install_bundled_plugins
+                && bundled_plugin_ids
+                    .iter()
+                    .any(|id| id == &marketplace_plugin.id))
+                || installed_plugin_ids
+                    .iter()
+                    .any(|id| id == &marketplace_plugin.id);
+            if should_install {
                 marketplace_plugin.installed_plugin_id = Some(marketplace_plugin.id.clone());
-                plugins.push(marketplace_plugin.to_installed_plugin());
+                let mut plugin = marketplace_plugin.to_installed_plugin();
+                if bundled_plugin_ids.iter().any(|id| id == &plugin.id) {
+                    plugin.source = PluginSource::Bundled;
+                }
+                plugin.installed_path = installed_plugin_paths
+                    .iter()
+                    .find(|(id, _)| id == &marketplace_plugin.id)
+                    .map(|(_, path)| path.clone())
+                    .unwrap_or_default();
+                plugins.push(plugin);
             }
         }
     }
@@ -50,6 +70,18 @@ pub(super) fn plugin_surface(install_bundled_plugins: bool) -> PluginSurfaceSnap
         marketplace_plugins,
         selected_plugin_id,
         selected_marketplace_plugin_id,
+        feedback,
         ..PluginSurfaceSnapshot::default()
+    }
+}
+
+fn merge_marketplace_plugins(
+    marketplace_plugins: &mut Vec<crate::PluginMarketplaceRow>,
+    rows: Vec<crate::PluginMarketplaceRow>,
+) {
+    for row in rows {
+        if !marketplace_plugins.iter().any(|plugin| plugin.id == row.id) {
+            marketplace_plugins.push(row);
+        }
     }
 }

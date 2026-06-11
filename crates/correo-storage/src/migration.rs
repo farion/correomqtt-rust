@@ -161,7 +161,7 @@ impl RustPluginState {
         Self {
             manifests: vec![
                 RustPluginManifest {
-                    id: "builtin.base64".to_owned(),
+                    id: "org.correomqtt.plugins.base64".to_owned(),
                     version: "0.1.0".to_owned(),
                     capabilities: vec![
                         "incoming_transform".to_owned(),
@@ -169,27 +169,27 @@ impl RustPluginState {
                     ],
                 },
                 RustPluginManifest {
-                    id: "builtin.json-format".to_owned(),
+                    id: "org.correomqtt.plugins.json-format".to_owned(),
                     version: "0.1.0".to_owned(),
                     capabilities: vec!["detail_formatter".to_owned()],
                 },
                 RustPluginManifest {
-                    id: "builtin.xml-format".to_owned(),
+                    id: "org.correomqtt.plugins.xml-format".to_owned(),
                     version: "0.1.0".to_owned(),
                     capabilities: vec!["detail_formatter".to_owned()],
                 },
                 RustPluginManifest {
-                    id: "builtin.contains-string-validator".to_owned(),
+                    id: "org.correomqtt.plugins.contains-string-validator".to_owned(),
                     version: "0.1.0".to_owned(),
                     capabilities: vec!["validator".to_owned()],
                 },
                 RustPluginManifest {
-                    id: "builtin.advanced-validator".to_owned(),
+                    id: "org.correomqtt.plugins.advanced-validator".to_owned(),
                     version: "0.1.0".to_owned(),
                     capabilities: vec!["validator".to_owned()],
                 },
                 RustPluginManifest {
-                    id: "builtin.xml-xsd-validator".to_owned(),
+                    id: "org.correomqtt.plugins.xml-xsd-validator".to_owned(),
                     version: "0.1.0".to_owned(),
                     capabilities: vec!["validator".to_owned()],
                 },

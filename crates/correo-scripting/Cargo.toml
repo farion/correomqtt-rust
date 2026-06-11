@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 correo-mqtt = { path = "../correo-mqtt" }
 rquickjs.workspace = true
 serde.workspace = true

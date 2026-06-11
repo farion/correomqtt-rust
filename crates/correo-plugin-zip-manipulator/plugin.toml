@@ -1,5 +1,5 @@
 manifest_version = 1
-id = "builtin.zip-manipulator"
+id = "org.correomqtt.plugins.zip-manipulator"
 name = "ZIP Manipulator"
 version = "0.1.0"
 description = "Compresses or decompresses message detail bytes with GZIP."

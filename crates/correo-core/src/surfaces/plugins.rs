@@ -157,6 +157,10 @@ pub struct PluginRow {
     pub license: String,
     #[serde(default)]
     pub location: String,
+    #[serde(default)]
+    pub origin: String,
+    #[serde(default)]
+    pub installed_path: String,
     pub source: PluginSource,
     pub enabled: bool,
     pub status: PluginStatus,
@@ -165,6 +169,12 @@ pub struct PluginRow {
     pub hooks: Vec<PluginHookAssignment>,
     pub diagnostics: Vec<PluginDiagnosticRow>,
     pub legacy_note: Option<String>,
+}
+
+impl PluginRow {
+    pub fn can_uninstall(&self) -> bool {
+        self.source == PluginSource::UserManifest
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,6 +200,7 @@ pub struct PluginMarketplaceRow {
 pub enum PluginMarketplaceSource {
     Bundled { plugin_id: String },
     LocalPackage { path: String },
+    Archive { url: String, sha256: String },
     Unknown,
 }
 
@@ -248,7 +259,9 @@ impl PluginMarketplaceSource {
     fn plugin_source(&self) -> PluginSource {
         match self {
             Self::Bundled { .. } => PluginSource::Bundled,
-            Self::LocalPackage { .. } | Self::Unknown => PluginSource::UserManifest,
+            Self::LocalPackage { .. } | Self::Archive { .. } | Self::Unknown => {
+                PluginSource::UserManifest
+            }
         }
     }
 
@@ -256,6 +269,7 @@ impl PluginMarketplaceSource {
         match self {
             Self::Bundled { plugin_id } => format!("bundled://{plugin_id}/plugin.toml"),
             Self::LocalPackage { path } => path.clone(),
+            Self::Archive { url, .. } => url.clone(),
             Self::Unknown => "Repository catalog".to_owned(),
         }
     }
@@ -271,6 +285,8 @@ impl PluginMarketplaceRow {
             provider: self.provider.clone(),
             license: self.license.clone(),
             location: self.location.clone(),
+            origin: self.location.clone(),
+            installed_path: String::new(),
             source: self.install_source.plugin_source(),
             enabled: true,
             status: PluginStatus::Active,

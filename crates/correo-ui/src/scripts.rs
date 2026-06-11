@@ -75,9 +75,9 @@ pub fn show(
         |ui| log::log_view(ui, &snapshot.scripts, tokens, commands),
         |ui| footer::footer(ui, &snapshot.scripts, tokens),
     );
-    dialogs::create_dialog(ui, &snapshot.scripts, commands);
-    rename_dialog(ui, &snapshot.scripts, commands);
-    delete_dialog(ui, &snapshot.scripts, commands);
+    dialogs::create_dialog(ui, &snapshot.scripts, tokens, commands);
+    rename_dialog(ui, &snapshot.scripts, tokens, commands);
+    delete_dialog(ui, &snapshot.scripts, tokens, commands);
 }
 
 fn script_browser(
@@ -385,58 +385,70 @@ fn executions(
         });
 }
 
-fn rename_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
+fn rename_dialog(
+    ui: &mut Ui,
+    scripts: &ScriptSurfaceSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     if !scripts.rename_dialog_open {
         return;
     }
-    let response = Modal::new(Id::new("rename-script-modal")).show(ui.ctx(), |ui| {
-        ui.set_width(360.0);
-        ui.heading("Rename Script");
-        let mut name = scripts.rename_script_name.clone();
-        if ui
-            .add_sized(
-                [ui.available_width(), CONTROL_HEIGHT],
-                padded_text_edit(TextEdit::singleline(&mut name)),
-            )
-            .changed()
-        {
-            send(commands, AppCommand::UpdateRenameScriptName(name));
-        }
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), CONTROL_HEIGHT),
-            egui::Layout::right_to_left(egui::Align::Center),
-            |ui| {
-                if ui.button("Rename").clicked() {
-                    send(commands, AppCommand::ConfirmRenameScript);
-                }
-                if ui.button("Cancel").clicked() {
-                    send(commands, AppCommand::CancelRenameScript);
-                }
-            },
-        );
-    });
+    let response = crate::modal_style::style(Modal::new(Id::new("rename-script-modal")), tokens)
+        .show(ui.ctx(), |ui| {
+            ui.set_width(360.0);
+            ui.heading("Rename Script");
+            let mut name = scripts.rename_script_name.clone();
+            if ui
+                .add_sized(
+                    [ui.available_width(), CONTROL_HEIGHT],
+                    padded_text_edit(TextEdit::singleline(&mut name)),
+                )
+                .changed()
+            {
+                send(commands, AppCommand::UpdateRenameScriptName(name));
+            }
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), CONTROL_HEIGHT),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    if ui.button("Rename").clicked() {
+                        send(commands, AppCommand::ConfirmRenameScript);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        send(commands, AppCommand::CancelRenameScript);
+                    }
+                },
+            );
+        });
     if response.should_close() {
         send(commands, AppCommand::CancelRenameScript);
     }
 }
 
-fn delete_dialog(ui: &mut Ui, scripts: &ScriptSurfaceSnapshot, commands: &AppCommandSender) {
+fn delete_dialog(
+    ui: &mut Ui,
+    scripts: &ScriptSurfaceSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     if !scripts.delete_confirmation_open {
         return;
     }
-    let response = Modal::new(Id::new("delete-script-modal")).show(ui.ctx(), |ui| {
-        ui.set_width(360.0);
-        ui.heading("Delete Script");
-        ui.label(format!("Delete {}?", scripts.selected_script));
-        ui.horizontal(|ui| {
-            if ui.button("Cancel").clicked() {
-                send(commands, AppCommand::CancelDeleteScript);
-            }
-            if ui.button("Delete").clicked() {
-                send(commands, AppCommand::ConfirmDeleteScript);
-            }
+    let response = crate::modal_style::style(Modal::new(Id::new("delete-script-modal")), tokens)
+        .show(ui.ctx(), |ui| {
+            ui.set_width(360.0);
+            ui.heading("Delete Script");
+            ui.label(format!("Delete {}?", scripts.selected_script));
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    send(commands, AppCommand::CancelDeleteScript);
+                }
+                if ui.button("Delete").clicked() {
+                    send(commands, AppCommand::ConfirmDeleteScript);
+                }
+            });
         });
-    });
     if response.should_close() {
         send(commands, AppCommand::CancelDeleteScript);
     }

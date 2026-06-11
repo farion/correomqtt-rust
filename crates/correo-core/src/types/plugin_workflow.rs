@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
+use crate::PluginMarketplaceRow;
 use crate::{PluginDiagnosticSeverity, PluginHookKind, QosLevel};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,6 +139,11 @@ impl fmt::Display for PluginHookError {
 
 pub trait PluginHookExecutor: fmt::Debug + Send + Sync + 'static {
     fn execute(&self, call: PluginHookCall) -> Result<PluginHookOutput, PluginHookError>;
+}
+
+pub trait PluginInstaller: fmt::Debug + Send + Sync + 'static {
+    fn install(&self, plugin: &PluginMarketplaceRow) -> Result<String, String>;
+    fn uninstall(&self, plugin_id: &str) -> Result<(), String>;
 }
 
 #[derive(Debug, Default)]

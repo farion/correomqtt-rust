@@ -14,21 +14,21 @@ fn plugin_commands_update_config_and_hook_snapshot_state() {
     );
 
     model.apply_command(AppCommand::UpdatePluginConfigValue {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
         key: "indent".to_owned(),
         value: "4".to_owned(),
     });
-    let json_plugin = plugin(&model, "builtin.json-formatter");
+    let json_plugin = plugin(&model, "org.correomqtt.plugins.json-format");
     assert_eq!(json_plugin.config_fields[0].value, "4");
     assert_eq!(json_plugin.status, crate::PluginStatus::Active);
 
     model.apply_command(AppCommand::SetPluginEnabled {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
         enabled: false,
     });
     assert!(model.snapshot().plugins.disable_confirmation.is_some());
     model.apply_command(AppCommand::ConfirmPluginDisable);
-    let json_plugin = plugin(&model, "builtin.json-formatter");
+    let json_plugin = plugin(&model, "org.correomqtt.plugins.json-format");
     assert!(!json_plugin.enabled);
     assert_eq!(json_plugin.status, crate::PluginStatus::Disabled);
     assert!(json_plugin
@@ -42,12 +42,12 @@ fn plugin_disable_with_active_hooks_can_be_cancelled() {
     let mut model = AppModel::default();
 
     model.apply_command(AppCommand::SetPluginEnabled {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
         enabled: false,
     });
     model.apply_command(AppCommand::CancelPluginDisable);
 
-    let json_plugin = plugin(&model, "builtin.json-formatter");
+    let json_plugin = plugin(&model, "org.correomqtt.plugins.json-format");
     assert!(json_plugin.enabled);
     assert!(json_plugin.hooks.iter().any(|hook| hook.enabled));
     assert!(model.snapshot().plugins.disable_confirmation.is_none());
@@ -58,15 +58,15 @@ fn plugin_config_apply_blocks_invalid_json_and_cancel_restores_saved_value() {
     let mut model = AppModel::default();
 
     model.apply_command(AppCommand::UpdatePluginConfigValue {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
         key: "viewer_options".to_owned(),
         value: "{ not json".to_owned(),
     });
     model.apply_command(AppCommand::ApplyPluginConfig {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
     });
 
-    let json_plugin = plugin(&model, "builtin.json-formatter");
+    let json_plugin = plugin(&model, "org.correomqtt.plugins.json-format");
     let field = json_plugin
         .config_fields
         .iter()
@@ -80,9 +80,9 @@ fn plugin_config_apply_blocks_invalid_json_and_cancel_restores_saved_value() {
         .is_some_and(|error| error.contains("valid JSON")));
 
     model.apply_command(AppCommand::CancelPluginConfig {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
     });
-    let json_plugin = plugin(&model, "builtin.json-formatter");
+    let json_plugin = plugin(&model, "org.correomqtt.plugins.json-format");
     let field = json_plugin
         .config_fields
         .iter()
@@ -98,7 +98,7 @@ fn plugin_hook_editor_add_edit_apply_cancel_and_reset_are_testable() {
     let mut model = AppModel::default();
 
     model.apply_command(AppCommand::StartAddPluginHook {
-        plugin_id: "builtin.json-formatter".to_owned(),
+        plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
     });
     model.apply_command(AppCommand::UpdatePluginHookTarget("draft/#".to_owned()));
     model.apply_command(AppCommand::ResetPluginHookEdit);
@@ -117,7 +117,7 @@ fn plugin_hook_editor_add_edit_apply_cancel_and_reset_are_testable() {
     assert!(model.snapshot().plugins.hook_editor.is_none());
 
     model.apply_command(AppCommand::StartAddPluginHook {
-        plugin_id: "builtin.base64-transform".to_owned(),
+        plugin_id: "org.correomqtt.plugins.base64".to_owned(),
     });
     model.apply_command(AppCommand::UpdatePluginHookTarget("telemetry/#".to_owned()));
     model.apply_command(AppCommand::UpdatePluginHookConfigJson(
@@ -136,7 +136,7 @@ fn plugin_hook_editor_add_edit_apply_cancel_and_reset_are_testable() {
         "{\"mode\":\"strict\"}".to_owned(),
     ));
     model.apply_command(AppCommand::ApplyPluginHookEdit);
-    let base64 = plugin(&model, "builtin.base64-transform");
+    let base64 = plugin(&model, "org.correomqtt.plugins.base64");
     assert!(base64
         .hooks
         .iter()

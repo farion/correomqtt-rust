@@ -1,5 +1,5 @@
 manifest_version = 1
-id = "builtin.system-topic"
+id = "org.correomqtt.plugins.system-topic"
 name = "System Topic Formatter"
 version = "0.1.0"
 description = "Labels known $SYS broker metrics for the message detail view."

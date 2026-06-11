@@ -11,8 +11,8 @@ pub(super) fn sample_plugins() -> PluginSurfaceSnapshot {
         load_state: PluginLoadState::Ready,
         plugin_filter: String::new(),
         diagnostic_filter: String::new(),
-        selected_plugin_id: "builtin.json-formatter".to_owned(),
-        selected_marketplace_plugin_id: "builtin.json-formatter".to_owned(),
+        selected_plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
+        selected_marketplace_plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
         selected_diagnostic_id: Some("diag-json-ready".to_owned()),
         feedback: None,
         disable_confirmation: None,
@@ -35,13 +35,16 @@ pub(super) fn sample_plugins() -> PluginSurfaceSnapshot {
 
 fn json_formatter() -> PluginRow {
     PluginRow {
-        id: "builtin.json-formatter".to_owned(),
+        id: "org.correomqtt.plugins.json-format".to_owned(),
         name: "JSON Formatter".to_owned(),
         version: "1.0.0".to_owned(),
         description: "Formats messages into readable JSON".to_owned(),
         provider: "CorreoMQTT".to_owned(),
         license: "GPL".to_owned(),
-        location: "bundled://builtin.json-formatter/plugin.toml".to_owned(),
+        location: "bundled://org.correomqtt.plugins.json-format/plugin.toml".to_owned(),
+        origin: "bundled://org.correomqtt.plugins.json-format/plugin.toml".to_owned(),
+        installed_path: "~/.local/share/correomqtt/plugins/org.correomqtt.plugins.json-format"
+            .to_owned(),
         source: PluginSource::Bundled,
         enabled: true,
         status: PluginStatus::Active,
@@ -85,7 +88,7 @@ fn json_formatter() -> PluginRow {
         ],
         diagnostics: vec![diag(
             "diag-json-ready",
-            "builtin.json-formatter",
+            "org.correomqtt.plugins.json-format",
             PluginDiagnosticSeverity::Info,
             Some(PluginHookKind::DetailFormatter),
             "Bundled formatter initialized",
@@ -98,13 +101,16 @@ fn json_formatter() -> PluginRow {
 
 fn base64_transform() -> PluginRow {
     PluginRow {
-        id: "builtin.base64-transform".to_owned(),
+        id: "org.correomqtt.plugins.base64".to_owned(),
         name: "Base64 Transform".to_owned(),
         version: "1.0.0".to_owned(),
         description: "Decodes Base64 encoded messages".to_owned(),
         provider: "CorreoMQTT".to_owned(),
         license: "GPL".to_owned(),
-        location: "bundled://builtin.base64-transform/plugin.toml".to_owned(),
+        location: "bundled://org.correomqtt.plugins.base64/plugin.toml".to_owned(),
+        origin: "bundled://org.correomqtt.plugins.base64/plugin.toml".to_owned(),
+        installed_path: "~/.local/share/correomqtt/plugins/org.correomqtt.plugins.base64"
+            .to_owned(),
         source: PluginSource::Bundled,
         enabled: true,
         status: PluginStatus::Active,
@@ -145,7 +151,7 @@ fn base64_transform() -> PluginRow {
         diagnostics: vec![
             diag(
                 "diag-base64-incoming-failed",
-                "builtin.base64-transform",
+                "org.correomqtt.plugins.base64",
                 PluginDiagnosticSeverity::Warning,
                 Some(PluginHookKind::IncomingTransform),
                 "Incoming transform failed",
@@ -154,7 +160,7 @@ fn base64_transform() -> PluginRow {
             ),
             diag(
                 "diag-base64-outgoing-blocked",
-                "builtin.base64-transform",
+                "org.correomqtt.plugins.base64",
                 PluginDiagnosticSeverity::Error,
                 Some(PluginHookKind::OutgoingTransform),
                 "Outgoing transform failed",
@@ -175,6 +181,8 @@ fn advanced_validator() -> PluginRow {
         provider: "Workspace".to_owned(),
         license: "GPL".to_owned(),
         location: "plugins/advanced-validator/plugin.toml".to_owned(),
+        origin: "plugins/advanced-validator/plugin.toml".to_owned(),
+        installed_path: "~/.local/share/correomqtt/plugins/user.advanced-validator".to_owned(),
         source: PluginSource::UserManifest,
         enabled: true,
         status: PluginStatus::CapabilityDenied,
@@ -231,13 +239,16 @@ fn advanced_validator() -> PluginRow {
 
 fn system_topic_formatter() -> PluginRow {
     PluginRow {
-        id: "builtin.system-topic".to_owned(),
+        id: "org.correomqtt.plugins.system-topic".to_owned(),
         name: "System Topic Formatter".to_owned(),
         version: "1.0.0".to_owned(),
         description: "Plugin to show a window with systopic information".to_owned(),
         provider: "CorreoMQTT".to_owned(),
         license: "GPL".to_owned(),
-        location: "bundled://builtin.system-topic/plugin.toml".to_owned(),
+        location: "bundled://org.correomqtt.plugins.system-topic/plugin.toml".to_owned(),
+        origin: "bundled://org.correomqtt.plugins.system-topic/plugin.toml".to_owned(),
+        installed_path: "~/.local/share/correomqtt/plugins/org.correomqtt.plugins.system-topic"
+            .to_owned(),
         source: PluginSource::Bundled,
         enabled: true,
         status: PluginStatus::HookFailed,
@@ -264,7 +275,7 @@ fn system_topic_formatter() -> PluginRow {
         )],
         diagnostics: vec![diag(
             "diag-systopic-hook-failed",
-            "builtin.system-topic",
+            "org.correomqtt.plugins.system-topic",
             PluginDiagnosticSeverity::Error,
             Some(PluginHookKind::DetailFormatter),
             "Formatter fallback used",
@@ -285,6 +296,8 @@ fn user_load_error() -> PluginRow {
         provider: "Workspace".to_owned(),
         license: "Unspecified".to_owned(),
         location: "plugins/broken-wasm-import/plugin.toml".to_owned(),
+        origin: "plugins/broken-wasm-import/plugin.toml".to_owned(),
+        installed_path: "~/.local/share/correomqtt/plugins/user.wasm-load-error".to_owned(),
         source: PluginSource::UserManifest,
         enabled: false,
         status: PluginStatus::LoadError,
@@ -324,6 +337,8 @@ fn legacy_save_plugin() -> PluginRow {
         provider: "PF4J import".to_owned(),
         license: "GPL".to_owned(),
         location: "~/.correomqtt/plugins/jars/save-manipulator.jar".to_owned(),
+        origin: "~/.correomqtt/plugins/jars/save-manipulator.jar".to_owned(),
+        installed_path: "~/.correomqtt/plugins/jars/save-manipulator.jar".to_owned(),
         source: PluginSource::LegacyJava,
         enabled: false,
         status: PluginStatus::UnsupportedLegacy,
@@ -348,14 +363,14 @@ fn legacy_save_plugin() -> PluginRow {
 
 fn marketplace_json_formatter() -> PluginMarketplaceRow {
     PluginMarketplaceRow {
-        id: "builtin.json-formatter".to_owned(),
+        id: "org.correomqtt.plugins.json-format".to_owned(),
         name: "JSON Formatter".to_owned(),
         version: "1.0.0".to_owned(),
         provider: "CorreoMQTT".to_owned(),
         repository: "Bundled replacements".to_owned(),
         description: "Formats JSON payloads and normalizes detail bytes.".to_owned(),
         license: "GPL-3.0-or-later".to_owned(),
-        location: "bundled://builtin.json-formatter/plugin.toml".to_owned(),
+        location: "bundled://org.correomqtt.plugins.json-format/plugin.toml".to_owned(),
         capabilities: vec![
             cap("Detail formatter", true, "Formats JSON payload details"),
             cap(
@@ -365,22 +380,22 @@ fn marketplace_json_formatter() -> PluginMarketplaceRow {
             ),
         ],
         install_source: PluginMarketplaceSource::Bundled {
-            plugin_id: "builtin.json-formatter".to_owned(),
+            plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
         },
-        installed_plugin_id: Some("builtin.json-formatter".to_owned()),
+        installed_plugin_id: Some("org.correomqtt.plugins.json-format".to_owned()),
     }
 }
 
 fn marketplace_base64_transform() -> PluginMarketplaceRow {
     PluginMarketplaceRow {
-        id: "builtin.base64-transform".to_owned(),
+        id: "org.correomqtt.plugins.base64".to_owned(),
         name: "Base64 Transform".to_owned(),
         version: "1.0.0".to_owned(),
         provider: "CorreoMQTT".to_owned(),
         repository: "Bundled replacements".to_owned(),
         description: "Decodes inbound payload previews and encodes outbound payloads.".to_owned(),
         license: "GPL-3.0-or-later".to_owned(),
-        location: "bundled://builtin.base64-transform/plugin.toml".to_owned(),
+        location: "bundled://org.correomqtt.plugins.base64/plugin.toml".to_owned(),
         capabilities: vec![
             cap(
                 "Incoming transform",
@@ -390,9 +405,9 @@ fn marketplace_base64_transform() -> PluginMarketplaceRow {
             cap("Outgoing transform", true, "Encodes outbound payloads"),
         ],
         install_source: PluginMarketplaceSource::Bundled {
-            plugin_id: "builtin.base64-transform".to_owned(),
+            plugin_id: "org.correomqtt.plugins.base64".to_owned(),
         },
-        installed_plugin_id: Some("builtin.base64-transform".to_owned()),
+        installed_plugin_id: Some("org.correomqtt.plugins.base64".to_owned()),
     }
 }
 

@@ -154,7 +154,7 @@ mod tests {
     fn manifest_declares_only_base64_transform_hooks() {
         let manifest = toml::from_str::<TestManifest>(include_str!("../plugin.toml")).unwrap();
 
-        assert_eq!(manifest.id, "builtin.base64");
+        assert_eq!(manifest.id, "org.correomqtt.plugins.base64");
         assert_eq!(
             manifest.capabilities.hooks,
             [

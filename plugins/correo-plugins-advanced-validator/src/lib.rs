@@ -203,10 +203,9 @@ impl ValidatorExtension {
 fn is_contains_string_plugin(plugin_id: &str) -> bool {
     matches!(
         plugin_id,
-        "builtin.contains-string-validator"
+        "org.correomqtt.plugins.contains-string-validator"
             | "contains-string-validator"
             | "contains-string-validator-plugin"
-            | "org.correomqtt.plugins.contains-string-validator"
     )
 }
 

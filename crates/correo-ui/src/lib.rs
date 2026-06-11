@@ -6,6 +6,7 @@ mod diagnostics;
 mod i18n;
 mod icons;
 mod migration_recovery;
+mod modal_style;
 mod nav;
 mod payload_highlight;
 mod plugins;

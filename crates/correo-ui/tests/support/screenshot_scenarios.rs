@@ -465,9 +465,9 @@ fn apply_plugin_scenario(scenario: Scenario, snapshot: &mut correo_core::AppSnap
             snapshot.plugins.selected_plugin_id.clear();
         }
         Scenario::PluginsDisableConfirm => {
-            snapshot.plugins.selected_plugin_id = "builtin.json-formatter".to_owned();
+            snapshot.plugins.selected_plugin_id = "org.correomqtt.plugins.json-format".to_owned();
             snapshot.plugins.disable_confirmation = Some(PluginDisableConfirmation {
-                plugin_id: "builtin.json-formatter".to_owned(),
+                plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
                 plugin_name: "JSON Formatter".to_owned(),
                 active_hooks: vec![
                     PluginHookKind::DetailFormatter,
@@ -481,9 +481,9 @@ fn apply_plugin_scenario(scenario: Scenario, snapshot: &mut correo_core::AppSnap
         }
         Scenario::PluginsHookConfigInvalid => {
             snapshot.plugins.active_tab = PluginSurfaceTab::Hooks;
-            snapshot.plugins.selected_plugin_id = "builtin.json-formatter".to_owned();
+            snapshot.plugins.selected_plugin_id = "org.correomqtt.plugins.json-format".to_owned();
             snapshot.plugins.hook_editor = Some(PluginHookEditor {
-                plugin_id: "builtin.json-formatter".to_owned(),
+                plugin_id: "org.correomqtt.plugins.json-format".to_owned(),
                 plugin_name: "JSON Formatter".to_owned(),
                 original: None,
                 draft: PluginHookDraft {

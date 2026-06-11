@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 
 use correo_core::{
-    startup_state_from_current_with_workbenches, startup_state_from_migration, Diagnostic,
+    startup_state_from_current_with_plugins, startup_state_from_migration, Diagnostic,
 };
 use correo_core::{StartupState, ThemeMode, WorkbenchSnapshot};
 use correo_storage::current::{
@@ -14,36 +14,63 @@ use correo_storage::legacy::LegacyProfile;
 use correo_storage::migration::MigrationPreview;
 use directories::ProjectDirs;
 
-pub fn load_startup_state(fallback_theme: ThemeMode) -> StartupState {
+use crate::plugins::{load_startup_plugins, StartupPlugins};
+
+#[derive(Debug)]
+pub struct LoadedStartup {
+    pub state: StartupState,
+    pub plugins: StartupPlugins,
+}
+
+pub fn load_startup_state(fallback_theme: ThemeMode) -> LoadedStartup {
     for root in current_roots() {
         if !root.join("config.json").exists() {
             continue;
         }
 
-        return load_root(&root, fallback_theme.clone()).unwrap_or_else(|error| {
-            StartupState::empty(
+        return load_root(&root, fallback_theme.clone()).unwrap_or_else(|error| LoadedStartup {
+            state: StartupState::empty(
                 fallback_theme,
                 Diagnostic::error(format!(
                     "Existing CorreoMQTT config at {} could not be opened: {error}",
                     root.display()
                 )),
-            )
+            ),
+            plugins: StartupPlugins::default(),
         });
     }
 
     for root in legacy_roots() {
         if root.join("config.json").exists() {
-            return StartupState::legacy_migration_detected(
-                fallback_theme,
-                root.display().to_string(),
-            );
+            return LoadedStartup {
+                state: StartupState::legacy_migration_detected(
+                    fallback_theme,
+                    root.display().to_string(),
+                ),
+                plugins: StartupPlugins::default(),
+            };
         }
     }
 
-    StartupState::empty(
+    let root = history_root();
+    let config = AppConfig::default();
+    let plugins = load_startup_plugins(&root, &config);
+    let mut state = startup_state_from_current_with_plugins(
+        config,
+        HistoryPersistenceSnapshot::default(),
+        BTreeMap::new(),
+        ScriptPersistenceSnapshot::default(),
+        Vec::new(),
         fallback_theme,
-        Diagnostic::info("No existing CorreoMQTT config found; empty workspace ready."),
-    )
+        plugins.repository_jsons.clone(),
+        plugins.bundled_plugin_ids.clone(),
+        plugins.installed_plugin_ids.clone(),
+        plugins.installed_plugin_paths.clone(),
+    );
+    state.snapshot.diagnostics.push(
+        Diagnostic::info("No existing CorreoMQTT config found; empty workspace ready.").redacted(),
+    );
+    LoadedStartup { state, plugins }
 }
 
 pub fn history_root() -> PathBuf {
@@ -55,26 +82,35 @@ pub fn history_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".correomqtt"))
 }
 
-fn load_root(root: &Path, fallback_theme: ThemeMode) -> Result<StartupState, String> {
+fn load_root(root: &Path, fallback_theme: ThemeMode) -> Result<LoadedStartup, String> {
     match read_current_config(root) {
         Ok(config) => {
             let histories = load_current_histories(root, &config)?;
             let workbenches = load_current_workbenches(root, &config)?;
             let scripts = load_current_scripts(root)?;
-            Ok(startup_state_from_current_with_workbenches(
+            let plugins = load_startup_plugins(root, &config);
+            let state = startup_state_from_current_with_plugins(
                 config,
                 histories,
                 workbenches,
                 scripts,
                 Vec::new(),
                 fallback_theme,
-            ))
+                plugins.repository_jsons.clone(),
+                plugins.bundled_plugin_ids.clone(),
+                plugins.installed_plugin_ids.clone(),
+                plugins.installed_plugin_paths.clone(),
+            );
+            Ok(LoadedStartup { state, plugins })
         }
         Err(current_error) => match LegacyProfile::read_from(root) {
             Ok(profile) => {
                 let preview = MigrationPreview::from_legacy_profile(profile)
                     .map_err(|error| error.to_string())?;
-                Ok(startup_state_from_migration(preview, fallback_theme))
+                Ok(LoadedStartup {
+                    state: startup_state_from_migration(preview, fallback_theme),
+                    plugins: StartupPlugins::default(),
+                })
             }
             Err(legacy_error) => Err(format!(
                 "current config error: {current_error}; legacy migration error: {legacy_error}"

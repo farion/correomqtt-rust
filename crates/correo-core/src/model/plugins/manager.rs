@@ -56,6 +56,13 @@ impl AppModel {
         let Some(index) = self.plugin_index(&plugin_id) else {
             return;
         };
+        if !self.snapshot.plugins.plugins[index].can_uninstall() {
+            let name = self.snapshot.plugins.plugins[index].name.clone();
+            self.snapshot.plugins.feedback = Some(PluginFeedback::warning(format!(
+                "{name} is bundled with CorreoMQTT and cannot be uninstalled."
+            )));
+            return;
+        }
         let plugin = self.snapshot.plugins.plugins.remove(index);
         for marketplace_plugin in &mut self.snapshot.plugins.marketplace_plugins {
             if marketplace_plugin.installed_plugin_id.as_deref() == Some(&plugin.id) {

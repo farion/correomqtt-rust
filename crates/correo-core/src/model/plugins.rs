@@ -91,6 +91,12 @@ impl AppModel {
         self.snapshot.plugins.active_tab = tab;
     }
 
+    pub(crate) fn set_plugin_installed_path(&mut self, plugin_id: &str, installed_path: String) {
+        if let Some(index) = self.plugin_index(plugin_id) {
+            self.snapshot.plugins.plugins[index].installed_path = installed_path;
+        }
+    }
+
     pub(super) fn set_plugin_enabled(&mut self, plugin_id: String, enabled: bool) {
         let Some(index) = self.plugin_index(&plugin_id) else {
             return;

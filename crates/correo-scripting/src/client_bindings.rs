@@ -1,21 +1,20 @@
 use std::sync::Arc;
 
-use rquickjs::{
-    prelude::{Opt, Rest},
-    Ctx, Function, Object, Value,
-};
+use rquickjs::{prelude::Rest, Ctx, Function, Object, Value};
 
 use crate::{
     client_args::{
         parse_async_noop_args, parse_async_publish_args, parse_async_subscribe_args,
-        parse_async_unsubscribe_args, parse_publish_args, parse_subscribe_args,
-        parse_unsubscribe_args, MqttOperation,
+        parse_async_unsubscribe_args, parse_publish_args, parse_unsubscribe_args, MqttOperation,
     },
     client_callbacks::{
-        clear_message_callbacks, new_message_subscriptions, register_message_callback,
-        remove_message_callbacks, MessageSubscriptions,
+        clear_message_callbacks, new_message_subscriptions, register_incoming_transform,
+        register_message_callback, remove_message_callbacks, MessageSubscriptions,
     },
-    client_results::{finish_async_result, finish_publish_result, promise_adapter},
+    client_results::{
+        call_optional_callback, finish_async_result, finish_publish_result, promise_adapter,
+        promise_connectivity_adapter, promise_subscribe_adapter,
+    },
     executor::HostState,
     ScriptingError, ScriptingResult,
 };
@@ -85,8 +84,32 @@ fn build_client<'js>(
         mode,
         subscriptions.clone(),
     )?;
+    install_incoming_message(ctx.clone(), &client, subscriptions.clone())?;
+    install_conversions(ctx.clone(), &client, state.clone())?;
     install_unsubscribe(ctx, &client, state, mode, subscriptions)?;
     Ok(client)
+}
+
+fn install_conversions<'js>(
+    ctx: Ctx<'js>,
+    client: &Object<'js>,
+    state: Arc<HostState>,
+) -> rquickjs::Result<()> {
+    let promise_state = state.clone();
+    client.set(
+        "toPromised",
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
+            build_client(ctx, promise_state.clone(), ClientMode::Promise)
+        })?
+        .with_name("toPromised")?,
+    )?;
+    client.set(
+        "toBlocking",
+        Function::new(ctx, move |ctx: Ctx<'js>| {
+            build_client(ctx, state.clone(), ClientMode::Blocking)
+        })?
+        .with_name("toBlocking")?,
+    )
 }
 
 fn install_connectivity<'js>(
@@ -114,7 +137,7 @@ fn install_connectivity<'js>(
 }
 
 #[derive(Clone, Copy)]
-enum ConnectivityOperation {
+pub(crate) enum ConnectivityOperation {
     Connect,
     Disconnect,
     UnsubscribeAll,
@@ -129,7 +152,7 @@ impl ConnectivityOperation {
         }
     }
 
-    fn run(self, state: &HostState) -> ScriptingResult<()> {
+    pub(crate) fn run(self, state: &HostState) -> ScriptingResult<()> {
         match self {
             Self::Connect => state.connect(),
             Self::Disconnect => state.disconnect(),
@@ -137,7 +160,7 @@ impl ConnectivityOperation {
         }
     }
 
-    fn finish(self, subscriptions: &MessageSubscriptions<'_>) {
+    pub(crate) fn finish(self, subscriptions: &MessageSubscriptions<'_>) {
         if matches!(self, Self::UnsubscribeAll) {
             clear_message_callbacks(subscriptions);
         }
@@ -295,9 +318,13 @@ fn install_subscribe<'js>(
             client.set(
                 "subscribe",
                 Function::new(ctx, move |Rest(args): Rest<Value<'js>>| {
-                    let result = parse_subscribe_args(&args)
-                        .map(MqttOperation::Subscribe)
-                        .and_then(|operation| operation.run(&subscribe_state));
+                    let (subscribe, _, _, on_message) = parse_async_subscribe_args(args)
+                        .map_err(|error| subscribe_state.throw_host_error(error))?;
+                    let topic_filter = subscribe.topic_filter().to_owned();
+                    let result = MqttOperation::Subscribe(subscribe).run(&subscribe_state);
+                    if result.is_ok() {
+                        register_message_callback(&subscriptions, topic_filter, on_message);
+                    }
                     result.map_err(|error| subscribe_state.throw_host_error(error))
                 })?
                 .with_name("subscribe")?,
@@ -328,14 +355,13 @@ fn install_subscribe<'js>(
                 Function::new(
                     ctx.clone(),
                     move |ctx: Ctx<'js>, Rest(args): Rest<Value<'js>>| {
-                        let operation = parse_subscribe_args(&args)
-                            .map(MqttOperation::Subscribe)
+                        let (subscribe, _, _, on_message) = parse_async_subscribe_args(args)
                             .map_err(|error| subscribe_state.throw_host_error(error))?;
-                        promise_adapter(
+                        promise_subscribe_adapter(
                             ctx,
                             subscribe_state.clone(),
-                            operation,
-                            "subscribe",
+                            subscribe,
+                            on_message,
                             subscriptions.clone(),
                         )
                     },
@@ -344,6 +370,20 @@ fn install_subscribe<'js>(
             )
         }
     }
+}
+
+fn install_incoming_message<'js>(
+    ctx: Ctx<'js>,
+    client: &Object<'js>,
+    subscriptions: MessageSubscriptions<'js>,
+) -> rquickjs::Result<()> {
+    client.set(
+        "onIncomingMessage",
+        Function::new(ctx, move |topic_filter: String, callback: Function<'js>| {
+            register_incoming_transform(&subscriptions, topic_filter, callback);
+        })?
+        .with_name("onIncomingMessage")?,
+    )
 }
 
 fn install_unsubscribe<'js>(
@@ -431,47 +471,4 @@ fn finish_connectivity_async_result<'js>(
         Err(_) if on_error.is_none() => Ok(()),
         Err(_) => call_optional_callback(on_error),
     }
-}
-
-fn promise_connectivity_adapter<'js>(
-    ctx: Ctx<'js>,
-    state: Arc<HostState>,
-    operation: ConnectivityOperation,
-    name: &'static str,
-    subscriptions: MessageSubscriptions<'js>,
-) -> rquickjs::Result<Function<'js>> {
-    Function::new(
-        ctx,
-        move |resolve: Opt<Function>, reject: Opt<Function>| match operation.run(&state) {
-            Ok(()) => {
-                operation.finish(&subscriptions);
-                call_required_callback(&state, resolve.0, "promise resolve callback")
-            }
-            Err(error) => match reject.0 {
-                Some(reject) => reject.call::<_, ()>(()),
-                None => Err(state.throw_host_error(error)),
-            },
-        },
-    )?
-    .with_name(name)
-}
-
-fn call_optional_callback(callback: Option<Function<'_>>) -> rquickjs::Result<()> {
-    if let Some(callback) = callback {
-        callback.call::<_, ()>(())
-    } else {
-        Ok(())
-    }
-}
-
-fn call_required_callback(
-    state: &HostState,
-    callback: Option<Function<'_>>,
-    label: &str,
-) -> rquickjs::Result<()> {
-    callback
-        .ok_or_else(|| {
-            state.throw_host_error(ScriptingError::HostApi(format!("{label} is required")))
-        })?
-        .call::<_, ()>(())
 }

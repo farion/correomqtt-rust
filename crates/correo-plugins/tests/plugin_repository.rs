@@ -19,14 +19,14 @@ fn bundled_repository_definition_lists_installable_replacements() {
     assert_eq!(
         ids,
         BTreeSet::from([
-            "builtin.advanced-validator",
-            "builtin.base64",
-            "builtin.contains-string-validator",
-            "builtin.json-format",
-            "builtin.system-topic",
-            "builtin.xml-format",
-            "builtin.xml-xsd-validator",
-            "builtin.zip-manipulator",
+            "org.correomqtt.plugins.advanced-validator",
+            "org.correomqtt.plugins.base64",
+            "org.correomqtt.plugins.contains-string-validator",
+            "org.correomqtt.plugins.json-format",
+            "org.correomqtt.plugins.system-topic",
+            "org.correomqtt.plugins.xml-format",
+            "org.correomqtt.plugins.xml-xsd-validator",
+            "org.correomqtt.plugins.zip-manipulator",
         ])
     );
 
@@ -92,4 +92,33 @@ export = "correo_detail_formatter"
         PluginInstallSource::LocalPackage { path } if path == "plugins/workspace-example"
     ));
     assert!(PluginRepositoryEntry::local_package(manifest, "../outside").is_err());
+}
+
+#[test]
+fn repository_definition_accepts_remote_archive_sources() {
+    let manifest = PluginRepositoryDefinition::from_bundled_plugins("local", "Local")
+        .plugins
+        .into_iter()
+        .next()
+        .unwrap()
+        .manifest;
+    let repository = PluginRepositoryDefinition {
+        repository_format_version: 1,
+        id: "remote.default".to_owned(),
+        name: "Default".to_owned(),
+        plugins: vec![correo_plugins::PluginRepositoryEntry {
+            manifest,
+            install_source: PluginInstallSource::Archive {
+                url: "https://example.invalid/plugin.zip".to_owned(),
+                sha256: "abc123".to_owned(),
+            },
+        }],
+    };
+
+    repository.validate().unwrap();
+    assert!(matches!(
+        &repository.plugins[0].install_source,
+        PluginInstallSource::Archive { url, sha256 }
+            if url == "https://example.invalid/plugin.zip" && sha256 == "abc123"
+    ));
 }

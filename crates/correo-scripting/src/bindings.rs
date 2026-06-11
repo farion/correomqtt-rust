@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rquickjs::{prelude::Rest, Ctx, Function, Object, Value};
 
 use crate::{client_bindings::build_client_factory, executor::HostState, ScriptLogLevel};
@@ -31,8 +32,37 @@ pub(crate) fn install_bindings<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rqu
     )?;
 
     globals.set("queue", build_queue(ctx.clone(), state.clone())?)?;
-    globals.set("clientFactory", build_client_factory(ctx, state)?)?;
+    globals.set("plugins", build_plugins(ctx.clone(), state.clone())?)?;
+    globals.set("clientFactory", build_client_factory(ctx.clone(), state)?)?;
+    ctx.eval::<(), _>(
+        "globalThis.ClientFactory = function ClientFactory() { return globalThis.clientFactory; };",
+    )?;
     Ok(())
+}
+
+fn build_plugins<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<Object<'js>> {
+    let plugins = Object::new(ctx.clone())?;
+    let base64 = Object::new(ctx.clone())?;
+    let decode_state = state.clone();
+    base64.set(
+        "decode",
+        Function::new(ctx.clone(), move |payload: String| {
+            let bytes = STANDARD.decode(payload).map_err(|error| {
+                decode_state.throw_host_error(crate::ScriptingError::HostApi(error.to_string()))
+            })?;
+            String::from_utf8(bytes).map_err(|error| {
+                decode_state.throw_host_error(crate::ScriptingError::HostApi(error.to_string()))
+            })
+        })?
+        .with_name("plugins.base64.decode")?,
+    )?;
+    base64.set(
+        "encode",
+        Function::new(ctx, move |payload: String| STANDARD.encode(payload))?
+            .with_name("plugins.base64.encode")?,
+    )?;
+    plugins.set("base64", base64)?;
+    Ok(plugins)
 }
 
 fn build_logger<'js>(ctx: Ctx<'js>, state: Arc<HostState>) -> rquickjs::Result<Object<'js>> {

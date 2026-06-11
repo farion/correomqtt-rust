@@ -15,7 +15,7 @@ async fn publish_hooks_transform_wire_payload_and_keep_draft() {
     let mut snapshot = sample_snapshot(ThemeMode::System);
     enable_hook(
         &mut snapshot,
-        "builtin.base64-transform",
+        "org.correomqtt.plugins.base64",
         PluginHookKind::OutgoingTransform,
         "bridge/#",
     );
@@ -158,7 +158,7 @@ async fn incoming_transform_error_keeps_payload_and_records_diagnostic() {
     let mut snapshot = sample_snapshot(ThemeMode::System);
     enable_hook(
         &mut snapshot,
-        "builtin.base64-transform",
+        "org.correomqtt.plugins.base64",
         PluginHookKind::IncomingTransform,
         "bridge/#",
     );
@@ -224,7 +224,7 @@ fn detail_formatter_selection_renders_and_cancellation_falls_back() {
     runtime
         .command_sender()
         .send(AppCommand::SelectDetailFormatter(Some(
-            "builtin.json-formatter".to_owned(),
+            "org.correomqtt.plugins.json-format".to_owned(),
         )))
         .unwrap();
     runtime

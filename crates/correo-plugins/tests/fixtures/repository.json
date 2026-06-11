@@ -6,7 +6,7 @@
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.advanced-validator",
+        "id": "org.correomqtt.plugins.advanced-validator",
         "name": "Advanced Validator",
         "version": "0.1.0",
         "description": "Composes configured validator rules with AND and OR groups.",
@@ -130,13 +130,13 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.advanced-validator"
+        "plugin_id": "org.correomqtt.plugins.advanced-validator"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.base64",
+        "id": "org.correomqtt.plugins.base64",
         "name": "Base64 Transform",
         "version": "0.1.0",
         "description": "Encodes outgoing payloads and decodes incoming payloads with Base64.",
@@ -176,13 +176,13 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.base64"
+        "plugin_id": "org.correomqtt.plugins.base64"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.contains-string-validator",
+        "id": "org.correomqtt.plugins.contains-string-validator",
         "name": "Contains String Validator",
         "version": "0.1.0",
         "description": "Validates text payloads by checking for configured text.",
@@ -229,13 +229,13 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.contains-string-validator"
+        "plugin_id": "org.correomqtt.plugins.contains-string-validator"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.json-format",
+        "id": "org.correomqtt.plugins.json-format",
         "name": "JSON Formatter",
         "version": "0.1.0",
         "description": "Formats valid JSON payloads for the message detail view.",
@@ -270,13 +270,54 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.json-format"
+        "plugin_id": "org.correomqtt.plugins.json-format"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.system-topic",
+        "id": "org.correomqtt.plugins.save-manipulator",
+        "name": "Save Manipulator",
+        "version": "0.1.0",
+        "description": "Requests that CorreoMQTT save the selected message payload.",
+        "provider": "CorreoMQTT",
+        "license": "GPL-3.0-or-later",
+        "compatible_correomqtt": ">=0.1.0, <1.0.0",
+        "capabilities": {
+          "hooks": [
+            "detail_byte_transform"
+          ],
+          "host": {
+            "filesystem": false,
+            "message_save": true,
+            "network": false,
+            "secrets": false,
+            "mqtt": false
+          }
+        },
+        "entrypoints": [
+          {
+            "hook": "detail_byte_transform",
+            "export": "correo_detail_byte_transform"
+          }
+        ],
+        "config_schema": {
+          "schema_version": 1,
+          "document": {
+            "additionalProperties": false,
+            "type": "object"
+          }
+        }
+      },
+      "install_source": {
+        "kind": "local_package",
+        "path": "plugins/save-manipulator"
+      }
+    },
+    {
+      "manifest": {
+        "manifest_version": 1,
+        "id": "org.correomqtt.plugins.system-topic",
         "name": "System Topic Formatter",
         "version": "0.1.0",
         "description": "Labels known $SYS broker metrics for the message detail view.",
@@ -311,13 +352,13 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.system-topic"
+        "plugin_id": "org.correomqtt.plugins.system-topic"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.xml-format",
+        "id": "org.correomqtt.plugins.xml-format",
         "name": "XML Formatter",
         "version": "0.1.0",
         "description": "Formats XML-like payloads for the message detail view.",
@@ -352,13 +393,13 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.xml-format"
+        "plugin_id": "org.correomqtt.plugins.xml-format"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.xml-xsd-validator",
+        "id": "org.correomqtt.plugins.xml-xsd-validator",
         "name": "XML/XSD Validator",
         "version": "0.1.0",
         "description": "Validates XML payloads against configured inline XSD schema text.",
@@ -434,13 +475,13 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.xml-xsd-validator"
+        "plugin_id": "org.correomqtt.plugins.xml-xsd-validator"
       }
     },
     {
       "manifest": {
         "manifest_version": 1,
-        "id": "builtin.zip-manipulator",
+        "id": "org.correomqtt.plugins.zip-manipulator",
         "name": "ZIP Manipulator",
         "version": "0.1.0",
         "description": "Compresses or decompresses message detail bytes with GZIP.",
@@ -500,48 +541,7 @@
       },
       "install_source": {
         "kind": "bundled",
-        "plugin_id": "builtin.zip-manipulator"
-      }
-    },
-    {
-      "manifest": {
-        "manifest_version": 1,
-        "id": "org.correomqtt.plugins.save-manipulator",
-        "name": "Save Manipulator",
-        "version": "0.1.0",
-        "description": "Requests that CorreoMQTT save the selected message payload.",
-        "provider": "CorreoMQTT",
-        "license": "GPL-3.0-or-later",
-        "compatible_correomqtt": ">=0.1.0, <1.0.0",
-        "capabilities": {
-          "hooks": [
-            "detail_byte_transform"
-          ],
-          "host": {
-            "filesystem": false,
-            "message_save": true,
-            "network": false,
-            "secrets": false,
-            "mqtt": false
-          }
-        },
-        "entrypoints": [
-          {
-            "hook": "detail_byte_transform",
-            "export": "correo_detail_byte_transform"
-          }
-        ],
-        "config_schema": {
-          "schema_version": 1,
-          "document": {
-            "additionalProperties": false,
-            "type": "object"
-          }
-        }
-      },
-      "install_source": {
-        "kind": "local_package",
-        "path": "plugins/save-manipulator"
+        "plugin_id": "org.correomqtt.plugins.zip-manipulator"
       }
     }
   ]

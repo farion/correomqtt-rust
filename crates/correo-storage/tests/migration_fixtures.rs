@@ -120,12 +120,12 @@ fn loads_legacy_profile_fixtures_and_reinitializes_plugins() {
     assert_eq!(
         plugin_ids,
         [
-            "builtin.base64",
-            "builtin.json-format",
-            "builtin.xml-format",
-            "builtin.contains-string-validator",
-            "builtin.advanced-validator",
-            "builtin.xml-xsd-validator"
+            "org.correomqtt.plugins.base64",
+            "org.correomqtt.plugins.json-format",
+            "org.correomqtt.plugins.xml-format",
+            "org.correomqtt.plugins.contains-string-validator",
+            "org.correomqtt.plugins.advanced-validator",
+            "org.correomqtt.plugins.xml-xsd-validator"
         ]
     );
     assert!(preview

@@ -215,9 +215,9 @@ mod tests {
     fn german_catalog_uses_original_settings_label() {
         let i18n = I18n::new("de_DE");
 
-        assert_eq!(i18n.text("settings-header"), "Einstellungen für CorreoMQTT");
+        assert_eq!(i18n.text("settings-header"), "Einstellungen");
         assert_eq!(i18n.text("common-save"), "Speichern");
-        assert_eq!(i18n.text("plugin-header"), "Plugins für CorreoMQTT");
+        assert_eq!(i18n.text("plugin-header"), "Plugins");
         assert_eq!(i18n.workspace_label(Workspace::Settings), "Einstellungen");
         assert_eq!(i18n.theme_label(&ThemeMode::Dark), "Dunkel");
     }
@@ -226,7 +226,7 @@ mod tests {
     fn unsupported_locale_falls_back_to_english() {
         let i18n = I18n::new("fr_FR");
 
-        assert_eq!(i18n.text("settings-header"), "Settings for CorreoMQTT");
+        assert_eq!(i18n.text("settings-header"), "Settings");
         assert_eq!(i18n.workspace_label(Workspace::Connections), "Connections");
     }
 }

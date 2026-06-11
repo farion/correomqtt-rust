@@ -18,14 +18,14 @@ fn bundled_manifests_cover_mvp_replacements_with_config_schemas() {
     assert_eq!(
         ids,
         BTreeSet::from([
-            "builtin.advanced-validator",
-            "builtin.base64",
-            "builtin.contains-string-validator",
-            "builtin.json-format",
-            "builtin.system-topic",
-            "builtin.xml-format",
-            "builtin.xml-xsd-validator",
-            "builtin.zip-manipulator",
+            "org.correomqtt.plugins.advanced-validator",
+            "org.correomqtt.plugins.base64",
+            "org.correomqtt.plugins.contains-string-validator",
+            "org.correomqtt.plugins.json-format",
+            "org.correomqtt.plugins.system-topic",
+            "org.correomqtt.plugins.xml-format",
+            "org.correomqtt.plugins.xml-xsd-validator",
+            "org.correomqtt.plugins.zip-manipulator",
         ])
     );
 
@@ -117,7 +117,7 @@ fn xml_xsd_package_manifest_declares_validator_hook_without_host_access() {
 
 #[test]
 fn base64_replacement_encodes_outgoing_and_decodes_incoming() {
-    let plugin = bundled_plugin_by_id("builtin.base64").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.base64").unwrap();
     let outgoing = plugin
         .dispatch(HookInvocation::OutgoingMessageTransform(
             correo_plugins::OutgoingMessageTransformRequest::new(MessageDto::new(
@@ -151,7 +151,7 @@ fn base64_replacement_encodes_outgoing_and_decodes_incoming() {
 
 #[test]
 fn detail_formatters_return_pretty_json_and_xml_text() {
-    let json = bundled_plugin_by_id("builtin.json-format").unwrap();
+    let json = bundled_plugin_by_id("org.correomqtt.plugins.json-format").unwrap();
     let output = json
         .dispatch(HookInvocation::DetailFormatter(
             DetailFormatterRequest::new(br#"{"ok":true,"items":[1,2]}"#.to_vec()),
@@ -159,7 +159,7 @@ fn detail_formatters_return_pretty_json_and_xml_text() {
         .unwrap();
     assert_formatted(output, DetailFormatDto::Json, "\"items\": [");
 
-    let xml = bundled_plugin_by_id("builtin.xml-format").unwrap();
+    let xml = bundled_plugin_by_id("org.correomqtt.plugins.xml-format").unwrap();
     let output = xml
         .dispatch(HookInvocation::DetailFormatter(
             DetailFormatterRequest::new(br#"<root><item id="1">ok</item></root>"#.to_vec()),
@@ -170,7 +170,7 @@ fn detail_formatters_return_pretty_json_and_xml_text() {
 
 #[test]
 fn system_topic_formatter_labels_known_broker_metrics() {
-    let plugin = bundled_plugin_by_id("builtin.system-topic").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.system-topic").unwrap();
     let mut request = DetailFormatterRequest::new(b"7".to_vec());
     request.context.subscription_topic = Some("$SYS/broker/clients/connected".to_owned());
 
@@ -183,7 +183,7 @@ fn system_topic_formatter_labels_known_broker_metrics() {
 
 #[test]
 fn system_topic_formatter_reports_aggregated_windows() {
-    let plugin = bundled_plugin_by_id("builtin.system-topic").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.system-topic").unwrap();
     let mut request = DetailFormatterRequest::new(b"42".to_vec());
     request.context.subscription_topic =
         Some("$SYS/broker/load/messages/received/15min".to_owned());
@@ -197,7 +197,7 @@ fn system_topic_formatter_reports_aggregated_windows() {
 
 #[test]
 fn contains_string_validator_supports_case_sensitive_config() {
-    let plugin = bundled_plugin_by_id("builtin.contains-string-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.contains-string-validator").unwrap();
     let mut request =
         MessageValidatorRequest::new(MessageDto::new("demo/topic", b"Telemetry READY".to_vec()));
     request.config = json!({
@@ -218,7 +218,7 @@ fn contains_string_validator_supports_case_sensitive_config() {
 
 #[test]
 fn zip_manipulator_transforms_detail_bytes_with_expansion_limits() {
-    let plugin = bundled_plugin_by_id("builtin.zip-manipulator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.zip-manipulator").unwrap();
     let mut request = DetailByteTransformRequest::new(b"payload".to_vec());
     request.config = json!({ "operation": "zip" });
 
@@ -257,7 +257,7 @@ fn zip_manipulator_transforms_detail_bytes_with_expansion_limits() {
 
 #[test]
 fn xml_xsd_validator_accepts_payload_that_matches_inline_schema() {
-    let plugin = bundled_plugin_by_id("builtin.xml-xsd-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.xml-xsd-validator").unwrap();
     let mut request = MessageValidatorRequest::new(MessageDto::new(
         "demo/topic",
         br#"<note><to>Tove</to><from>Jani</from><heading>Reminder</heading><body>Ok</body></note>"#
@@ -279,7 +279,7 @@ fn xml_xsd_validator_accepts_payload_that_matches_inline_schema() {
 
 #[test]
 fn xml_xsd_validator_rejects_payload_that_misses_required_schema_elements() {
-    let plugin = bundled_plugin_by_id("builtin.xml-xsd-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.xml-xsd-validator").unwrap();
     let mut request = MessageValidatorRequest::new(MessageDto::new(
         "demo/topic",
         br#"<note><to>Tove</to><from>Jani</from></note>"#.to_vec(),
@@ -308,7 +308,7 @@ fn xml_xsd_validator_rejects_payload_that_misses_required_schema_elements() {
 
 #[test]
 fn xml_xsd_validator_rejects_legacy_file_schema_config() {
-    let plugin = bundled_plugin_by_id("builtin.xml-xsd-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.xml-xsd-validator").unwrap();
     let mut request = MessageValidatorRequest::new(MessageDto::new(
         "demo/topic",
         br#"<note><to>Tove</to></note>"#.to_vec(),

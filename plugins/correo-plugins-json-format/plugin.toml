@@ -1,5 +1,5 @@
 manifest_version = 1
-id = "builtin.json-format"
+id = "org.correomqtt.plugins.json-format"
 name = "JSON Formatter"
 version = "0.1.0"
 description = "Formats valid JSON payloads for the message detail view."

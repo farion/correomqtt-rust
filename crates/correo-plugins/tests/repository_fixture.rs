@@ -60,6 +60,9 @@ fn repository_fixture_is_path_safe_and_contains_no_legacy_pf4j_sources() {
                 assert_eq!(path, "plugins/save-manipulator");
                 found_save_manipulator = true;
             }
+            PluginInstallSource::Archive { .. } => {
+                panic!("bundled fixture should not contain remote archive sources");
+            }
         }
     }
     assert!(found_save_manipulator);

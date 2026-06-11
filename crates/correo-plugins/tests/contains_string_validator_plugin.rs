@@ -77,7 +77,7 @@ fn assert_validation(
     case_sensitive: bool,
     expected: ValidationResultDto,
 ) {
-    let plugin = bundled_plugin_by_id("builtin.contains-string-validator").unwrap();
+    let plugin = bundled_plugin_by_id("org.correomqtt.plugins.contains-string-validator").unwrap();
     let mut request =
         MessageValidatorRequest::new(MessageDto::new("demo/topic", payload.as_bytes().to_vec()));
     request.config = json!({

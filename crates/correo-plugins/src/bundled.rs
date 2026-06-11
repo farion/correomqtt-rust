@@ -25,13 +25,13 @@ mod advanced_validator;
 mod formatting;
 mod gzip;
 
-const BASE64_ID: &str = "builtin.base64";
-const JSON_FORMAT_ID: &str = "builtin.json-format";
-const XML_FORMAT_ID: &str = "builtin.xml-format";
-const CONTAINS_STRING_ID: &str = "builtin.contains-string-validator";
-const ADVANCED_VALIDATOR_ID: &str = "builtin.advanced-validator";
-const XML_XSD_VALIDATOR_ID: &str = "builtin.xml-xsd-validator";
-const ZIP_MANIPULATOR_ID: &str = "builtin.zip-manipulator";
+const BASE64_ID: &str = "org.correomqtt.plugins.base64";
+const JSON_FORMAT_ID: &str = "org.correomqtt.plugins.json-format";
+const XML_FORMAT_ID: &str = "org.correomqtt.plugins.xml-format";
+const CONTAINS_STRING_ID: &str = "org.correomqtt.plugins.contains-string-validator";
+const ADVANCED_VALIDATOR_ID: &str = "org.correomqtt.plugins.advanced-validator";
+const XML_XSD_VALIDATOR_ID: &str = "org.correomqtt.plugins.xml-xsd-validator";
+const ZIP_MANIPULATOR_ID: &str = "org.correomqtt.plugins.zip-manipulator";
 pub const SAVE_MANIPULATOR_ID: &str = "org.correomqtt.plugins.save-manipulator";
 
 #[derive(Debug, Clone)]

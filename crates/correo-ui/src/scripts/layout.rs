@@ -12,6 +12,7 @@ const MIN_PANE_WIDTH: f32 = 180.0;
 const MIN_UPPER_HEIGHT: f32 = 220.0;
 const MIN_LOWER_HEIGHT: f32 = 160.0;
 const PANE_PADDING_X: f32 = 10.0;
+const PANE_PADDING_TOP: f32 = 10.0;
 const PANE_PADDING_BOTTOM: f32 = 10.0;
 
 pub(super) fn four_pane(
@@ -41,6 +42,7 @@ pub(super) fn four_pane(
         Id::new("scripts-top-left-ratio"),
         top_rect,
         tokens,
+        0.0,
         top_left,
         top_right,
     );
@@ -49,6 +51,7 @@ pub(super) fn four_pane(
         Id::new("scripts-bottom-left-ratio"),
         bottom_rect,
         tokens,
+        PANE_PADDING_TOP,
         bottom_left,
         bottom_right,
     );
@@ -87,6 +90,7 @@ fn horizontal_split(
     id: Id,
     rect: Rect,
     tokens: ThemeTokens,
+    top_padding: f32,
     left: impl FnOnce(&mut Ui),
     right: impl FnOnce(&mut Ui),
 ) {
@@ -112,19 +116,27 @@ fn horizontal_split(
 
     pane(
         ui,
-        Rect::from_min_max(rect.left_top(), pos2(divider.left(), rect.bottom())),
+        Rect::from_min_max(
+            rect.left_top(),
+            pos2(divider.left() - PANE_PADDING_X, rect.bottom()),
+        ),
+        top_padding,
         left,
     );
     pane(
         ui,
-        Rect::from_min_max(pos2(divider.right(), rect.top()), rect.right_bottom()),
+        Rect::from_min_max(
+            pos2(divider.right() + PANE_PADDING_X, rect.top()),
+            rect.right_bottom(),
+        ),
+        top_padding,
         right,
     );
 }
 
-fn pane(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
+fn pane(ui: &mut Ui, rect: Rect, top_padding: f32, add_contents: impl FnOnce(&mut Ui)) {
     let content_rect = Rect::from_min_max(
-        pos2(rect.left() + PANE_PADDING_X, rect.top()),
+        pos2(rect.left() + PANE_PADDING_X, rect.top() + top_padding),
         pos2(
             rect.right() - PANE_PADDING_X,
             rect.bottom() - PANE_PADDING_BOTTOM,

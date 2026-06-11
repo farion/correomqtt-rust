@@ -79,12 +79,35 @@ impl ScriptRuntime {
             install_bindings(ctx.clone(), state.clone())
                 .map_err(|error| ScriptingError::Runtime(error.to_string()))?;
 
+            let wrapped_source;
+            let source = if source.contains("await") {
+                wrapped_source = async_wrapped_source(source);
+                wrapped_source.as_str()
+            } else {
+                source
+            };
             match ctx.eval::<(), _>(source).catch(&ctx) {
-                Ok(()) => Ok(()),
+                Ok(()) => drain_pending_jobs(&ctx, &state),
                 Err(error) => state.map_guest_error(error.to_string()),
             }
         })
     }
+}
+
+fn async_wrapped_source(source: &str) -> String {
+    format!("(async () => {{\n{source}\n}})();")
+}
+
+fn drain_pending_jobs(ctx: &rquickjs::Ctx<'_>, state: &HostState) -> ScriptingResult<()> {
+    for _ in 0..10_000 {
+        state.check_cancelled()?;
+        if !ctx.execute_pending_job() {
+            return Ok(());
+        }
+    }
+    Err(ScriptingError::Runtime(
+        "JavaScript promise queue did not settle".to_owned(),
+    ))
 }
 
 impl Default for ScriptRuntime {

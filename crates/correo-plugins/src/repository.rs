@@ -80,6 +80,7 @@ impl PluginRepositoryEntry {
 pub enum PluginInstallSource {
     Bundled { plugin_id: String },
     LocalPackage { path: String },
+    Archive { url: String, sha256: String },
 }
 
 impl PluginInstallSource {
@@ -93,6 +94,15 @@ impl PluginInstallSource {
                 }
             }
             Self::LocalPackage { path } => ensure_safe_relative_path(Path::new(path)),
+            Self::Archive { url, sha256 } => {
+                if url.trim().is_empty() {
+                    Err(PluginRepositoryError::EmptyArchiveUrl)
+                } else if sha256.trim().is_empty() {
+                    Err(PluginRepositoryError::EmptyArchiveChecksum)
+                } else {
+                    Ok(())
+                }
+            }
         }
     }
 }
@@ -103,6 +113,10 @@ pub enum PluginRepositoryError {
     UnsupportedFormatVersion { found: u16 },
     #[error("plugin repository bundled source has an empty plugin id")]
     EmptyBundledPluginId,
+    #[error("plugin repository archive source has an empty URL")]
+    EmptyArchiveUrl,
+    #[error("plugin repository archive source has an empty SHA-256 checksum")]
+    EmptyArchiveChecksum,
     #[error("plugin repository package path must be relative, safe, and non-empty: {path}")]
     UnsafePackagePath { path: PathBuf },
     #[error(transparent)]

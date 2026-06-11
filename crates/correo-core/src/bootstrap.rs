@@ -77,13 +77,17 @@ pub fn startup_state_from_current(
     warnings: Vec<String>,
     fallback_theme: ThemeMode,
 ) -> StartupState {
-    startup_state_from_current_with_workbenches(
+    startup_state_from_current_with_plugins(
         config,
         histories,
         BTreeMap::new(),
         scripts,
         warnings,
         fallback_theme,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
     )
 }
 
@@ -94,6 +98,32 @@ pub fn startup_state_from_current_with_workbenches(
     scripts: ScriptPersistenceSnapshot,
     warnings: Vec<String>,
     fallback_theme: ThemeMode,
+) -> StartupState {
+    startup_state_from_current_with_plugins(
+        config,
+        histories,
+        persisted_workbenches,
+        scripts,
+        warnings,
+        fallback_theme,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+}
+
+pub fn startup_state_from_current_with_plugins(
+    config: AppConfig,
+    histories: HistoryPersistenceSnapshot,
+    persisted_workbenches: BTreeMap<String, WorkbenchSnapshot>,
+    scripts: ScriptPersistenceSnapshot,
+    warnings: Vec<String>,
+    fallback_theme: ThemeMode,
+    plugin_repository_jsons: Vec<String>,
+    bundled_plugin_ids: Vec<String>,
+    installed_plugin_ids: Vec<String>,
+    installed_plugin_paths: Vec<(String, String)>,
 ) -> StartupState {
     let theme_mode = theme_mode(config.theme_settings.as_ref()).unwrap_or(fallback_theme);
     let mut snapshot = AppSnapshot::empty();
@@ -123,7 +153,13 @@ pub fn startup_state_from_current_with_workbenches(
     snapshot.connections = mapped;
     snapshot.theme_mode = theme_mode;
     snapshot.global_settings = global_settings(&config.settings);
-    snapshot.plugins = plugin_surface(config.settings.install_bundled_plugins);
+    snapshot.plugins = plugin_surface(
+        config.settings.install_bundled_plugins,
+        &plugin_repository_jsons,
+        &bundled_plugin_ids,
+        &installed_plugin_ids,
+        &installed_plugin_paths,
+    );
     snapshot.scripts = script_surface(&scripts);
     snapshot.diagnostics = warnings
         .into_iter()
@@ -460,20 +496,45 @@ mod tests {
     use super::*;
     use crate::{PluginLoadState, PluginSource, PluginStatus};
 
+    const TEST_REPOSITORY_JSON: &str =
+        include_str!("../../correo-plugins/tests/fixtures/repository.json");
+
+    fn bundled_plugin_ids() -> Vec<String> {
+        [
+            "org.correomqtt.plugins.advanced-validator",
+            "org.correomqtt.plugins.base64",
+            "org.correomqtt.plugins.contains-string-validator",
+            "org.correomqtt.plugins.json-format",
+            "org.correomqtt.plugins.save-manipulator",
+            "org.correomqtt.plugins.system-topic",
+            "org.correomqtt.plugins.xml-format",
+            "org.correomqtt.plugins.xml-xsd-validator",
+            "org.correomqtt.plugins.zip-manipulator",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+    }
+
     #[test]
     fn current_startup_populates_marketplace_and_installs_bundled_plugins() {
-        let state = startup_state_from_current(
+        let state = startup_state_from_current_with_plugins(
             AppConfig::default(),
             HistoryPersistenceSnapshot::default(),
+            BTreeMap::new(),
             ScriptPersistenceSnapshot::default(),
             Vec::new(),
             ThemeMode::System,
+            vec![TEST_REPOSITORY_JSON.to_owned()],
+            bundled_plugin_ids(),
+            Vec::new(),
+            Vec::new(),
         );
         let plugins = &state.snapshot.plugins;
 
         assert_eq!(plugins.load_state, PluginLoadState::Ready);
         assert_eq!(plugins.marketplace_plugins.len(), 9);
-        assert_eq!(plugins.plugins.len(), 8);
+        assert_eq!(plugins.plugins.len(), 9);
         assert!(!plugins.selected_plugin_id.is_empty());
         assert!(!plugins.selected_marketplace_plugin_id.is_empty());
         assert!(plugins.plugins.iter().all(|plugin| {
@@ -490,8 +551,36 @@ mod tests {
                 .iter()
                 .find(|plugin| plugin.id == "org.correomqtt.plugins.save-manipulator")
                 .and_then(|plugin| plugin.installed_plugin_id.as_deref()),
-            None
+            Some("org.correomqtt.plugins.save-manipulator")
         );
+    }
+
+    #[test]
+    fn bundled_plugin_ids_keep_file_installed_plugins_non_uninstallable() {
+        let repository_json =
+            repository_json_with_local_package_source("org.correomqtt.plugins.advanced-validator");
+        let state = startup_state_from_current_with_plugins(
+            AppConfig::default(),
+            HistoryPersistenceSnapshot::default(),
+            BTreeMap::new(),
+            ScriptPersistenceSnapshot::default(),
+            Vec::new(),
+            ThemeMode::System,
+            vec![repository_json],
+            vec!["org.correomqtt.plugins.advanced-validator".to_owned()],
+            Vec::new(),
+            Vec::new(),
+        );
+        let plugin = state
+            .snapshot
+            .plugins
+            .plugins
+            .iter()
+            .find(|plugin| plugin.id == "org.correomqtt.plugins.advanced-validator")
+            .expect("bundled plugin should be installed");
+
+        assert_eq!(plugin.source, PluginSource::Bundled);
+        assert!(!plugin.can_uninstall());
     }
 
     #[test]
@@ -499,12 +588,17 @@ mod tests {
         let mut config = AppConfig::default();
         config.settings.install_bundled_plugins = false;
 
-        let state = startup_state_from_current(
+        let state = startup_state_from_current_with_plugins(
             config,
             HistoryPersistenceSnapshot::default(),
+            BTreeMap::new(),
             ScriptPersistenceSnapshot::default(),
             Vec::new(),
             ThemeMode::System,
+            vec![TEST_REPOSITORY_JSON.to_owned()],
+            bundled_plugin_ids(),
+            Vec::new(),
+            Vec::new(),
         );
         let plugins = &state.snapshot.plugins;
 
@@ -515,5 +609,27 @@ mod tests {
             .marketplace_plugins
             .iter()
             .all(|plugin| plugin.installed_plugin_id.is_none()));
+    }
+
+    fn repository_json_with_local_package_source(plugin_id: &str) -> String {
+        let mut value = serde_json::from_str::<serde_json::Value>(TEST_REPOSITORY_JSON).unwrap();
+        let plugins = value
+            .get_mut("plugins")
+            .and_then(serde_json::Value::as_array_mut)
+            .unwrap();
+        let plugin = plugins
+            .iter_mut()
+            .find(|plugin| {
+                plugin
+                    .pointer("/manifest/id")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(plugin_id)
+            })
+            .unwrap();
+        plugin["install_source"] = serde_json::json!({
+            "kind": "local_package",
+            "path": format!("plugins/{plugin_id}"),
+        });
+        serde_json::to_string(&value).unwrap()
     }
 }

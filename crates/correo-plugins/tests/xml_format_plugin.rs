@@ -14,7 +14,7 @@ fn xml_format_manifest_declares_only_detail_formatter_without_host_caps() {
         PluginManifest::from_toml_str(include_str!("../../../plugins/xml-format/plugin.toml"))
             .unwrap();
 
-    assert_eq!(manifest.id, "builtin.xml-format");
+    assert_eq!(manifest.id, "org.correomqtt.plugins.xml-format");
     assert_eq!(manifest.capabilities.hooks, vec![HookKind::DetailFormatter]);
     assert_eq!(
         manifest
