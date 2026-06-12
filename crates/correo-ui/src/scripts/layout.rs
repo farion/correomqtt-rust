@@ -7,8 +7,8 @@ use crate::theme::ThemeTokens;
 const DEFAULT_UPPER_RATIO: f32 = 0.65;
 const DEFAULT_LEFT_RATIO: f32 = 0.35;
 const DIVIDER_SIZE: f32 = 8.0;
-const FOOTER_HEIGHT: f32 = 28.0;
-const MIN_PANE_WIDTH: f32 = 180.0;
+const MIN_PANE_WIDTH: f32 = correo_style::layout::SCRIPTING_FLYOUT_WIDTH;
+const MIN_RIGHT_PANE_WIDTH: f32 = 550.0;
 const MIN_UPPER_HEIGHT: f32 = 220.0;
 const MIN_LOWER_HEIGHT: f32 = 160.0;
 const PANE_PADDING_X: f32 = 10.0;
@@ -22,24 +22,15 @@ pub(super) fn four_pane(
     top_right: impl FnOnce(&mut Ui),
     bottom_left: impl FnOnce(&mut Ui),
     bottom_right: impl FnOnce(&mut Ui),
-    footer: impl FnOnce(&mut Ui),
 ) {
     let full_rect = ui.available_rect_before_wrap();
     ui.allocate_rect(full_rect, Sense::hover());
 
-    let footer_rect = Rect::from_min_max(
-        pos2(full_rect.left(), full_rect.bottom() - FOOTER_HEIGHT),
-        full_rect.right_bottom(),
-    );
-    let content_rect = Rect::from_min_max(
-        full_rect.left_top(),
-        pos2(full_rect.right(), footer_rect.top()),
-    );
-
-    let (top_rect, bottom_rect) = vertical_split(ui, content_rect, tokens);
+    let (top_rect, bottom_rect) =
+        vertical_split(ui, Id::new("scripts-upper-ratio"), full_rect, tokens);
     horizontal_split(
         ui,
-        Id::new("scripts-top-left-ratio"),
+        shared_list_ratio_id(),
         top_rect,
         tokens,
         0.0,
@@ -48,22 +39,52 @@ pub(super) fn four_pane(
     );
     horizontal_split(
         ui,
-        Id::new("scripts-bottom-left-ratio"),
+        shared_list_ratio_id(),
         bottom_rect,
         tokens,
         PANE_PADDING_TOP,
         bottom_left,
         bottom_right,
     );
-    footer_cell(ui, footer_rect, footer);
 }
 
-fn vertical_split(ui: &mut Ui, rect: Rect, tokens: ThemeTokens) -> (Rect, Rect) {
+pub(super) fn right_panes(
+    ui: &mut Ui,
+    tokens: ThemeTokens,
+    top_right: impl FnOnce(&mut Ui),
+    bottom_right: impl FnOnce(&mut Ui),
+) {
+    let full_rect = ui.available_rect_before_wrap();
+    ui.allocate_rect(full_rect, Sense::hover());
+    let (top_rect, bottom_rect) =
+        vertical_split(ui, Id::new("scripts-upper-ratio"), full_rect, tokens);
+    pane(ui, top_rect, 0.0, top_right);
+    pane(ui, bottom_rect, PANE_PADDING_TOP, bottom_right);
+}
+
+pub(super) fn list_column(
+    ui: &mut Ui,
+    tokens: ThemeTokens,
+    top_left: impl FnOnce(&mut Ui),
+    bottom_left: impl FnOnce(&mut Ui),
+) {
+    let full_rect = ui.available_rect_before_wrap();
+    ui.allocate_rect(full_rect, Sense::hover());
+    let (top_rect, bottom_rect) = vertical_split(
+        ui,
+        Id::new("scripts-flyout-list-column-ratio"),
+        full_rect,
+        tokens,
+    );
+    pane_with_padding(ui, top_rect, 0.0, 0.0, top_left);
+    pane_with_padding(ui, bottom_rect, 0.0, PANE_PADDING_TOP, bottom_left);
+}
+
+fn vertical_split(ui: &mut Ui, id: Id, rect: Rect, tokens: ThemeTokens) -> (Rect, Rect) {
     let usable = (rect.height() - DIVIDER_SIZE).max(1.0);
     let min_upper = MIN_UPPER_HEIGHT.min(usable * 0.55);
     let min_lower = MIN_LOWER_HEIGHT.min((usable - min_upper).max(0.0));
     let max_upper = (usable - min_lower).max(min_upper);
-    let id = Id::new("scripts-upper-ratio");
     let mut upper = ratio(ui, id, DEFAULT_UPPER_RATIO) * usable;
     upper = upper.clamp(min_upper, max_upper);
 
@@ -96,7 +117,7 @@ fn horizontal_split(
 ) {
     let usable = (rect.width() - DIVIDER_SIZE).max(1.0);
     let min_left = MIN_PANE_WIDTH.min(usable * 0.45);
-    let min_right = MIN_PANE_WIDTH.min((usable - min_left).max(0.0));
+    let min_right = MIN_RIGHT_PANE_WIDTH.min((usable - min_left).max(0.0));
     let max_left = (usable - min_right).max(min_left);
     let mut left_width = ratio(ui, id, DEFAULT_LEFT_RATIO) * usable;
     left_width = left_width.clamp(min_left, max_left);
@@ -134,11 +155,25 @@ fn horizontal_split(
     );
 }
 
+fn shared_list_ratio_id() -> Id {
+    Id::new("scripts-list-ratio")
+}
+
 fn pane(ui: &mut Ui, rect: Rect, top_padding: f32, add_contents: impl FnOnce(&mut Ui)) {
+    pane_with_padding(ui, rect, PANE_PADDING_X, top_padding, add_contents);
+}
+
+fn pane_with_padding(
+    ui: &mut Ui,
+    rect: Rect,
+    horizontal_padding: f32,
+    top_padding: f32,
+    add_contents: impl FnOnce(&mut Ui),
+) {
     let content_rect = Rect::from_min_max(
-        pos2(rect.left() + PANE_PADDING_X, rect.top() + top_padding),
+        pos2(rect.left() + horizontal_padding, rect.top() + top_padding),
         pos2(
-            rect.right() - PANE_PADDING_X,
+            rect.right() - horizontal_padding,
             rect.bottom() - PANE_PADDING_BOTTOM,
         ),
     );
@@ -148,16 +183,6 @@ fn pane(ui: &mut Ui, rect: Rect, top_padding: f32, add_contents: impl FnOnce(&mu
             .layout(Layout::top_down(Align::Min)),
     );
     child.set_clip_rect(content_rect);
-    add_contents(&mut child);
-}
-
-fn footer_cell(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui)) {
-    let mut child = ui.new_child(
-        UiBuilder::new()
-            .max_rect(rect)
-            .layout(Layout::top_down(Align::Min)),
-    );
-    child.set_clip_rect(rect);
     add_contents(&mut child);
 }
 

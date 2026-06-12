@@ -3,6 +3,7 @@ use egui::{RichText, ScrollArea, Ui};
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
+use crate::responsive;
 use crate::theme::ThemeTokens;
 use correo_style::layout;
 
@@ -25,7 +26,10 @@ pub(super) fn tab(
     let filtered = plugins.filtered_plugins();
     plugin_split(
         ui,
+        plugins,
         tokens,
+        commands,
+        i18n,
         |ui| {
             plugin_list(ui, plugins, &filtered, tokens, commands, i18n);
         },
@@ -96,6 +100,7 @@ fn plugin_row(
     );
     if response.clicked() {
         send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
+        responsive::close_plugin_flyout(ui.ctx());
     }
     response.context_menu(|ui| installed_plugin_context_menu(ui, plugin, commands, i18n));
 }

@@ -37,30 +37,37 @@ pub(super) fn fallback_shell_capture(capture: Capture) -> RgbaImage {
         rail_button(&mut image, tokens, 8, 76 + index * 40, index == 0);
     }
 
-    fill(
-        &mut image,
-        48,
-        68,
-        260,
-        content_bottom.saturating_sub(68),
-        tokens.panel_bg,
-    );
-    stroke(
-        &mut image,
-        48,
-        68,
-        260,
-        content_bottom.saturating_sub(68),
-        tokens.border,
-    );
-    text_bar(&mut image, 64, 96, 120, tokens.text_primary);
-    draw_text(&mut image, 64, 88, "CONNECTIONS", tokens.text_primary, 2);
-    if !matches!(capture.scenario, Scenario::ConnectionsEmpty) {
-        for index in 0..4 {
-            row(&mut image, tokens, 64, 132 + index * 64, index == 0);
+    let compact_connections = capture.size.0 < 900
+        && matches!(
+            capture.scenario,
+            Scenario::ConnectionsEmpty | Scenario::Workbench
+        );
+    let main_x = if compact_connections { 48 } else { 308 };
+    if !compact_connections {
+        fill(
+            &mut image,
+            48,
+            68,
+            260,
+            content_bottom.saturating_sub(68),
+            tokens.panel_bg,
+        );
+        stroke(
+            &mut image,
+            48,
+            68,
+            260,
+            content_bottom.saturating_sub(68),
+            tokens.border,
+        );
+        text_bar(&mut image, 64, 96, 120, tokens.text_primary);
+        draw_text(&mut image, 64, 88, "CONNECTIONS", tokens.text_primary, 2);
+        if !matches!(capture.scenario, Scenario::ConnectionsEmpty) {
+            for index in 0..4 {
+                row(&mut image, tokens, 64, 132 + index * 64, index == 0);
+            }
         }
     }
-    let main_x = 308;
     let main_w = width.saturating_sub(main_x);
     let narrow_workbench = capture.size.0 <= 1024;
     match capture.scenario {

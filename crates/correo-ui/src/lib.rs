@@ -10,6 +10,7 @@ mod modal_style;
 mod nav;
 mod payload_highlight;
 mod plugins;
+mod responsive;
 mod scripts;
 mod settings;
 mod shell;

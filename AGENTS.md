@@ -17,6 +17,10 @@ This repository is being ported from Java/JavaFX to Rust. Follow `architecture.m
 - Old Java plugins may be dropped and reinitialized. Do not promise PF4J jar compatibility.
 - Preserve user secrets carefully. Never log passwords, key material, decrypted password maps, or export passwords.
 
+## Agent behavior
+
+- Do not run tests if not requested.
+
 ## Expected Workspace Shape
 
 The target Rust workspace should use small crates:

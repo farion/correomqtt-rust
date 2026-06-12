@@ -1,10 +1,11 @@
 use correo_core::{sample_snapshot, AppCommandSender, AppSnapshot, ThemeMode, Workspace};
 use correo_style::{apply_theme, layout, tokens, ThemeTokens};
-use egui::{CentralPanel, Frame, SidePanel, TopBottomPanel};
+use egui::{Button, CentralPanel, Frame, RichText, SidePanel, TopBottomPanel};
+use egui_phosphor::regular;
 
 use crate::{
-    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, toasts,
-    transfer_wizard, workspace,
+    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, responsive,
+    toasts, transfer_wizard, widgets, workspace,
 };
 
 pub const THEME_KEY: &str = "correo.theme-mode";
@@ -136,20 +137,37 @@ impl CorreoUi {
                 nav::rail(ui, snapshot.active_workspace, tokens, commands, i18n);
             });
 
-        if context_panel_visible(&snapshot) {
-            SidePanel::left("correo-context")
-                .default_width(layout::SIDEBAR_DEFAULT_WIDTH)
-                .width_range(layout::SIDEBAR_MIN_WIDTH..=layout::SIDEBAR_MAX_WIDTH)
-                .resizable(true)
-                .frame(sidebar_frame(tokens))
-                .show(context, |ui| match snapshot.active_workspace {
-                    Workspace::Connections => {
+        let compact_connections_context =
+            responsive::connections_context_is_compact(context, snapshot.active_workspace);
+
+        if context_panel_visible(&snapshot) && !compact_connections_context {
+            if snapshot.active_workspace == Workspace::Connections {
+                let sidebar_width = connection_sidebar_width(context);
+                let response = SidePanel::left("correo-context")
+                    .exact_width(sidebar_width)
+                    .resizable(false)
+                    .frame(sidebar_frame(tokens))
+                    .show(context, |ui| {
                         connection_launcher::panel(ui, &snapshot, tokens, commands, i18n);
-                    }
-                    active_workspace => {
-                        workspace::sidebar(ui, &snapshot, active_workspace, tokens, commands, i18n);
-                    }
-                });
+                    });
+                connection_sidebar_resize_handle(context, response.response.rect, tokens);
+            } else {
+                SidePanel::left("correo-context")
+                    .default_width(layout::SIDEBAR_DEFAULT_WIDTH)
+                    .width_range(layout::SIDEBAR_MIN_WIDTH..=layout::SIDEBAR_MAX_WIDTH)
+                    .resizable(true)
+                    .frame(sidebar_frame(tokens))
+                    .show(context, |ui| {
+                        workspace::sidebar(
+                            ui,
+                            &snapshot,
+                            snapshot.active_workspace,
+                            tokens,
+                            commands,
+                            i18n,
+                        );
+                    });
+            }
         }
 
         CentralPanel::default()
@@ -157,6 +175,9 @@ impl CorreoUi {
             .show(context, |ui| {
                 workspace::show(ui, &snapshot, tokens, commands, i18n);
             });
+        if compact_connections_context {
+            connection_flyout(context, &snapshot, tokens, commands, i18n);
+        }
         transfer_wizard::show(
             context,
             &snapshot,
@@ -185,6 +206,179 @@ fn context_panel_visible(snapshot: &AppSnapshot) -> bool {
             | Workspace::Settings
             | Workspace::About
     )
+}
+
+fn connection_sidebar_width(context: &egui::Context) -> f32 {
+    context
+        .data_mut(|data| {
+            data.get_persisted(connection_sidebar_width_id())
+                .unwrap_or(layout::CONNECTION_FLYOUT_WIDTH)
+        })
+        .clamp(
+            layout::CONNECTION_SIDEBAR_MIN_WIDTH,
+            layout::CONNECTION_SIDEBAR_MAX_WIDTH,
+        )
+}
+
+fn connection_sidebar_resize_handle(
+    context: &egui::Context,
+    rect: egui::Rect,
+    tokens: ThemeTokens,
+) {
+    let x = rect.right();
+    let handle_width = layout::WORKBENCH_DIVIDER_SIZE;
+    egui::Area::new(egui::Id::new("connections-context-resize-handle"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::pos2(x - handle_width * 0.5, rect.top()))
+        .movable(false)
+        .show(context, |ui| {
+            let handle_rect = egui::Rect::from_min_size(
+                ui.min_rect().min,
+                egui::vec2(handle_width, rect.height()),
+            );
+            let response = ui
+                .allocate_rect(handle_rect, egui::Sense::click_and_drag())
+                .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+            if response.dragged() {
+                if let Some(pointer) = response.interact_pointer_pos() {
+                    let width = (pointer.x - rect.left()).clamp(
+                        layout::CONNECTION_SIDEBAR_MIN_WIDTH,
+                        layout::CONNECTION_SIDEBAR_MAX_WIDTH,
+                    );
+                    ui.ctx().data_mut(|data| {
+                        data.insert_persisted(connection_sidebar_width_id(), width)
+                    });
+                }
+            }
+        });
+
+    context
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("connections-context-resize-line"),
+        ))
+        .line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            egui::Stroke::new(1.0, tokens.border),
+        );
+}
+
+fn connection_sidebar_width_id() -> egui::Id {
+    egui::Id::new("connections-context-sidebar-width")
+}
+
+fn connection_flyout(
+    context: &egui::Context,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    if !responsive::connection_flyout_open(context) {
+        return;
+    }
+    if context.input(|input| input.key_pressed(egui::Key::Escape)) {
+        responsive::close_connection_flyout(context);
+    }
+
+    let screen = context.screen_rect();
+    let overlay_rect = egui::Rect::from_min_max(
+        egui::pos2(
+            screen.left() + layout::RAIL_WIDTH,
+            screen.top() + layout::HEADER_HEIGHT,
+        ),
+        screen.right_bottom(),
+    );
+    if overlay_rect.width() <= 0.0 || overlay_rect.height() <= 0.0 {
+        return;
+    }
+
+    egui::Area::new(egui::Id::new("connections-context-flyout"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(overlay_rect.min)
+        .movable(false)
+        .show(context, |ui| {
+            let (scrim_rect, _) = ui.allocate_exact_size(overlay_rect.size(), egui::Sense::hover());
+            ui.painter().rect_filled(
+                scrim_rect,
+                egui::CornerRadius::ZERO,
+                egui::Color32::from_black_alpha(crate::modal_style::SCRIM_ALPHA),
+            );
+
+            let panel_width = layout::CONNECTION_FLYOUT_WIDTH.min(overlay_rect.width());
+            let panel_rect = egui::Rect::from_min_size(
+                scrim_rect.left_top(),
+                egui::vec2(panel_width, scrim_rect.height()),
+            );
+            ui.painter()
+                .rect_filled(panel_rect, egui::CornerRadius::ZERO, tokens.window_bg);
+
+            let margin = layout::sidebar_margin();
+            let content_rect = egui::Rect::from_min_max(
+                egui::pos2(
+                    panel_rect.left() + f32::from(margin.left),
+                    panel_rect.top() + f32::from(margin.top),
+                ),
+                egui::pos2(
+                    panel_rect.right() - f32::from(margin.right),
+                    panel_rect.bottom() - f32::from(margin.bottom),
+                ),
+            );
+            let mut panel_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(content_rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            panel_ui.set_clip_rect(content_rect);
+            connection_launcher::panel(&mut panel_ui, snapshot, tokens, commands, i18n);
+            connection_flyout_restore_button(ui, panel_rect);
+
+            let clicked_outside = ui.ctx().input(|input| {
+                input.pointer.any_click()
+                    && input
+                        .pointer
+                        .interact_pos()
+                        .is_some_and(|pos| !panel_rect.contains(pos))
+            });
+            if clicked_outside {
+                responsive::close_connection_flyout(ui.ctx());
+            }
+        });
+}
+
+fn connection_flyout_restore_button(ui: &mut egui::Ui, panel_rect: egui::Rect) {
+    if !(responsive::forced_connection_flyout_mode(ui.ctx())
+        && !responsive::connections_context_requires_flyout(ui.ctx()))
+    {
+        return;
+    }
+
+    let button_rect = egui::Rect::from_min_size(
+        egui::pos2(
+            panel_rect.right() + layout::TOOLBAR_GAP,
+            panel_rect.top() + f32::from(layout::SIDEBAR_MARGIN_TOP),
+        ),
+        egui::Vec2::from(layout::square_icon_button_size()),
+    );
+    let mut button_ui = ui.new_child(egui::UiBuilder::new().max_rect(button_rect).layout(
+        egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+    ));
+    if button_ui
+        .scope(|ui| {
+            widgets::with_icon_button_padding(ui, |ui| {
+                ui.add_sized(
+                    layout::square_icon_button_size(),
+                    Button::new(RichText::new(regular::SIDEBAR_SIMPLE).size(15.0)),
+                )
+            })
+        })
+        .inner
+        .on_hover_text("Use connections sidebar")
+        .clicked()
+    {
+        responsive::set_forced_connection_flyout_mode(ui.ctx(), false);
+        responsive::close_connection_flyout(ui.ctx());
+    }
 }
 
 impl Default for CorreoUi {

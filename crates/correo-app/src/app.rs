@@ -17,7 +17,7 @@ pub fn run() -> eframe::Result {
             .with_title("CorreoMQTT")
             .with_icon(app_icon())
             .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([900.0, 640.0]),
+            .with_min_inner_size([550.0, 520.0]),
         ..Default::default()
     };
 

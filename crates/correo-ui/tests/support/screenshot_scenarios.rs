@@ -5,6 +5,7 @@ use correo_core::{
     TransferFeedback, TransferOutcome, TransferSection, TransferStep, WorkbenchTab, Workspace,
 };
 pub(super) const REQUIRED_SIZES: [(u32, u32); 3] = [(1280, 800), (1024, 768), (900, 640)];
+const NARROW_WORKBENCH_SIZE: (u32, u32) = (720, 640);
 const PLUGIN_MANAGER_SIZES: [(u32, u32); 3] = [(1280, 800), (1024, 700), (900, 600)];
 const PLUGIN_STATE_SIZE: (u32, u32) = (1024, 700);
 const TRANSFER_STATE_SIZE: (u32, u32) = (900, 640);
@@ -222,6 +223,13 @@ pub(super) fn screenshot_captures() -> Vec<Capture> {
                 captures.push(Capture::new(scenario, mode.clone(), size));
             }
         }
+    }
+    for mode in REQUIRED_MODES {
+        captures.push(Capture::new(
+            Scenario::Workbench,
+            mode.clone(),
+            NARROW_WORKBENCH_SIZE,
+        ));
     }
     for scenario in SECONDARY_SCENARIOS {
         for mode in REQUIRED_MODES {

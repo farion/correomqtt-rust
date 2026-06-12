@@ -7,7 +7,9 @@ use egui::{Button, ComboBox, Id, Modal, RichText, ScrollArea, Sense, TextEdit, U
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
+use crate::modal_style;
 use crate::payload_highlight;
+use crate::responsive;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
     clearable_search_edit, fill_remaining_tile_rows, padded_text_edit, square_icon_button_size,
@@ -64,19 +66,32 @@ pub fn show(
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
-    layout::four_pane(
-        ui,
-        tokens,
-        |ui| script_browser(ui, &snapshot.scripts, tokens, commands, i18n),
-        |ui| {
-            toolbar(ui, snapshot, commands);
-            ui.add_space(6.0);
-            editor(ui, &snapshot.scripts, commands);
-        },
-        |ui| executions(ui, &snapshot.scripts, tokens, commands),
-        |ui| log::log_view(ui, &snapshot.scripts, tokens, commands),
-        |ui| footer::footer(ui, &snapshot.scripts, tokens),
-    );
+    if responsive::scripting_context_is_compact(ui.ctx()) {
+        layout::right_panes(
+            ui,
+            tokens,
+            |ui| {
+                toolbar(ui, snapshot, commands);
+                ui.add_space(6.0);
+                editor(ui, &snapshot.scripts, commands);
+            },
+            |ui| log::log_view(ui, &snapshot.scripts, tokens, commands),
+        );
+        scripting_flyout(ui.ctx(), snapshot, tokens, commands, i18n);
+    } else {
+        layout::four_pane(
+            ui,
+            tokens,
+            |ui| script_browser(ui, &snapshot.scripts, tokens, commands, i18n),
+            |ui| {
+                toolbar(ui, snapshot, commands);
+                ui.add_space(6.0);
+                editor(ui, &snapshot.scripts, commands);
+            },
+            |ui| executions(ui, &snapshot.scripts, tokens, commands),
+            |ui| log::log_view(ui, &snapshot.scripts, tokens, commands),
+        );
+    }
     dialogs::create_dialog(ui, &snapshot.scripts, tokens, commands);
     rename_dialog(ui, &snapshot.scripts, tokens, commands);
     delete_dialog(ui, &snapshot.scripts, tokens, commands);
@@ -93,7 +108,18 @@ fn script_browser(
         egui::vec2(tile_list_content_width(ui), CONTROL_HEIGHT),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
+            if !responsive::forced_scripting_flyout_mode(ui.ctx())
+                && !responsive::scripting_flyout_open(ui.ctx())
+                && header_icon_button(ui, regular::LIST)
+                    .on_hover_text("Use scripting flyout")
+                    .clicked()
+            {
+                responsive::set_forced_scripting_flyout_mode(ui.ctx(), true);
+                responsive::open_scripting_flyout(ui.ctx());
+            }
             ui.heading(i18n.workspace_label(correo_core::Workspace::Scripts));
+            ui.add_space(8.0);
+            footer::execution_summary(ui, scripts, tokens);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if header_add_button(ui).on_hover_text("New Script").clicked() {
                     send(commands, AppCommand::RequestCreateScript);
@@ -128,10 +154,14 @@ fn script_browser(
 }
 
 fn header_add_button(ui: &mut Ui) -> egui::Response {
+    header_icon_button(ui, regular::PLUS)
+}
+
+fn header_icon_button(ui: &mut Ui, icon: &'static str) -> egui::Response {
     with_icon_button_padding(ui, |ui| {
         ui.add_sized(
             square_icon_button_size(),
-            Button::new(RichText::new(regular::PLUS).size(15.0)),
+            Button::new(RichText::new(icon).size(15.0)),
         )
     })
 }
@@ -184,6 +214,7 @@ fn script_list(
         response.context_menu(|ui| script_context_menu(ui, scripts, script, commands));
         if response.clicked() {
             send(commands, AppCommand::SelectScript(script.name.clone()));
+            close_scripting_flyout_if_open(ui);
         }
         ui.add_space(TILE_GAP);
     }
@@ -255,17 +286,30 @@ fn paint_segment(
 fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
     let scripts = &snapshot.scripts;
     let has_script = scripts.selected_script().is_some();
-    ui.horizontal(|ui| {
-        ui.heading(script_title(scripts));
-        if script_icon_button(ui, regular::PENCIL_SIMPLE_LINE, has_script, "Rename script")
-            .clicked()
-        {
-            send(commands, AppCommand::RequestRenameScript);
-        }
-        if script_icon_button(ui, regular::TRASH, has_script, "Delete script").clicked() {
-            send(commands, AppCommand::RequestDeleteScript);
-        }
-    });
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), CONTROL_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            if responsive::scripting_context_is_compact(ui.ctx())
+                && script_icon_button(ui, regular::LIST, true, "Show scripts and executions")
+                    .clicked()
+            {
+                responsive::open_scripting_flyout(ui.ctx());
+            }
+            ui.heading(script_title(scripts));
+            if script_icon_button(ui, regular::PENCIL_SIMPLE_LINE, has_script, "Rename script")
+                .clicked()
+            {
+                send(commands, AppCommand::RequestRenameScript);
+            }
+            if script_icon_button(ui, regular::TRASH, has_script, "Delete script").clicked() {
+                send(commands, AppCommand::RequestDeleteScript);
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                footer::help_link(ui);
+            });
+        },
+    );
     ui.add_space(2.0);
     ui.horizontal(|ui| {
         if script_icon_button(ui, regular::FLOPPY_DISK, scripts.can_save(), "Save script").clicked()
@@ -411,6 +455,7 @@ fn executions(
                         commands,
                         AppCommand::SelectScriptExecution(execution.execution_id.clone()),
                     );
+                    close_scripting_flyout_if_open(ui);
                 }
                 ui.add_space(TILE_GAP);
             }
@@ -461,6 +506,131 @@ fn execution_context_menu(
     {
         send(commands, AppCommand::ClearFinishedScriptExecutions);
         ui.close_menu();
+    }
+}
+
+fn scripting_flyout(
+    ctx: &egui::Context,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    if !responsive::scripting_flyout_open(ctx) {
+        return;
+    }
+    if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+        responsive::close_scripting_flyout(ctx);
+    }
+
+    let screen = ctx.screen_rect();
+    let overlay_rect = egui::Rect::from_min_max(
+        egui::pos2(
+            screen.left() + style_layout::RAIL_WIDTH,
+            screen.top() + style_layout::HEADER_HEIGHT,
+        ),
+        screen.right_bottom(),
+    );
+    if overlay_rect.width() <= 0.0 || overlay_rect.height() <= 0.0 {
+        return;
+    }
+
+    egui::Area::new(egui::Id::new("scripting-context-flyout"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(overlay_rect.min)
+        .movable(false)
+        .show(ctx, |ui| {
+            let (scrim_rect, _) = ui.allocate_exact_size(overlay_rect.size(), Sense::hover());
+            ui.painter().rect_filled(
+                scrim_rect,
+                egui::CornerRadius::ZERO,
+                egui::Color32::from_black_alpha(modal_style::SCRIM_ALPHA),
+            );
+
+            let panel_width = style_layout::SCRIPTING_FLYOUT_WIDTH.min(overlay_rect.width());
+            let panel_rect = egui::Rect::from_min_size(
+                scrim_rect.left_top(),
+                egui::vec2(panel_width, scrim_rect.height()),
+            );
+            ui.painter()
+                .rect_filled(panel_rect, egui::CornerRadius::ZERO, tokens.window_bg);
+
+            let margin = style_layout::sidebar_margin();
+            let content_rect = egui::Rect::from_min_max(
+                egui::pos2(
+                    panel_rect.left() + f32::from(margin.left),
+                    panel_rect.top() + f32::from(margin.top),
+                ),
+                egui::pos2(
+                    panel_rect.right() - f32::from(margin.right),
+                    panel_rect.bottom() - f32::from(margin.bottom),
+                ),
+            );
+            let mut panel_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(content_rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            panel_ui.set_clip_rect(content_rect);
+            layout::list_column(
+                &mut panel_ui,
+                tokens,
+                |ui| script_browser(ui, &snapshot.scripts, tokens, commands, i18n),
+                |ui| executions(ui, &snapshot.scripts, tokens, commands),
+            );
+            scripting_flyout_restore_button(ui, panel_rect);
+
+            let clicked_outside = ui.ctx().input(|input| {
+                input.pointer.any_click()
+                    && input
+                        .pointer
+                        .interact_pos()
+                        .is_some_and(|pos| !panel_rect.contains(pos))
+            });
+            if clicked_outside {
+                responsive::close_scripting_flyout(ui.ctx());
+            }
+        });
+}
+
+fn scripting_flyout_restore_button(ui: &mut Ui, panel_rect: egui::Rect) {
+    if !(responsive::forced_scripting_flyout_mode(ui.ctx())
+        && !responsive::scripting_context_requires_flyout(ui.ctx()))
+    {
+        return;
+    }
+
+    let button_rect = egui::Rect::from_min_size(
+        egui::pos2(
+            panel_rect.right() + style_layout::TOOLBAR_GAP,
+            panel_rect.top() + f32::from(style_layout::SIDEBAR_MARGIN_TOP),
+        ),
+        egui::Vec2::from(style_layout::square_icon_button_size()),
+    );
+    let mut button_ui = ui.new_child(egui::UiBuilder::new().max_rect(button_rect).layout(
+        egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+    ));
+    if button_ui
+        .scope(|ui| {
+            with_icon_button_padding(ui, |ui| {
+                ui.add_sized(
+                    style_layout::square_icon_button_size(),
+                    Button::new(RichText::new(regular::SIDEBAR_SIMPLE).size(15.0)),
+                )
+            })
+        })
+        .inner
+        .on_hover_text("Use scripting lists")
+        .clicked()
+    {
+        responsive::set_forced_scripting_flyout_mode(ui.ctx(), false);
+        responsive::close_scripting_flyout(ui.ctx());
+    }
+}
+
+fn close_scripting_flyout_if_open(ui: &Ui) {
+    if responsive::scripting_flyout_open(ui.ctx()) {
+        responsive::close_scripting_flyout(ui.ctx());
     }
 }
 

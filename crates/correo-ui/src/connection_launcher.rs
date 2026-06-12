@@ -7,6 +7,7 @@ use egui::{
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
+use crate::responsive;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
     clearable_search_edit, disable_tile_text_selection, fill_remaining_tile_rows,
@@ -34,6 +35,15 @@ pub fn panel(
         egui::vec2(tile_list_content_width(ui), CONTROL_HEIGHT),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
+            if !responsive::forced_connection_flyout_mode(ui.ctx())
+                && !responsive::connection_flyout_open(ui.ctx())
+                && header_icon_button(ui, regular::LIST)
+                    .on_hover_text("Use connections flyout")
+                    .clicked()
+            {
+                responsive::set_forced_connection_flyout_mode(ui.ctx(), true);
+                responsive::open_connection_flyout(ui.ctx());
+            }
             ui.heading(i18n.text("connections-heading"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if header_add_button(ui)
@@ -212,12 +222,20 @@ fn connection_row(
     if response.double_clicked() {
         if connection.can_connect() {
             send(commands, AppCommand::Connect(connection.id));
+            close_compact_flyout(ui, snapshot);
         }
     } else if response.clicked() {
         send(commands, AppCommand::SelectConnection(connection.id));
+        close_compact_flyout(ui, snapshot);
     }
 
     ui.add_space(TILE_GAP);
+}
+
+fn close_compact_flyout(ui: &Ui, snapshot: &AppSnapshot) {
+    if responsive::connections_context_is_compact(ui.ctx(), snapshot.active_workspace) {
+        responsive::close_connection_flyout(ui.ctx());
+    }
 }
 
 fn connection_context_menu(

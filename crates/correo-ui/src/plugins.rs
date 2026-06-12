@@ -4,13 +4,16 @@ use correo_core::{
 };
 use egui::{Button, RichText, Sense, Stroke, Ui, UiBuilder, Window};
 use egui_extras::{Size, StripBuilder};
+use egui_phosphor::regular;
 
 use crate::i18n::I18n;
-use crate::theme::ThemeTokens;
 use crate::widgets::{
-    clearable_search_edit, disable_tile_text_selection, tighten_tile_spacing, tile_inner_padding,
-    tile_list_content_width, tile_table_fill, tile_table_hover_fill, TILE_GAP,
+    clearable_search_edit, disable_tile_text_selection, square_icon_button_size,
+    tighten_tile_spacing, tile_inner_padding, tile_list_content_width, tile_table_fill,
+    tile_table_hover_fill, with_icon_button_padding, TILE_GAP,
 };
+use crate::{modal_style, responsive, theme::ThemeTokens};
+use correo_style::layout;
 
 #[path = "plugins/installed.rs"]
 mod installed;
@@ -20,10 +23,10 @@ mod keyboard;
 mod marketplace;
 
 pub(super) const TILE_HEIGHT: f32 = 76.0;
-const LIST_WIDTH: f32 = 340.0;
-const MIN_LIST_WIDTH: f32 = 260.0;
-const MAX_LIST_WIDTH: f32 = 520.0;
-const DETAIL_MIN_WIDTH: f32 = 280.0;
+const LIST_WIDTH: f32 = layout::PLUGIN_FLYOUT_WIDTH;
+const MIN_LIST_WIDTH: f32 = layout::PLUGIN_FLYOUT_WIDTH;
+const MAX_LIST_WIDTH: f32 = 600.0;
+const DETAIL_MIN_WIDTH: f32 = 550.0;
 const SPLIT_GUTTER: f32 = 24.0;
 
 pub fn show(
@@ -35,10 +38,6 @@ pub fn show(
 ) {
     keyboard::handle(ui.ctx(), &snapshot.plugins, commands);
 
-    ui.heading(i18n.text("plugin-header"));
-    ui.add_space(8.0);
-    toolbar(ui, &snapshot.plugins, tokens, commands, i18n);
-    ui.add_space(8.0);
     if snapshot.plugins.load_state != PluginLoadState::Ready {
         empty_state(ui, &snapshot.plugins, tokens, i18n);
         return;
@@ -301,10 +300,21 @@ pub(super) fn plugin_tile(
 
 pub(super) fn plugin_split(
     ui: &mut Ui,
+    plugins: &PluginSurfaceSnapshot,
     tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
     add_list: impl FnOnce(&mut Ui),
     add_detail: impl FnOnce(&mut Ui),
 ) {
+    if responsive::plugin_context_is_compact(ui.ctx()) {
+        plugin_main_opener(ui);
+        ui.add_space(8.0);
+        add_detail(ui);
+        plugin_flyout(ui.ctx(), plugins, tokens, commands, i18n, add_list);
+        return;
+    }
+
     let list_width = plugin_list_width(ui.available_width());
     StripBuilder::new(ui)
         .clip(true)
@@ -312,10 +322,173 @@ pub(super) fn plugin_split(
         .size(Size::exact(SPLIT_GUTTER))
         .size(Size::remainder().at_least(DETAIL_MIN_WIDTH))
         .horizontal(|mut strip| {
-            strip.cell(add_list);
+            strip.cell(|ui| plugin_sidebar(ui, plugins, tokens, commands, i18n, add_list));
             strip.cell(|ui| divider(ui, tokens));
             strip.cell(add_detail);
         });
+}
+
+fn plugin_flyout(
+    ctx: &egui::Context,
+    plugins: &PluginSurfaceSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+    add_list: impl FnOnce(&mut Ui),
+) {
+    if !responsive::plugin_flyout_open(ctx) {
+        return;
+    }
+    if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+        responsive::close_plugin_flyout(ctx);
+    }
+
+    let screen = ctx.screen_rect();
+    let overlay_rect = egui::Rect::from_min_max(
+        egui::pos2(
+            screen.left() + layout::RAIL_WIDTH,
+            screen.top() + layout::HEADER_HEIGHT,
+        ),
+        screen.right_bottom(),
+    );
+    if overlay_rect.width() <= 0.0 || overlay_rect.height() <= 0.0 {
+        return;
+    }
+
+    egui::Area::new(egui::Id::new("plugin-context-flyout"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(overlay_rect.min)
+        .movable(false)
+        .show(ctx, |ui| {
+            let (scrim_rect, _) = ui.allocate_exact_size(overlay_rect.size(), Sense::hover());
+            ui.painter().rect_filled(
+                scrim_rect,
+                egui::CornerRadius::ZERO,
+                egui::Color32::from_black_alpha(modal_style::SCRIM_ALPHA),
+            );
+
+            let panel_width = layout::PLUGIN_FLYOUT_WIDTH.min(overlay_rect.width());
+            let panel_rect = egui::Rect::from_min_size(
+                scrim_rect.left_top(),
+                egui::vec2(panel_width, scrim_rect.height()),
+            );
+            ui.painter()
+                .rect_filled(panel_rect, egui::CornerRadius::ZERO, tokens.window_bg);
+
+            let margin = layout::sidebar_margin();
+            let content_rect = egui::Rect::from_min_max(
+                egui::pos2(
+                    panel_rect.left() + f32::from(margin.left),
+                    panel_rect.top() + f32::from(margin.top),
+                ),
+                egui::pos2(
+                    panel_rect.right() - f32::from(margin.right),
+                    panel_rect.bottom() - f32::from(margin.bottom),
+                ),
+            );
+            let mut panel_ui = ui.new_child(
+                UiBuilder::new()
+                    .max_rect(content_rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            panel_ui.set_clip_rect(content_rect);
+            plugin_sidebar(&mut panel_ui, plugins, tokens, commands, i18n, add_list);
+            plugin_flyout_restore_button(ui, panel_rect);
+
+            let clicked_outside = ui.ctx().input(|input| {
+                input.pointer.any_click()
+                    && input
+                        .pointer
+                        .interact_pos()
+                        .is_some_and(|pos| !panel_rect.contains(pos))
+            });
+            if clicked_outside {
+                responsive::close_plugin_flyout(ui.ctx());
+            }
+        });
+}
+
+fn plugin_sidebar(
+    ui: &mut Ui,
+    plugins: &PluginSurfaceSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+    add_list: impl FnOnce(&mut Ui),
+) {
+    ui.horizontal(|ui| {
+        plugin_list_header_icon(ui);
+        ui.heading(i18n.text("plugin-header"));
+    });
+    ui.add_space(8.0);
+    toolbar(ui, plugins, tokens, commands, i18n);
+    ui.add_space(8.0);
+    add_list(ui);
+}
+
+fn plugin_main_opener(ui: &mut Ui) {
+    if header_icon_button(ui, regular::LIST)
+        .on_hover_text("Show plugin list")
+        .clicked()
+    {
+        responsive::open_plugin_flyout(ui.ctx());
+    }
+}
+
+fn plugin_flyout_restore_button(ui: &mut Ui, panel_rect: egui::Rect) {
+    if !(responsive::forced_plugin_flyout_mode(ui.ctx())
+        && !responsive::plugin_context_requires_flyout(ui.ctx()))
+    {
+        return;
+    }
+
+    let button_rect = egui::Rect::from_min_size(
+        egui::pos2(
+            panel_rect.right() + layout::TOOLBAR_GAP,
+            panel_rect.top() + f32::from(layout::SIDEBAR_MARGIN_TOP),
+        ),
+        egui::Vec2::from(layout::square_icon_button_size()),
+    );
+    let mut button_ui = ui.new_child(UiBuilder::new().max_rect(button_rect).layout(
+        egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+    ));
+    if button_ui
+        .scope(|ui| {
+            with_icon_button_padding(ui, |ui| {
+                ui.add_sized(
+                    layout::square_icon_button_size(),
+                    Button::new(RichText::new(regular::SIDEBAR_SIMPLE).size(15.0)),
+                )
+            })
+        })
+        .inner
+        .on_hover_text("Use plugin sidebar")
+        .clicked()
+    {
+        responsive::set_forced_plugin_flyout_mode(ui.ctx(), false);
+        responsive::close_plugin_flyout(ui.ctx());
+    }
+}
+
+pub(super) fn plugin_list_header_icon(ui: &mut Ui) {
+    if !responsive::forced_plugin_flyout_mode(ui.ctx())
+        && !responsive::plugin_flyout_open(ui.ctx())
+        && header_icon_button(ui, regular::LIST)
+            .on_hover_text("Use plugin flyout")
+            .clicked()
+    {
+        responsive::set_forced_plugin_flyout_mode(ui.ctx(), true);
+        responsive::open_plugin_flyout(ui.ctx());
+    }
+}
+
+fn header_icon_button(ui: &mut Ui, icon: &'static str) -> egui::Response {
+    with_icon_button_padding(ui, |ui| {
+        ui.add_sized(
+            square_icon_button_size(),
+            Button::new(RichText::new(icon).size(15.0)),
+        )
+    })
 }
 
 fn plugin_list_width(available_width: f32) -> f32 {

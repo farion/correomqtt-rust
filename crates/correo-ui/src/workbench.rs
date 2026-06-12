@@ -17,6 +17,8 @@ pub fn show(ui: &mut Ui, snapshot: &AppSnapshot, tokens: ThemeTokens, commands: 
     workbench_layout::show(
         ui,
         tokens,
+        snapshot.workbench.narrow_tab,
+        commands,
         |ui| workbench_publish::editor(ui, snapshot, tokens, commands),
         |ui| workbench_subscribe::editor(ui, snapshot, tokens, commands),
         |ui| workbench_publish::outgoing_messages(ui, snapshot, tokens, commands),

@@ -4,6 +4,7 @@ use egui::{Button, Rect, RichText, Sense, Ui};
 use egui_phosphor::regular;
 
 use crate::{
+    responsive,
     theme::{ThemeTokens, CONTROL_HEIGHT},
     widgets::{
         edit_pulldown, fill_remaining_tile_rows, square_icon_button_size,
@@ -46,15 +47,17 @@ fn topic_row(
 ) {
     let mut topic = snapshot.workbench.subscribe.topic.clone();
     let rect = toolbar_rect(ui);
+    let icon_only = responsive::workbench_uses_icon_actions(rect.width());
     let is_connected = connected(snapshot);
     let can_subscribe = snapshot.workbench.subscribe.valid && is_connected;
+    let action_width = if icon_only {
+        square_icon_button_size()[0]
+    } else {
+        layout::SUBSCRIBE_ACTION_BUTTON_WIDTH
+    };
 
-    let subscribe_rect = right_rect(rect, layout::SUBSCRIBE_ACTION_BUTTON_WIDTH, 0.0);
-    let qos_rect = right_rect(
-        rect,
-        layout::QOS_WIDTH,
-        layout::SUBSCRIBE_ACTION_BUTTON_WIDTH + layout::TOOLBAR_GAP,
-    );
+    let subscribe_rect = right_rect(rect, action_width, 0.0);
+    let qos_rect = right_rect(rect, layout::QOS_WIDTH, action_width + layout::TOOLBAR_GAP);
     let topic_rect = Rect::from_min_max(
         rect.left_top(),
         egui::pos2(
@@ -87,7 +90,11 @@ fn topic_row(
         );
     });
     child_ui(ui, subscribe_rect, |ui| {
-        let label = format!("{}  Subscribe", regular::ARROW_DOWN_LEFT);
+        let label = if icon_only {
+            regular::ARROW_DOWN_LEFT.to_owned()
+        } else {
+            format!("{}  Subscribe", regular::ARROW_DOWN_LEFT)
+        };
         if !is_connected {
             disconnected_action_button(
                 ui,
@@ -101,7 +108,10 @@ fn topic_row(
 
         let subscribe = ui.add_enabled_ui(can_subscribe, |ui| {
             ui.spacing_mut().button_padding.x = 4.0;
-            ui.add_sized([subscribe_rect.width(), CONTROL_HEIGHT], Button::new(label))
+            ui.add_sized(
+                [subscribe_rect.width(), CONTROL_HEIGHT],
+                Button::new(&label),
+            )
         });
         let subscribe = subscribe.inner;
         if subscribe.clicked() {
@@ -109,6 +119,8 @@ fn topic_row(
         }
         if !can_subscribe {
             subscribe.on_hover_text("Requires a valid topic filter.");
+        } else if icon_only {
+            subscribe.on_hover_text("Subscribe");
         }
     });
 }

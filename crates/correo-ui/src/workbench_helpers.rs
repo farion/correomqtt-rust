@@ -23,8 +23,13 @@ pub(crate) fn disconnected_action_button(
             ui.add_sized([width, CONTROL_HEIGHT], Button::new(&label))
         })
         .inner;
+    let hover_response = ui.interact(
+        response.rect,
+        response.id.with("disabled-action-warning"),
+        egui::Sense::hover(),
+    );
 
-    if response.hovered() || response.contains_pointer() {
+    if hover_response.hovered() || hover_response.contains_pointer() {
         let text_color = contrast_text(tokens.danger);
         ui.painter().rect_filled(
             response.rect,
@@ -40,7 +45,7 @@ pub(crate) fn disconnected_action_button(
         );
     }
 
-    response.on_hover_ui(|ui| {
+    hover_response.on_hover_ui(|ui| {
         let text_color = contrast_text(tokens.danger);
         Frame::NONE
             .fill(tokens.danger)

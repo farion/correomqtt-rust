@@ -4,7 +4,7 @@ use egui::{Button, Rect, RichText, TextEdit, Ui};
 use egui_phosphor::regular;
 
 use crate::{
-    payload_highlight,
+    payload_highlight, responsive,
     theme::{ThemeTokens, CONTROL_HEIGHT},
     widgets::{
         checkbox, edit_pulldown, padded_text_edit, square_icon_button_size,
@@ -59,15 +59,17 @@ fn topic_row(
 ) {
     let mut topic = snapshot.workbench.publish.topic.clone();
     let rect = toolbar_rect(ui);
+    let icon_only = responsive::workbench_uses_icon_actions(rect.width());
     let is_connected = connected(snapshot);
     let can_publish = snapshot.workbench.publish.valid && is_connected;
+    let action_width = if icon_only {
+        square_icon_button_size()[0]
+    } else {
+        layout::PUBLISH_ACTION_BUTTON_WIDTH
+    };
 
-    let publish_rect = right_rect(rect, layout::PUBLISH_ACTION_BUTTON_WIDTH, 0.0);
-    let qos_rect = right_rect(
-        rect,
-        layout::QOS_WIDTH,
-        layout::PUBLISH_ACTION_BUTTON_WIDTH + layout::TOOLBAR_GAP,
-    );
+    let publish_rect = right_rect(rect, action_width, 0.0);
+    let qos_rect = right_rect(rect, layout::QOS_WIDTH, action_width + layout::TOOLBAR_GAP);
     let folder_rect =
         Rect::from_min_size(rect.left_top(), egui::vec2(CONTROL_HEIGHT, CONTROL_HEIGHT));
     let topic_left = folder_rect.right() + layout::TOOLBAR_GAP;
@@ -114,7 +116,11 @@ fn topic_row(
         });
     });
     child_ui(ui, publish_rect, |ui| {
-        let label = format!("{}  Publish", regular::PAPER_PLANE_RIGHT);
+        let label = if icon_only {
+            regular::PAPER_PLANE_RIGHT.to_owned()
+        } else {
+            format!("{}  Publish", regular::PAPER_PLANE_RIGHT)
+        };
         if !is_connected {
             disconnected_action_button(
                 ui,
@@ -128,7 +134,7 @@ fn topic_row(
 
         let publish = ui.add_enabled_ui(can_publish, |ui| {
             ui.spacing_mut().button_padding.x = 4.0;
-            ui.add_sized([publish_rect.width(), CONTROL_HEIGHT], Button::new(label))
+            ui.add_sized([publish_rect.width(), CONTROL_HEIGHT], Button::new(&label))
         });
         let publish = publish.inner;
         if publish.clicked() {
@@ -136,6 +142,8 @@ fn topic_row(
         }
         if !can_publish {
             publish.on_hover_text("Requires a valid topic.");
+        } else if icon_only {
+            publish.on_hover_text("Publish");
         }
     });
 
