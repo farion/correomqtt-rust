@@ -371,6 +371,7 @@ fn sample_global_settings() -> GlobalSettingsSnapshot {
         cleanup_status: "Sensitive cleanup requires confirmation".to_owned(),
         search_use_regex: true,
         search_ignore_case: true,
+        reduce_motion: false,
         bundled_plugins_url: "https://github.com/farion/correomqtt-rust/releases".to_owned(),
         plugin_repositories: vec![PluginRepositoryRow {
             id: "sample".to_owned(),

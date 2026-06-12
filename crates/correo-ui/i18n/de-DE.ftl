@@ -65,6 +65,7 @@ settings-updates = Nach Updates suchen
 settings-plugins = Plugins
 settings-data = Daten
 settings-theme = Erscheinungsbild
+settings-reduce-motion = Bewegung reduzieren
 settings-use-regex = Reguläre Ausdrücke verwenden
 settings-ignore-case = Ignoriere Groß-/Kleinschreibung
 settings-backend = Secret Storage

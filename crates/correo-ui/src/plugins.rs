@@ -12,8 +12,9 @@ use crate::widgets::{
     tighten_tile_spacing, tile_inner_padding, tile_list_content_width, tile_table_fill,
     tile_table_hover_fill, with_icon_button_padding, TILE_GAP,
 };
-use crate::{modal_style, responsive, theme::ThemeTokens};
+use crate::{modal_style, motion, responsive, theme::ThemeTokens};
 use correo_style::layout;
+use std::hash::Hash;
 
 #[path = "plugins/installed.rs"]
 mod installed;
@@ -270,6 +271,7 @@ pub(super) fn search_field(
 
 pub(super) fn plugin_tile(
     ui: &mut Ui,
+    id_source: impl Hash,
     index: usize,
     selected: bool,
     tokens: ThemeTokens,
@@ -277,13 +279,15 @@ pub(super) fn plugin_tile(
 ) -> egui::Response {
     let width = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, TILE_HEIGHT), Sense::click());
-    let fill = if selected {
-        tokens.accent_selected_bg
-    } else if response.hovered() || response.contains_pointer() {
-        tile_table_hover_fill(tokens)
-    } else {
-        tile_table_fill(index, tokens)
-    };
+    let fill = motion::tile_fill(
+        ui,
+        id_source,
+        tile_table_fill(index, tokens),
+        tile_table_hover_fill(tokens),
+        tokens.accent_selected_bg,
+        response.hovered() || response.contains_pointer(),
+        selected,
+    );
     let clip_rect = rect.intersect(ui.clip_rect());
     let painter = ui.painter().with_clip_rect(clip_rect);
     painter.rect_filled(rect, egui::CornerRadius::ZERO, fill);
@@ -336,10 +340,11 @@ fn plugin_flyout(
     i18n: &I18n,
     add_list: impl FnOnce(&mut Ui),
 ) {
-    if !responsive::plugin_flyout_open(ctx) {
+    let open = responsive::plugin_flyout_open(ctx);
+    let Some(progress) = motion::flyout_progress(ctx, "plugin-context", open) else {
         return;
-    }
-    if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+    };
+    if open && ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
         responsive::close_plugin_flyout(ctx);
     }
 
@@ -364,14 +369,11 @@ fn plugin_flyout(
             ui.painter().rect_filled(
                 scrim_rect,
                 egui::CornerRadius::ZERO,
-                egui::Color32::from_black_alpha(modal_style::SCRIM_ALPHA),
+                motion::scrim_color(modal_style::SCRIM_ALPHA, progress),
             );
 
             let panel_width = layout::PLUGIN_FLYOUT_WIDTH.min(overlay_rect.width());
-            let panel_rect = egui::Rect::from_min_size(
-                scrim_rect.left_top(),
-                egui::vec2(panel_width, scrim_rect.height()),
-            );
+            let panel_rect = motion::flyout_panel_rect(scrim_rect, panel_width, progress);
             ui.painter()
                 .rect_filled(panel_rect, egui::CornerRadius::ZERO, tokens.window_bg);
 
@@ -391,17 +393,19 @@ fn plugin_flyout(
                     .max_rect(content_rect)
                     .layout(egui::Layout::top_down(egui::Align::Min)),
             );
+            panel_ui.multiply_opacity(motion::content_opacity(progress));
             panel_ui.set_clip_rect(content_rect);
             plugin_sidebar(&mut panel_ui, plugins, tokens, commands, i18n, add_list);
             plugin_flyout_restore_button(ui, panel_rect);
 
-            let clicked_outside = ui.ctx().input(|input| {
-                input.pointer.any_click()
-                    && input
-                        .pointer
-                        .interact_pos()
-                        .is_some_and(|pos| !panel_rect.contains(pos))
-            });
+            let clicked_outside = open
+                && ui.ctx().input(|input| {
+                    input.pointer.any_click()
+                        && input
+                            .pointer
+                            .interact_pos()
+                            .is_some_and(|pos| !panel_rect.contains(pos))
+                });
             if clicked_outside {
                 responsive::close_plugin_flyout(ui.ctx());
             }

@@ -27,6 +27,14 @@ pub fn show(
         .show(ui, |ui| {
             section(
                 ui,
+                i18n.settings_section_label(correo_core::SettingsSection::Appearance),
+                tokens,
+                |ui| {
+                    appearance(ui, settings, commands, i18n);
+                },
+            );
+            section(
+                ui,
                 i18n.settings_section_label(correo_core::SettingsSection::Search),
                 tokens,
                 |ui| {
@@ -71,6 +79,21 @@ fn section(ui: &mut Ui, title: String, tokens: ThemeTokens, add: impl FnOnce(&mu
     ui.add_space(8.0);
     add(ui);
     ui.add_space(14.0);
+}
+
+fn appearance(
+    ui: &mut Ui,
+    settings: &GlobalSettingsSnapshot,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    checkbox_flag(
+        ui,
+        &i18n.text("settings-reduce-motion"),
+        settings.reduce_motion,
+        GlobalSettingFlag::ReduceMotion,
+        commands,
+    );
 }
 
 fn search(

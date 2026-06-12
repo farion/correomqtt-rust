@@ -8,6 +8,7 @@ use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::modal_style;
+use crate::motion;
 use crate::payload_highlight;
 use crate::responsive;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
@@ -187,6 +188,8 @@ fn script_list(
             Sense::click(),
         );
         let fill = tile_fill(
+            ui,
+            ("script", script.name.as_str()),
             index,
             selected,
             response.hovered() || response.contains_pointer(),
@@ -258,14 +261,23 @@ fn paint_line(ui: &Ui, rect: egui::Rect, line: usize, text: &str, color: egui::C
     paint_segment(ui, rect, line, rect.left() + 12.0, text, color)
 }
 
-fn tile_fill(index: usize, selected: bool, hovered: bool, tokens: ThemeTokens) -> egui::Color32 {
-    if selected {
-        tokens.accent_selected_bg
-    } else if hovered {
-        tile_table_hover_fill(tokens)
-    } else {
-        tile_table_fill(index, tokens)
-    }
+fn tile_fill(
+    ui: &Ui,
+    id_source: impl std::hash::Hash,
+    index: usize,
+    selected: bool,
+    hovered: bool,
+    tokens: ThemeTokens,
+) -> egui::Color32 {
+    motion::tile_fill(
+        ui,
+        id_source,
+        tile_table_fill(index, tokens),
+        tile_table_hover_fill(tokens),
+        tokens.accent_selected_bg,
+        hovered,
+        selected,
+    )
 }
 
 fn paint_segment(
@@ -431,6 +443,8 @@ fn executions(
                     Sense::click(),
                 );
                 let fill = tile_fill(
+                    ui,
+                    ("execution", execution.execution_id.as_str()),
                     index,
                     selected,
                     response.hovered() || response.contains_pointer(),
@@ -516,10 +530,11 @@ fn scripting_flyout(
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
-    if !responsive::scripting_flyout_open(ctx) {
+    let open = responsive::scripting_flyout_open(ctx);
+    let Some(progress) = motion::flyout_progress(ctx, "scripting-context", open) else {
         return;
-    }
-    if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+    };
+    if open && ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
         responsive::close_scripting_flyout(ctx);
     }
 
@@ -544,14 +559,11 @@ fn scripting_flyout(
             ui.painter().rect_filled(
                 scrim_rect,
                 egui::CornerRadius::ZERO,
-                egui::Color32::from_black_alpha(modal_style::SCRIM_ALPHA),
+                motion::scrim_color(modal_style::SCRIM_ALPHA, progress),
             );
 
             let panel_width = style_layout::SCRIPTING_FLYOUT_WIDTH.min(overlay_rect.width());
-            let panel_rect = egui::Rect::from_min_size(
-                scrim_rect.left_top(),
-                egui::vec2(panel_width, scrim_rect.height()),
-            );
+            let panel_rect = motion::flyout_panel_rect(scrim_rect, panel_width, progress);
             ui.painter()
                 .rect_filled(panel_rect, egui::CornerRadius::ZERO, tokens.window_bg);
 
@@ -571,6 +583,7 @@ fn scripting_flyout(
                     .max_rect(content_rect)
                     .layout(egui::Layout::top_down(egui::Align::Min)),
             );
+            panel_ui.multiply_opacity(motion::content_opacity(progress));
             panel_ui.set_clip_rect(content_rect);
             layout::list_column(
                 &mut panel_ui,
@@ -580,13 +593,14 @@ fn scripting_flyout(
             );
             scripting_flyout_restore_button(ui, panel_rect);
 
-            let clicked_outside = ui.ctx().input(|input| {
-                input.pointer.any_click()
-                    && input
-                        .pointer
-                        .interact_pos()
-                        .is_some_and(|pos| !panel_rect.contains(pos))
-            });
+            let clicked_outside = open
+                && ui.ctx().input(|input| {
+                    input.pointer.any_click()
+                        && input
+                            .pointer
+                            .interact_pos()
+                            .is_some_and(|pos| !panel_rect.contains(pos))
+                });
             if clicked_outside {
                 responsive::close_scripting_flyout(ui.ctx());
             }

@@ -94,6 +94,7 @@ fn storage_settings(snapshot: GlobalSettingsSnapshot) -> Settings {
     settings.saved_locale = locale(snapshot.language);
     settings.use_regex_for_search = snapshot.search_use_regex;
     settings.use_ignore_case = snapshot.search_ignore_case;
+    settings.reduce_motion = snapshot.reduce_motion;
     settings.search_updates = snapshot.update_checks_enabled;
     settings.use_default_repo = snapshot.use_default_plugin_repository;
     settings.install_bundled_plugins = snapshot.install_bundled_plugins;
@@ -161,6 +162,7 @@ mod tests {
         settings.language = "de_DE".to_owned();
         settings.search_use_regex = true;
         settings.search_ignore_case = true;
+        settings.reduce_motion = true;
         settings.keyring_backend = keyring_backend.clone();
         settings.plugin_repositories = vec![
             PluginRepositoryRow {
@@ -189,6 +191,7 @@ mod tests {
         assert_eq!(config.settings.saved_locale.as_deref(), Some("de_DE"));
         assert!(config.settings.use_regex_for_search);
         assert!(config.settings.use_ignore_case);
+        assert!(config.settings.reduce_motion);
         assert_eq!(
             config.settings.keyring_identifier.as_deref(),
             Some(keyring_backend.as_str())
@@ -213,5 +216,6 @@ mod tests {
     #[test]
     fn settings_flag_enum_stays_exhaustive_for_persistence() {
         let _ = GlobalSettingFlag::InstallBundledPlugins;
+        let _ = GlobalSettingFlag::ReduceMotion;
     }
 }

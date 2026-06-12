@@ -65,6 +65,7 @@ settings-updates = Check for updates
 settings-plugins = Plugins
 settings-data = Data
 settings-theme = Theme
+settings-reduce-motion = Reduce motion
 settings-use-regex = Use regular expressions
 settings-ignore-case = Ignore case
 settings-backend = Secret Storage

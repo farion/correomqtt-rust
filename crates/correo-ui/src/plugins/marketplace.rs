@@ -76,6 +76,7 @@ fn marketplace_row(
 ) {
     let response = plugin_tile(
         ui,
+        ("marketplace", plugin.id.as_str()),
         index,
         plugins.selected_marketplace_plugin_id == plugin.id,
         tokens,

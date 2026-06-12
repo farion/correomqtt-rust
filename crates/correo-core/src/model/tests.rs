@@ -338,6 +338,10 @@ fn global_settings_commands_track_dirty_save_and_discard() {
         flag: GlobalSettingFlag::UseRegexForSearch,
         enabled: true,
     });
+    model.apply_command(AppCommand::SetGlobalSettingFlag {
+        flag: GlobalSettingFlag::ReduceMotion,
+        enabled: true,
+    });
     model.apply_command(AppCommand::SetThemeMode(ThemeMode::Dark));
 
     assert!(model.snapshot().global_settings.dirty);
@@ -357,6 +361,7 @@ fn global_settings_commands_track_dirty_save_and_discard() {
     assert_eq!(model.snapshot().global_settings.language, "de_DE");
     assert_eq!(model.snapshot().global_settings.keyring_backend, "os");
     assert!(model.snapshot().global_settings.search_use_regex);
+    assert!(model.snapshot().global_settings.reduce_motion);
     assert_eq!(model.snapshot().theme_mode, ThemeMode::Dark);
     assert!(!model.snapshot().global_settings.dirty);
 }

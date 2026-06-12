@@ -123,6 +123,7 @@ pub struct ConnectionConfig {
 pub struct Settings {
     pub use_regex_for_search: bool,
     pub use_ignore_case: bool,
+    pub reduce_motion: bool,
     pub saved_locale: Option<String>,
     pub current_locale: Option<String>,
     pub search_updates: bool,
@@ -141,6 +142,7 @@ impl Default for Settings {
         Self {
             use_regex_for_search: false,
             use_ignore_case: false,
+            reduce_motion: false,
             saved_locale: None,
             current_locale: None,
             search_updates: false,

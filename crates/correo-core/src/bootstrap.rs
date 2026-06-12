@@ -341,6 +341,7 @@ fn global_settings(settings: &Settings) -> GlobalSettingsSnapshot {
         cleanup_status: "Sensitive values remain outside the UI snapshot".to_owned(),
         search_use_regex: settings.use_regex_for_search,
         search_ignore_case: settings.use_ignore_case,
+        reduce_motion: settings.reduce_motion,
         use_default_plugin_repository: settings.use_default_repo,
         install_bundled_plugins: settings.install_bundled_plugins,
         bundled_plugins_url: settings.bundled_plugins_url.clone().unwrap_or_default(),

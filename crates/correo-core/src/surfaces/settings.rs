@@ -47,6 +47,7 @@ pub enum GlobalSettingField {
 pub enum GlobalSettingFlag {
     UseRegexForSearch,
     UseIgnoreCase,
+    ReduceMotion,
     SearchUpdates,
     UseDefaultPluginRepository,
     InstallBundledPlugins,
@@ -109,6 +110,7 @@ pub struct GlobalSettingsSnapshot {
     pub keyring_options: Vec<SettingsOption>,
     pub search_use_regex: bool,
     pub search_ignore_case: bool,
+    pub reduce_motion: bool,
     pub update_checks_enabled: bool,
     pub last_update_check: String,
     pub use_default_plugin_repository: bool,
@@ -134,6 +136,7 @@ impl Default for GlobalSettingsSnapshot {
             keyring_options: available_keyring_options(),
             search_use_regex: false,
             search_ignore_case: false,
+            reduce_motion: false,
             update_checks_enabled: false,
             last_update_check: "Not checked this session".to_owned(),
             use_default_plugin_repository: true,

@@ -4,8 +4,8 @@ use egui::{Button, CentralPanel, Frame, RichText, SidePanel, TopBottomPanel};
 use egui_phosphor::regular;
 
 use crate::{
-    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, nav, responsive,
-    toasts, transfer_wizard, widgets, workspace,
+    command_bar, connection_launcher, i18n::I18n, icons, migration_recovery, motion, nav,
+    responsive, toasts, transfer_wizard, widgets, workspace,
 };
 
 pub const THEME_KEY: &str = "correo.theme-mode";
@@ -91,6 +91,7 @@ impl CorreoUi {
         self.ensure_icons_installed(context);
         let snapshot = self.snapshot.clone();
         apply_theme(context, &snapshot.theme_mode);
+        motion::apply_preference(context, snapshot.global_settings.reduce_motion);
         let tokens = tokens(context, &snapshot.theme_mode);
         let commands = &self.command_sender;
         let i18n = &self.i18n;
@@ -274,10 +275,11 @@ fn connection_flyout(
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
-    if !responsive::connection_flyout_open(context) {
+    let open = responsive::connection_flyout_open(context);
+    let Some(progress) = motion::flyout_progress(context, "connections-context", open) else {
         return;
-    }
-    if context.input(|input| input.key_pressed(egui::Key::Escape)) {
+    };
+    if open && context.input(|input| input.key_pressed(egui::Key::Escape)) {
         responsive::close_connection_flyout(context);
     }
 
@@ -302,14 +304,11 @@ fn connection_flyout(
             ui.painter().rect_filled(
                 scrim_rect,
                 egui::CornerRadius::ZERO,
-                egui::Color32::from_black_alpha(crate::modal_style::SCRIM_ALPHA),
+                motion::scrim_color(crate::modal_style::SCRIM_ALPHA, progress),
             );
 
             let panel_width = layout::CONNECTION_FLYOUT_WIDTH.min(overlay_rect.width());
-            let panel_rect = egui::Rect::from_min_size(
-                scrim_rect.left_top(),
-                egui::vec2(panel_width, scrim_rect.height()),
-            );
+            let panel_rect = motion::flyout_panel_rect(scrim_rect, panel_width, progress);
             ui.painter()
                 .rect_filled(panel_rect, egui::CornerRadius::ZERO, tokens.window_bg);
 
@@ -329,17 +328,19 @@ fn connection_flyout(
                     .max_rect(content_rect)
                     .layout(egui::Layout::top_down(egui::Align::Min)),
             );
+            panel_ui.multiply_opacity(motion::content_opacity(progress));
             panel_ui.set_clip_rect(content_rect);
             connection_launcher::panel(&mut panel_ui, snapshot, tokens, commands, i18n);
             connection_flyout_restore_button(ui, panel_rect);
 
-            let clicked_outside = ui.ctx().input(|input| {
-                input.pointer.any_click()
-                    && input
-                        .pointer
-                        .interact_pos()
-                        .is_some_and(|pos| !panel_rect.contains(pos))
-            });
+            let clicked_outside = open
+                && ui.ctx().input(|input| {
+                    input.pointer.any_click()
+                        && input
+                            .pointer
+                            .interact_pos()
+                            .is_some_and(|pos| !panel_rect.contains(pos))
+                });
             if clicked_outside {
                 responsive::close_connection_flyout(ui.ctx());
             }

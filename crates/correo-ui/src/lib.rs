@@ -7,6 +7,7 @@ mod i18n;
 mod icons;
 mod migration_recovery;
 mod modal_style;
+mod motion;
 mod nav;
 mod payload_highlight;
 mod plugins;

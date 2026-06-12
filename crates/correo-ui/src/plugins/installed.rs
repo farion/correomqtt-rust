@@ -76,6 +76,7 @@ fn plugin_row(
 ) {
     let response = plugin_tile(
         ui,
+        ("installed", plugin.id.as_str()),
         index,
         plugins.selected_plugin_id == plugin.id,
         tokens,

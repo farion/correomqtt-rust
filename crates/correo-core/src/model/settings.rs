@@ -37,6 +37,7 @@ impl AppModel {
         match flag {
             GlobalSettingFlag::UseRegexForSearch => settings.search_use_regex = enabled,
             GlobalSettingFlag::UseIgnoreCase => settings.search_ignore_case = enabled,
+            GlobalSettingFlag::ReduceMotion => settings.reduce_motion = enabled,
             GlobalSettingFlag::SearchUpdates => settings.update_checks_enabled = enabled,
             GlobalSettingFlag::UseDefaultPluginRepository => {
                 settings.use_default_plugin_repository = enabled;
