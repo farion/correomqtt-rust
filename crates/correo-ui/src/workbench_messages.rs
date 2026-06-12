@@ -1,5 +1,5 @@
 use correo_core::{AppCommandSender, AppSnapshot};
-use egui::{Context, Id, Order, Window};
+use egui::{CentralPanel, Context, Frame, Id, ViewportBuilder, ViewportClass, ViewportId, Window};
 
 use crate::{theme::ThemeTokens, workbench_detail};
 
@@ -31,7 +31,7 @@ pub(crate) fn show(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    show_outgoing(ctx, snapshot, tokens);
+    show_outgoing(ctx, snapshot, tokens, commands);
     show_incoming(ctx, snapshot, tokens, commands);
 }
 
@@ -41,7 +41,9 @@ fn show_incoming(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    let focused = ctx.data_mut(|data| data.get_temp::<Option<u32>>(focused_incoming_id()));
+    let focused = ctx
+        .data_mut(|data| data.get_temp::<Option<u32>>(focused_incoming_id()))
+        .flatten();
     let mut retained = Vec::new();
     for message_id in incoming_ids(ctx) {
         let Some(message) = snapshot
@@ -52,25 +54,38 @@ fn show_incoming(
         else {
             continue;
         };
-        let mut open = true;
-        Window::new(format!("Message {}", message.topic))
-            .id(Id::new(("workbench-message-window", message_id)))
-            .order(order_for(focused.flatten() == Some(message_id)))
-            .open(&mut open)
-            .default_width(520.0)
-            .default_height(360.0)
-            .show(ctx, |ui| {
+        let title = format!("Message {}", message.topic);
+        let close_requested = show_message_viewport(
+            ctx,
+            viewport_id("workbench-message-viewport", message_id),
+            Id::new(("workbench-message-window", message_id)),
+            &title,
+            [520.0, 360.0],
+            focused == Some(message_id),
+            tokens,
+            |ui| {
                 workbench_detail::message_window_content(ui, snapshot, message, tokens, commands);
-            });
-        if open {
+            },
+        );
+        if !close_requested {
             retained.push(message_id);
         }
     }
-    ctx.data_mut(|data| data.insert_temp(incoming_ids_id(), retained));
+    ctx.data_mut(|data| {
+        data.insert_temp(incoming_ids_id(), retained);
+        data.insert_temp(focused_incoming_id(), None::<u32>);
+    });
 }
 
-fn show_outgoing(ctx: &Context, snapshot: &AppSnapshot, tokens: ThemeTokens) {
-    let focused = ctx.data_mut(|data| data.get_temp::<Option<u32>>(focused_outgoing_id()));
+fn show_outgoing(
+    ctx: &Context,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
+    let focused = ctx
+        .data_mut(|data| data.get_temp::<Option<u32>>(focused_outgoing_id()))
+        .flatten();
     let mut retained = Vec::new();
     for message_id in outgoing_ids(ctx) {
         let Some(row) = snapshot
@@ -82,29 +97,72 @@ fn show_outgoing(ctx: &Context, snapshot: &AppSnapshot, tokens: ThemeTokens) {
         else {
             continue;
         };
-        let mut open = true;
-        Window::new(format!("Published {}", row.topic))
-            .id(Id::new(("workbench-outgoing-message-window", message_id)))
-            .order(order_for(focused.flatten() == Some(message_id)))
-            .open(&mut open)
-            .default_width(480.0)
-            .default_height(260.0)
-            .show(ctx, |ui| {
-                workbench_detail::outgoing_window_content(ui, row, tokens);
-            });
-        if open {
+        let title = format!("Published {}", row.topic);
+        let close_requested = show_message_viewport(
+            ctx,
+            viewport_id("workbench-outgoing-message-viewport", message_id),
+            Id::new(("workbench-outgoing-message-window", message_id)),
+            &title,
+            [480.0, 260.0],
+            focused == Some(message_id),
+            tokens,
+            |ui| {
+                workbench_detail::outgoing_window_content(ui, row, tokens, commands);
+            },
+        );
+        if !close_requested {
             retained.push(message_id);
         }
     }
-    ctx.data_mut(|data| data.insert_temp(outgoing_ids_id(), retained));
+    ctx.data_mut(|data| {
+        data.insert_temp(outgoing_ids_id(), retained);
+        data.insert_temp(focused_outgoing_id(), None::<u32>);
+    });
 }
 
-fn order_for(focused: bool) -> Order {
+fn show_message_viewport(
+    ctx: &Context,
+    viewport_id: ViewportId,
+    embedded_window_id: Id,
+    title: &str,
+    size: [f32; 2],
+    focused: bool,
+    tokens: ThemeTokens,
+    mut add_contents: impl FnMut(&mut egui::Ui),
+) -> bool {
+    let mut builder = ViewportBuilder::default()
+        .with_title(title)
+        .with_inner_size(size)
+        .with_min_inner_size([360.0, 220.0]);
     if focused {
-        Order::Foreground
-    } else {
-        Order::Middle
+        builder = builder.with_active(true);
     }
+
+    ctx.show_viewport_immediate(viewport_id, builder, |ctx, class| {
+        let close_requested = ctx.input(|input| input.viewport().close_requested());
+        if class == ViewportClass::Embedded {
+            let mut open = !close_requested;
+            Window::new(title)
+                .id(embedded_window_id)
+                .open(&mut open)
+                .default_size(size)
+                .show(ctx, |ui| add_contents(ui));
+            close_requested || !open
+        } else {
+            CentralPanel::default()
+                .frame(
+                    Frame::NONE
+                        .fill(tokens.window_bg)
+                        .inner_margin(egui::Margin::same(correo_style::layout::CENTRAL_MARGIN)),
+                )
+                .show(ctx, |ui| add_contents(ui));
+            close_requested
+        }
+    })
+}
+
+fn viewport_id(kind: &'static str, message_id: u32) -> ViewportId {
+    ViewportId::from_hash_of((kind, message_id))
 }
 
 fn incoming_ids(ctx: &Context) -> Vec<u32> {

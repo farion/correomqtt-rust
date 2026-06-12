@@ -219,6 +219,8 @@ impl AppModel {
             AppCommand::CopyIncomingMessageToPublishForm(id) => {
                 self.copy_incoming_message_to_publish_form(id);
             }
+            AppCommand::RemovePublishHistoryMessage(id) => self.remove_publish_history_message(id),
+            AppCommand::RemoveIncomingMessage(id) => self.remove_incoming_message(id),
             AppCommand::ClearPublishHistory => self.clear_publish_history(),
             AppCommand::ClearIncomingMessages => self.clear_incoming_messages(),
             AppCommand::SelectWorkbenchTab(tab) => self.snapshot.workbench.narrow_tab = tab,
@@ -282,17 +284,12 @@ impl AppModel {
             }
             AppCommand::SaveConnectionSettings => self.save_connection_settings(),
             AppCommand::DiscardConnectionSettings => self.discard_connection_settings(),
-            AppCommand::RequestDeleteConnection => {
-                self.snapshot.connection_settings.delete_confirmation_open = true;
-            }
+            AppCommand::RequestDeleteConnection => self.request_delete_connection(),
             AppCommand::CancelDeleteConnection => {
                 self.snapshot.connection_settings.delete_confirmation_open = false;
             }
             AppCommand::ConfirmDeleteConnection => {
-                self.snapshot.connection_settings.delete_confirmation_open = false;
-                self.push_diagnostic(Diagnostic::warning(
-                    "Delete connection command queued; secrets remain redacted.",
-                ));
+                self.delete_selected_connection();
             }
             AppCommand::SelectTransferSection(section) => {
                 self.snapshot.transfer.active_section = section;
@@ -508,6 +505,8 @@ fn command_mutates_active_workbench(command: &AppCommand) -> bool {
             | AppCommand::ExportIncomingMessage(_)
             | AppCommand::CopyPublishHistoryMessageToPublishForm(_)
             | AppCommand::CopyIncomingMessageToPublishForm(_)
+            | AppCommand::RemovePublishHistoryMessage(_)
+            | AppCommand::RemoveIncomingMessage(_)
             | AppCommand::ClearPublishHistory
             | AppCommand::ClearIncomingMessages
             | AppCommand::SelectWorkbenchTab(_)

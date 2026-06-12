@@ -1,5 +1,4 @@
 use correo_core::{AppCommand, AppCommandSender, AppSnapshot, ConnectionSurface, Workspace};
-use correo_style::layout;
 use egui::{RichText, Ui, UiBuilder};
 
 use crate::{
@@ -108,6 +107,9 @@ fn connections(
         ConnectionSurface::Launcher | ConnectionSurface::Workbench => {
             connection_workbench(ui, snapshot, tokens, commands, i18n)
         }
+        ConnectionSurface::Settings if snapshot.selected_connection.is_none() => {
+            connection_workbench(ui, snapshot, tokens, commands, i18n)
+        }
         ConnectionSurface::Settings => {
             connection_settings::show(ui, snapshot, tokens, commands, i18n)
         }
@@ -115,16 +117,9 @@ fn connections(
     }
     if matches!(
         snapshot.connection_surface,
-        ConnectionSurface::Launcher | ConnectionSurface::Workbench
+        ConnectionSurface::Launcher | ConnectionSurface::Workbench | ConnectionSurface::Settings
     ) {
-        connection_settings::overlay(
-            ui,
-            snapshot,
-            tokens,
-            commands,
-            i18n,
-            VIEW_PADDING + f32::from(layout::CENTRAL_MARGIN),
-        );
+        connection_settings::overlay(ui, snapshot, tokens, commands, i18n);
     }
 }
 

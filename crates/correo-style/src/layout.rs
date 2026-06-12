@@ -12,7 +12,7 @@ pub const HEADER_MARGIN_X: i8 = 16;
 pub const HEADER_MARGIN_Y: i8 = 6;
 pub const HEADER_ICON_SIZE: f32 = 44.0;
 pub const APP_TITLE_BASE_SIZE: f32 = 16.0;
-pub const APP_TITLE_SIZE: f32 = APP_TITLE_BASE_SIZE * 1.5;
+pub const APP_TITLE_SIZE: f32 = APP_TITLE_BASE_SIZE * 1.75;
 
 pub const RAIL_WIDTH: f32 = 48.0;
 pub const RAIL_MARGIN: i8 = 4;
@@ -150,6 +150,6 @@ mod tests {
     #[test]
     fn header_metrics_match_application_chrome() {
         assert_eq!(HEADER_HEIGHT, 64.0);
-        assert_eq!(APP_TITLE_SIZE, APP_TITLE_BASE_SIZE * 1.5);
+        assert_eq!(APP_TITLE_SIZE, APP_TITLE_BASE_SIZE * 1.75);
     }
 }

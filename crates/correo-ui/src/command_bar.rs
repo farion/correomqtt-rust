@@ -2,10 +2,13 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, GlobalSettingField, SettingsOption, ThemeMode,
 };
 use correo_style::layout;
-use egui::{Align, ComboBox, Image, Layout, RichText, Ui};
+use egui::{load::TexturePoll, Align, ComboBox, Image, Layout, RichText, Sense, Ui};
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
+
+const HEADER_LOGO_SIZE: f32 = 34.0;
+const HEADER_LOGO_RASTER_SCALE: f32 = 2.0;
 
 pub fn command_bar(
     ui: &mut Ui,
@@ -15,11 +18,7 @@ pub fn command_bar(
     i18n: &I18n,
 ) {
     ui.horizontal_centered(|ui| {
-        ui.add(
-            Image::new(egui::include_image!("../../../assets/icon.svg")).fit_to_exact_size(
-                egui::vec2(layout::HEADER_ICON_SIZE, layout::HEADER_ICON_SIZE),
-            ),
-        );
+        header_icon(ui);
         ui.label(
             RichText::new("CorreoMQTT")
                 .strong()
@@ -37,6 +36,27 @@ pub fn command_bar(
             );
         });
     });
+}
+
+fn header_icon(ui: &mut Ui) {
+    let size = egui::Vec2::splat(HEADER_LOGO_SIZE);
+    let (rect, _response) = ui.allocate_exact_size(size, Sense::hover());
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+
+    let raster_size = size * HEADER_LOGO_RASTER_SCALE;
+    let source = Image::from_bytes(
+        "bytes://correo-header-icon-mono.svg",
+        include_bytes!("../../../assets/icon_mono.svg"),
+    )
+    .fit_to_exact_size(raster_size);
+    if let Ok(TexturePoll::Ready { texture }) = source.load_for_size(ui.ctx(), raster_size) {
+        Image::from_texture(texture)
+            .fit_to_exact_size(size)
+            .tint(ui.visuals().text_color())
+            .paint_at(ui, rect);
+    }
 }
 
 fn theme_selector(ui: &mut Ui, current: &ThemeMode, commands: &AppCommandSender, i18n: &I18n) {
@@ -113,8 +133,8 @@ mod tests {
     }
 
     #[test]
-    fn app_title_font_size_is_scaled_by_one_and_a_half() {
-        assert_eq!(layout::APP_TITLE_SIZE, 24.0);
-        assert_eq!(layout::APP_TITLE_SIZE, layout::APP_TITLE_BASE_SIZE * 1.5);
+    fn app_title_font_size_is_scaled_up_for_header() {
+        assert_eq!(layout::APP_TITLE_SIZE, 28.0);
+        assert_eq!(layout::APP_TITLE_SIZE, layout::APP_TITLE_BASE_SIZE * 1.75);
     }
 }

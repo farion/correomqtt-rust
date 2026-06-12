@@ -3,9 +3,9 @@ use correo_core::{
     ConnectionSettingFlag, SecretInput,
 };
 use correo_style::layout;
-use egui::{Button, ComboBox, RichText, TextEdit, Ui};
+use egui::{Button, ComboBox, TextEdit, Ui};
 
-use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::theme::CONTROL_HEIGHT;
 
 pub(super) const FORM_MAX_WIDTH: f32 = LABEL_WIDTH + layout::TOOLBAR_GAP + CONTROL_MAX_WIDTH;
 const LABEL_WIDTH: f32 = 180.0;
@@ -127,22 +127,18 @@ pub(super) fn secret_field(
     ui: &mut Ui,
     label: &str,
     value: &SecretInput,
-    status: &str,
     field: ConnectionSecretField,
-    tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    secret_field_enabled(ui, label, value, status, field, true, tokens, commands);
+    secret_field_enabled(ui, label, value, field, true, commands);
 }
 
 pub(super) fn secret_field_enabled(
     ui: &mut Ui,
     label: &str,
     value: &SecretInput,
-    status: &str,
     field: ConnectionSecretField,
     enabled: bool,
-    tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
     ui.add_enabled_ui(enabled, |ui| {
@@ -166,11 +162,6 @@ pub(super) fn secret_field_enabled(
             }
         });
     });
-    if !status.is_empty() {
-        row(ui, "", |ui| {
-            ui.label(RichText::new(status).color(tokens.text_secondary));
-        });
-    }
 }
 
 pub(super) fn file_field(

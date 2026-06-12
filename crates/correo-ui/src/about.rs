@@ -1,10 +1,11 @@
-use egui::{Grid, Hyperlink, RichText, ScrollArea, Ui};
+use egui::{Grid, Hyperlink, Image, RichText, ScrollArea, Ui};
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
 
 const WEBSITE_URL: &str = env!("CARGO_PKG_REPOSITORY");
 const EXXETA_URL: &str = "https://exxeta.com";
+const ABOUT_ICON_SIZE: f32 = 160.0;
 
 mod build_info {
     include!(concat!(env!("OUT_DIR"), "/about_metadata.rs"));
@@ -15,6 +16,11 @@ pub fn show(ui: &mut Ui, _tokens: ThemeTokens, i18n: &I18n) {
         .id_salt("about-content")
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            ui.add(
+                Image::new(egui::include_image!("../../../assets/icon.svg"))
+                    .fit_to_exact_size(egui::Vec2::splat(ABOUT_ICON_SIZE)),
+            );
+            ui.add_space(18.0);
             value_row(
                 ui,
                 "CorreoMQTT",

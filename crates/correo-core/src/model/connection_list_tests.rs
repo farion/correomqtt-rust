@@ -50,6 +50,50 @@ fn launcher_command_selects_first_connection_workbench() {
 }
 
 #[test]
+fn delete_connection_removes_it_and_selects_first_available() {
+    let mut model = AppModel::default();
+    let first_id = model.snapshot().connections[0].id;
+    let second_id = model.snapshot().connections[1].id;
+    let original_count = model.snapshot().connection_count;
+
+    let second_name = model.snapshot().connections[1].name.clone();
+
+    model.apply_command(AppCommand::SelectConnection(second_id));
+    model.apply_command(AppCommand::RequestDeleteConnection);
+    assert!(
+        model
+            .snapshot()
+            .connection_settings
+            .delete_confirmation_open
+    );
+    assert_eq!(
+        model.snapshot().connection_settings.profile_name,
+        second_name
+    );
+
+    model.apply_command(AppCommand::ConfirmDeleteConnection);
+
+    assert_eq!(model.snapshot().connection_count, original_count - 1);
+    assert!(!model
+        .snapshot()
+        .connections
+        .iter()
+        .any(|connection| connection.id == second_id));
+    assert_eq!(model.snapshot().selected_connection, Some(first_id));
+    assert_eq!(
+        model.snapshot().connection_surface,
+        ConnectionSurface::Workbench
+    );
+    assert_eq!(model.snapshot().connection_settings_overlay, None);
+    assert!(
+        !model
+            .snapshot()
+            .connection_settings
+            .delete_confirmation_open
+    );
+}
+
+#[test]
 fn move_connection_reorders_visible_connections() {
     let mut model = AppModel::default();
     let original: Vec<_> = model

@@ -1,6 +1,6 @@
 use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, ConnectionSecretField, ConnectionSettingField,
-    ConnectionSettingFlag, ConnectionSettingsSnapshot, ConnectionSettingsTab, KeyringState,
+    ConnectionSettingFlag, ConnectionSettingsSnapshot, ConnectionSettingsTab,
 };
 use egui::{
     Button, Color32, CornerRadius, Rect, RichText, ScrollArea, Sense, TextEdit, Ui, UiBuilder,
@@ -50,12 +50,10 @@ fn show_body(
     ui.add_space(8.0);
     settings_content(ui, settings, tokens, commands, i18n);
     ui.add_space(8.0);
-    action_bar(ui, settings, commands, i18n, modal);
-    ui.add_space(8.0);
-    internal_id_hint(ui, settings, tokens, i18n);
+    action_bar(ui, settings, commands, i18n, modal, true);
 
     if settings.delete_confirmation_open {
-        delete_confirmation(ui, settings, commands, i18n);
+        delete_confirmation(ui, settings, tokens, commands, i18n);
     }
 }
 
@@ -65,82 +63,92 @@ pub fn overlay(
     tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
-    padding: f32,
 ) {
-    let Some(editor_id) = snapshot.connection_settings_overlay else {
+    if snapshot.connection_settings.delete_confirmation_open
+        && snapshot.connection_settings_overlay.is_none()
+        && snapshot.selected_connection.is_some()
+    {
+        delete_confirmation(ui, &snapshot.connection_settings, tokens, commands, i18n);
         return;
-    };
-    if snapshot.selected_connection != Some(editor_id) {
-        return;
-    }
-    if ui.ctx().input(|input| input.key_pressed(egui::Key::Escape)) {
-        send(commands, AppCommand::DiscardConnectionSettings);
     }
 
-    let content_rect = ui.max_rect();
-    let overlay_rect = Rect::from_min_max(
-        egui::pos2(
-            content_rect.left() - padding,
-            content_rect.top() - f32::from(correo_style::layout::CENTRAL_MARGIN),
-        ),
-        egui::pos2(
-            content_rect.right() + padding,
-            content_rect.bottom() + padding,
-        ),
-    );
+    let overlay_key = if let Some(editor_id) = snapshot.connection_settings_overlay {
+        if snapshot.selected_connection != Some(editor_id) {
+            return;
+        }
+        editor_id.to_string()
+    } else if snapshot.connection_surface == correo_core::ConnectionSurface::Settings
+        && snapshot.selected_connection.is_none()
+    {
+        "new-connection".to_owned()
+    } else {
+        return;
+    };
+    if ui.ctx().input(|input| input.key_pressed(egui::Key::Escape)) {
+        if snapshot.connection_settings.delete_confirmation_open {
+            send(commands, AppCommand::CancelDeleteConnection);
+        } else {
+            send(commands, AppCommand::DiscardConnectionSettings);
+        }
+    }
+
+    let overlay_rect = ui.ctx().screen_rect();
     let modal_size = egui::vec2(
         (overlay_rect.width() * 0.95).min(MODAL_MAX_WIDTH),
         (overlay_rect.height() * MODAL_HEIGHT_SCALE).min(MODAL_MAX_HEIGHT),
     );
-    egui::Area::new(egui::Id::new((
-        "connection-settings-overlay",
-        editor_id.to_string(),
-    )))
-    .order(egui::Order::Foreground)
-    .fixed_pos(overlay_rect.min)
-    .movable(false)
-    .show(ui.ctx(), |ui| {
-        let (scrim_rect, _) = ui.allocate_exact_size(overlay_rect.size(), Sense::click());
-        ui.painter().rect_filled(
-            scrim_rect,
-            CornerRadius::ZERO,
-            Color32::from_black_alpha(SCRIM_ALPHA),
-        );
+    let is_new_draft = snapshot.selected_connection.is_none();
+    let body_id = egui::Id::new(("connection-settings-overlay-body", overlay_key.clone()));
+    egui::Area::new(egui::Id::new(("connection-settings-overlay", overlay_key)))
+        .order(egui::Order::Foreground)
+        .fixed_pos(overlay_rect.min)
+        .movable(false)
+        .show(ui.ctx(), |ui| {
+            let (scrim_rect, _) = ui.allocate_exact_size(overlay_rect.size(), Sense::click());
+            ui.painter().rect_filled(
+                scrim_rect,
+                CornerRadius::ZERO,
+                Color32::from_black_alpha(SCRIM_ALPHA),
+            );
 
-        let modal_rect = Rect::from_center_size(scrim_rect.center(), modal_size);
-        ui.painter().rect_filled(
-            modal_rect,
-            CornerRadius::same(MODAL_RADIUS),
-            modal_bg(tokens),
-        );
+            let modal_rect = Rect::from_center_size(scrim_rect.center(), modal_size);
+            ui.painter().rect_filled(
+                modal_rect,
+                CornerRadius::same(MODAL_RADIUS),
+                modal_bg(tokens),
+            );
 
-        let content_rect = modal_rect.shrink(f32::from(MODAL_PADDING));
-        let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
-        content_ui.set_min_size(content_rect.size());
-        content_ui.set_max_size(content_rect.size());
-        content_ui.set_clip_rect(content_rect);
-        let body_id = egui::Id::new(("connection-settings-overlay-body", editor_id.to_string()));
-        content_ui.vertical(|ui| {
-            modal_header(ui, commands, i18n);
-            ui.separator();
-            let footer_height = crate::theme::CONTROL_HEIGHT + 20.0;
-            let body_height = (ui.available_height() - footer_height).max(120.0);
-            ScrollArea::vertical()
-                .id_salt(body_id)
-                .max_height(body_height)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    settings_content(ui, &snapshot.connection_settings, tokens, commands, i18n);
-                    ui.add_space(8.0);
-                    internal_id_hint(ui, &snapshot.connection_settings, tokens, i18n);
-                });
-            ui.add_space(8.0);
-            action_bar(ui, &snapshot.connection_settings, commands, i18n, true);
-            if snapshot.connection_settings.delete_confirmation_open {
-                delete_confirmation(ui, &snapshot.connection_settings, commands, i18n);
-            }
+            let content_rect = modal_rect.shrink(f32::from(MODAL_PADDING));
+            let mut content_ui = ui.new_child(UiBuilder::new().max_rect(content_rect));
+            content_ui.set_min_size(content_rect.size());
+            content_ui.set_max_size(content_rect.size());
+            content_ui.set_clip_rect(content_rect);
+            content_ui.vertical(|ui| {
+                modal_header(ui, commands, i18n);
+                ui.separator();
+                let footer_height = crate::theme::CONTROL_HEIGHT + 20.0;
+                let body_height = (ui.available_height() - footer_height).max(120.0);
+                ScrollArea::vertical()
+                    .id_salt(body_id)
+                    .max_height(body_height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        settings_content(ui, &snapshot.connection_settings, tokens, commands, i18n);
+                    });
+                ui.add_space(8.0);
+                action_bar(
+                    ui,
+                    &snapshot.connection_settings,
+                    commands,
+                    i18n,
+                    true,
+                    !is_new_draft,
+                );
+                if snapshot.connection_settings.delete_confirmation_open {
+                    delete_confirmation(ui, &snapshot.connection_settings, tokens, commands, i18n);
+                }
+            });
         });
-    });
 }
 
 fn header(ui: &mut Ui, i18n: &I18n) {
@@ -187,8 +195,6 @@ fn settings_content(
         ConnectionSettingsTab::Lwt => lwt_tab(ui, settings, tokens, commands, i18n),
     }
     ui.add_space(8.0);
-    validation(ui, settings, tokens);
-    keyring_status(ui, settings.keyring_state, tokens, i18n);
 }
 
 fn tab_bar(ui: &mut Ui, selected: ConnectionSettingsTab, commands: &AppCommandSender, i18n: &I18n) {
@@ -207,27 +213,27 @@ fn tab_bar(ui: &mut Ui, selected: ConnectionSettingsTab, commands: &AppCommandSe
 fn mqtt_tab(
     ui: &mut Ui,
     settings: &ConnectionSettingsSnapshot,
-    tokens: ThemeTokens,
+    _tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
     field(
         ui,
-        &i18n.text("connection-name"),
+        &required_label(i18n.text("connection-name")),
         &settings.profile_name,
         ConnectionSettingField::ProfileName,
         commands,
     );
     field(
         ui,
-        &i18n.text("connection-host"),
+        &required_label(i18n.text("connection-host")),
         &settings.host,
         ConnectionSettingField::Host,
         commands,
     );
     field(
         ui,
-        &i18n.text("connection-port"),
+        &required_label(i18n.text("connection-port")),
         &settings.port,
         ConnectionSettingField::Port,
         commands,
@@ -267,9 +273,7 @@ fn mqtt_tab(
         ui,
         &i18n.text("connection-password"),
         &settings.password,
-        &settings.password_status,
         ConnectionSecretField::MqttPassword,
-        tokens,
         commands,
     );
 }
@@ -291,7 +295,10 @@ fn tls_tab(
     );
     file_field(
         ui,
-        &i18n.text("connection-ssl-keystore"),
+        &maybe_required_label(
+            i18n.text("connection-ssl-keystore"),
+            settings.tls_mode == "Keystore",
+        ),
         &settings.tls_store,
         ConnectionSettingField::TlsStore,
         true,
@@ -301,9 +308,7 @@ fn tls_tab(
         ui,
         &i18n.text("connection-ssl-password"),
         &settings.tls_keystore_password,
-        &settings.tls_password_status,
         ConnectionSecretField::TlsKeystorePassword,
-        _tokens,
         commands,
     );
     flag(
@@ -333,14 +338,20 @@ fn proxy_tab(
     ui.add_enabled_ui(settings.proxy_mode == "SSH", |ui| {
         field(
             ui,
-            &i18n.text("connection-ssh-host"),
+            &maybe_required_label(
+                i18n.text("connection-ssh-host"),
+                settings.proxy_mode == "SSH",
+            ),
             &settings.ssh_host,
             ConnectionSettingField::SshHost,
             commands,
         );
         field(
             ui,
-            &i18n.text("connection-ssh-port"),
+            &maybe_required_label(
+                i18n.text("connection-ssh-port"),
+                settings.proxy_mode == "SSH",
+            ),
             &settings.ssh_port,
             ConnectionSettingField::SshPort,
             commands,
@@ -362,7 +373,10 @@ fn proxy_tab(
         );
         field(
             ui,
-            &i18n.text("connection-ssh-username"),
+            &maybe_required_label(
+                i18n.text("connection-ssh-username"),
+                settings.auth_mode != "No Auth",
+            ),
             &settings.auth_username,
             ConnectionSettingField::AuthUsername,
             commands,
@@ -371,15 +385,16 @@ fn proxy_tab(
             ui,
             &i18n.text("connection-ssh-password"),
             &settings.ssh_password,
-            &settings.ssh_password_status,
             ConnectionSecretField::SshPassword,
             settings.auth_mode == "Password",
-            _tokens,
             commands,
         );
         file_field(
             ui,
-            &i18n.text("connection-ssh-key-file"),
+            &maybe_required_label(
+                i18n.text("connection-ssh-key-file"),
+                settings.auth_mode == "Keyfile",
+            ),
             &settings.ssh_key_file,
             ConnectionSettingField::SshKeyFile,
             settings.auth_mode == "Keyfile",
@@ -391,7 +406,7 @@ fn proxy_tab(
 fn lwt_tab(
     ui: &mut Ui,
     settings: &ConnectionSettingsSnapshot,
-    tokens: ThemeTokens,
+    _tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
@@ -438,41 +453,16 @@ fn lwt_tab(
             }
         });
     });
-    if !settings.lwt_enabled {
-        ui.label(
-            RichText::new(i18n.text("connection-last-will-inactive")).color(tokens.text_disabled),
-        );
+}
+
+fn required_label(label: String) -> String {
+    maybe_required_label(label, true)
+}
+
+fn maybe_required_label(label: String, required: bool) -> String {
+    if required {
+        format!("{label} *")
+    } else {
+        label
     }
-}
-
-fn validation(ui: &mut Ui, settings: &ConnectionSettingsSnapshot, tokens: ThemeTokens) {
-    for error in &settings.validation_errors {
-        ui.label(RichText::new(error).color(tokens.warning));
-    }
-}
-
-fn keyring_status(ui: &mut Ui, state: KeyringState, tokens: ThemeTokens, i18n: &I18n) {
-    let color = match state {
-        KeyringState::Available => return,
-        KeyringState::Locked => tokens.warning,
-        KeyringState::Unavailable => tokens.danger,
-    };
-    ui.label(RichText::new(i18n.keyring_state_label(state)).color(color));
-}
-
-fn internal_id_hint(
-    ui: &mut Ui,
-    settings: &ConnectionSettingsSnapshot,
-    tokens: ThemeTokens,
-    i18n: &I18n,
-) {
-    ui.label(
-        RichText::new(format!(
-            "{}: {}",
-            i18n.text("connection-internal-id"),
-            settings.internal_id
-        ))
-        .monospace()
-        .color(tokens.text_secondary),
-    );
 }

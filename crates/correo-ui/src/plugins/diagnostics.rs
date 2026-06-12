@@ -2,11 +2,11 @@ use correo_core::{
     AppCommand, AppCommandSender, PluginDiagnosticRow, PluginDiagnosticSeverity,
     PluginSurfaceSnapshot,
 };
-use egui::{RichText, ScrollArea, TextEdit, Ui};
+use egui::{RichText, ScrollArea, Ui};
 use egui_extras::{Column, TableBuilder};
 
-use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
-use crate::widgets::padded_text_edit;
+use crate::theme::ThemeTokens;
+use crate::widgets::clearable_search_edit;
 
 const COMPACT_WIDTH: f32 = 760.0;
 
@@ -18,16 +18,14 @@ pub(super) fn tab(
 ) {
     ui.horizontal_wrapped(|ui| {
         let mut filter = plugins.diagnostic_filter.clone();
-        if ui
-            .add_sized(
-                [220.0, CONTROL_HEIGHT],
-                    padded_text_edit(
-                        TextEdit::singleline(&mut filter)
-                            .id(super::keyboard::plugin_search_id())
-                            .hint_text("Filter diagnostics..."),
-                    ),
-            )
-            .changed()
+        if clearable_search_edit(
+            ui,
+            Some(super::keyboard::plugin_search_id()),
+            &mut filter,
+            "Filter diagnostics...",
+            220.0,
+        )
+        .changed()
         {
             send(commands, AppCommand::SearchPluginDiagnostics(filter));
         }

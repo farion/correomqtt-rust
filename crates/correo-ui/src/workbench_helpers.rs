@@ -1,10 +1,55 @@
 use correo_core::{AppCommand, AppCommandSender, AppSnapshot, ConnectionState, QosLevel};
-use egui::{ComboBox, Rect, Ui, UiBuilder};
+use egui::{Align2, Button, ComboBox, CornerRadius, FontId, Frame, Rect, RichText, Ui, UiBuilder};
+
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 
 pub(crate) fn connected(snapshot: &AppSnapshot) -> bool {
     snapshot
         .selected_connection()
         .is_some_and(|connection| connection.state == ConnectionState::Connected)
+}
+
+pub(crate) fn disconnected_action_button(
+    ui: &mut Ui,
+    width: f32,
+    label: impl Into<String>,
+    tooltip: &'static str,
+    tokens: ThemeTokens,
+) {
+    let label = label.into();
+    let response = ui
+        .add_enabled_ui(false, |ui| {
+            ui.spacing_mut().button_padding.x = 4.0;
+            ui.add_sized([width, CONTROL_HEIGHT], Button::new(&label))
+        })
+        .inner;
+
+    if response.hovered() || response.contains_pointer() {
+        let text_color = contrast_text(tokens.danger);
+        ui.painter().rect_filled(
+            response.rect,
+            CornerRadius::same(correo_style::layout::CORNER_RADIUS),
+            tokens.danger,
+        );
+        ui.painter().text(
+            response.rect.center(),
+            Align2::CENTER_CENTER,
+            label,
+            FontId::proportional(14.0),
+            text_color,
+        );
+    }
+
+    response.on_hover_ui(|ui| {
+        let text_color = contrast_text(tokens.danger);
+        Frame::NONE
+            .fill(tokens.danger)
+            .corner_radius(CornerRadius::same(correo_style::layout::CORNER_RADIUS))
+            .inner_margin(egui::Margin::symmetric(10, 6))
+            .show(ui, |ui| {
+                ui.label(RichText::new(tooltip).strong().color(text_color));
+            });
+    });
 }
 
 pub(crate) fn qos_selector(
@@ -37,6 +82,16 @@ pub(crate) fn toolbar_rect(ui: &mut Ui) -> Rect {
         egui::Sense::hover(),
     );
     rect
+}
+
+fn contrast_text(background: egui::Color32) -> egui::Color32 {
+    let [red, green, blue, _] = background.to_array();
+    let luminance = 0.299 * red as f32 + 0.587 * green as f32 + 0.114 * blue as f32;
+    if luminance > 140.0 {
+        egui::Color32::from_rgb(0x17, 0x20, 0x2A)
+    } else {
+        egui::Color32::WHITE
+    }
 }
 
 pub(crate) fn right_rect(row: Rect, width: f32, right_offset: f32) -> Rect {

@@ -1,6 +1,6 @@
 use correo_core::{
-    ConnectDisabledReason, ConnectionSettingsTab, ConnectionState, KeyringState, PluginLoadState,
-    PluginSource, PluginStatus, PluginSurfaceTab, SettingsSection, ThemeMode, Workspace,
+    ConnectionSettingsTab, ConnectionState, PluginLoadState, PluginSource, PluginStatus,
+    PluginSurfaceTab, SettingsSection, ThemeMode, Workspace,
 };
 use fluent_bundle::{FluentBundle, FluentResource};
 use unic_langid::LanguageIdentifier;
@@ -131,22 +131,6 @@ impl I18n {
             ConnectionSettingsTab::Tls => "connection-tab-tls",
             ConnectionSettingsTab::Proxy => "connection-tab-proxy",
             ConnectionSettingsTab::Lwt => "connection-tab-lwt",
-        })
-    }
-
-    pub(crate) fn disabled_reason_label(&self, reason: ConnectDisabledReason) -> String {
-        self.text(match reason {
-            ConnectDisabledReason::AlreadyConnected => "disabled-already-connected",
-            ConnectDisabledReason::MissingHost => "disabled-missing-host",
-            ConnectDisabledReason::Busy => "disabled-busy",
-        })
-    }
-
-    pub(crate) fn keyring_state_label(&self, state: KeyringState) -> String {
-        self.text(match state {
-            KeyringState::Available => "keyring-available",
-            KeyringState::Locked => "keyring-locked",
-            KeyringState::Unavailable => "keyring-unavailable",
         })
     }
 

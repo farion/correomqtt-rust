@@ -10,7 +10,10 @@ use crate::{
         tile_scroll_bar_rect_with_height, tile_table_fill, with_icon_button_padding,
     },
     workbench_connection_messages::{self, MessageOrigin},
-    workbench_helpers::{child_ui, connected, qos_selector, right_rect, send, toolbar_rect},
+    workbench_helpers::{
+        child_ui, connected, disconnected_action_button, qos_selector, right_rect, send,
+        toolbar_rect,
+    },
     workbench_layout::{self, WorkbenchPaneSide},
 };
 
@@ -22,7 +25,7 @@ pub(crate) fn editor(
 ) {
     workbench_layout::pane_title(ui, "Subscribe", WorkbenchPaneSide::Subscribe);
     ui.add_space(4.0);
-    topic_row(ui, snapshot, commands);
+    topic_row(ui, snapshot, tokens, commands);
     subscriptions(ui, snapshot, tokens, commands);
 }
 
@@ -35,10 +38,16 @@ pub(crate) fn incoming_messages(
     workbench_connection_messages::show(ui, snapshot, MessageOrigin::Incoming, tokens, commands);
 }
 
-fn topic_row(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
+fn topic_row(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     let mut topic = snapshot.workbench.subscribe.topic.clone();
     let rect = toolbar_rect(ui);
-    let can_subscribe = snapshot.workbench.subscribe.valid && connected(snapshot);
+    let is_connected = connected(snapshot);
+    let can_subscribe = snapshot.workbench.subscribe.valid && is_connected;
 
     let subscribe_rect = right_rect(rect, layout::SUBSCRIBE_ACTION_BUTTON_WIDTH, 0.0);
     let qos_rect = right_rect(
@@ -78,19 +87,28 @@ fn topic_row(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
         );
     });
     child_ui(ui, subscribe_rect, |ui| {
+        let label = format!("{}  Subscribe", regular::ARROW_DOWN_LEFT);
+        if !is_connected {
+            disconnected_action_button(
+                ui,
+                subscribe_rect.width(),
+                label,
+                "Subscribe is not available as long as the connection is not connected.",
+                tokens,
+            );
+            return;
+        }
+
         let subscribe = ui.add_enabled_ui(can_subscribe, |ui| {
             ui.spacing_mut().button_padding.x = 4.0;
-            ui.add_sized(
-                [subscribe_rect.width(), CONTROL_HEIGHT],
-                Button::new(format!("{}  Subscribe", regular::ARROW_DOWN_LEFT)),
-            )
+            ui.add_sized([subscribe_rect.width(), CONTROL_HEIGHT], Button::new(label))
         });
         let subscribe = subscribe.inner;
         if subscribe.clicked() {
             send(commands, AppCommand::Subscribe);
         }
         if !can_subscribe {
-            subscribe.on_hover_text("Requires a connected broker and a valid topic filter.");
+            subscribe.on_hover_text("Requires a valid topic filter.");
         }
     });
 }

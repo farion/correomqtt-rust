@@ -32,6 +32,9 @@ impl AppModel {
             }
             AppCommand::RunScript => self.run_script(),
             AppCommand::CancelScript => self.cancel_script(),
+            AppCommand::RemoveScriptExecution(execution_id) => {
+                self.remove_script_execution(execution_id);
+            }
             AppCommand::ClearFinishedScriptExecutions => self.clear_finished_script_executions(),
             _ => return false,
         }

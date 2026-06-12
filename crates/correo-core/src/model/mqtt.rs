@@ -66,12 +66,55 @@ impl AppModel {
         self.snapshot.workbench.publish.selected_history_id = None;
     }
 
+    pub(super) fn remove_publish_history_message(&mut self, id: u32) {
+        self.snapshot
+            .workbench
+            .publish
+            .history
+            .retain(|message| message.id != id);
+        if self.snapshot.workbench.publish.selected_history_id == Some(id) {
+            self.snapshot.workbench.publish.selected_history_id = self
+                .snapshot
+                .workbench
+                .publish
+                .history
+                .first()
+                .map(|message| message.id);
+        }
+    }
+
     pub(super) fn clear_incoming_messages(&mut self) {
         self.snapshot.workbench.messages.clear();
         self.snapshot.workbench.selected_message_id = None;
         for subscription in &mut self.snapshot.workbench.subscribe.subscriptions {
             subscription.message_count = 0;
         }
+    }
+
+    pub(super) fn remove_incoming_message(&mut self, id: u32) {
+        let Some(message) = self
+            .snapshot
+            .workbench
+            .messages
+            .iter()
+            .find(|message| message.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        self.snapshot
+            .workbench
+            .messages
+            .retain(|message| message.id != id);
+        if self.snapshot.workbench.selected_message_id == Some(id) {
+            self.snapshot.workbench.selected_message_id = self
+                .snapshot
+                .workbench
+                .messages
+                .first()
+                .map(|message| message.id);
+        }
+        decrement_matching_subscriptions(&mut self.snapshot.workbench, &message.topic);
     }
 
     pub(super) fn update_publish_qos(&mut self, qos: QosLevel) {
@@ -632,4 +675,15 @@ fn topic_matches_filter(topic: &str, filter: &str) -> bool {
     }
 
     topic_levels.len() == filter_levels.len()
+}
+
+fn decrement_matching_subscriptions(workbench: &mut WorkbenchSnapshot, topic: &str) {
+    for subscription in &mut workbench.subscribe.subscriptions {
+        if subscription.active
+            && subscription.message_count > 0
+            && topic_matches_filter(topic, &subscription.topic_filter)
+        {
+            subscription.message_count -= 1;
+        }
+    }
 }

@@ -2,13 +2,13 @@ use correo_core::{
     AppCommand, AppCommandSender, AppSnapshot, PluginDisableConfirmation, PluginFeedbackSeverity,
     PluginLoadState, PluginRow, PluginStatus, PluginSurfaceSnapshot, PluginSurfaceTab,
 };
-use egui::{Button, RichText, Sense, Stroke, TextEdit, Ui, UiBuilder, Window};
+use egui::{Button, RichText, Sense, Stroke, Ui, UiBuilder, Window};
 use egui_extras::{Size, StripBuilder};
 
 use crate::i18n::I18n;
-use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
+use crate::theme::ThemeTokens;
 use crate::widgets::{
-    disable_tile_text_selection, padded_text_edit, tighten_tile_spacing, tile_inner_padding,
+    clearable_search_edit, disable_tile_text_selection, tighten_tile_spacing, tile_inner_padding,
     tile_list_content_width, tile_table_fill, tile_table_hover_fill, TILE_GAP,
 };
 
@@ -256,16 +256,14 @@ pub(super) fn search_field(
     i18n: &I18n,
 ) {
     let mut filter = plugins.plugin_filter.clone();
-    if ui
-        .add_sized(
-            [tile_list_content_width(ui), CONTROL_HEIGHT],
-            padded_text_edit(
-                TextEdit::singleline(&mut filter)
-                    .id(keyboard::plugin_search_id())
-                    .hint_text(i18n.text("plugin-search")),
-            ),
-        )
-        .changed()
+    if clearable_search_edit(
+        ui,
+        Some(keyboard::plugin_search_id()),
+        &mut filter,
+        i18n.text("plugin-search"),
+        tile_list_content_width(ui),
+    )
+    .changed()
     {
         send(commands, AppCommand::SearchPlugins(filter));
     }

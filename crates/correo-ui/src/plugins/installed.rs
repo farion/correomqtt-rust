@@ -1,5 +1,6 @@
 use correo_core::{AppCommand, AppCommandSender, PluginRow, PluginSurfaceSnapshot};
 use egui::{RichText, ScrollArea, Ui};
+use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
@@ -96,6 +97,54 @@ fn plugin_row(
     if response.clicked() {
         send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
     }
+    response.context_menu(|ui| installed_plugin_context_menu(ui, plugin, commands, i18n));
+}
+
+fn installed_plugin_context_menu(
+    ui: &mut Ui,
+    plugin: &PluginRow,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    let toggle_label = if plugin.enabled {
+        i18n.text("plugin-disable")
+    } else {
+        i18n.text("plugin-enable")
+    };
+    let toggle_icon = if plugin.enabled {
+        regular::PROHIBIT
+    } else {
+        regular::POWER
+    };
+    if ui.button(menu_label(toggle_icon, &toggle_label)).clicked() {
+        send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
+        send(
+            commands,
+            AppCommand::SetPluginEnabled {
+                plugin_id: plugin.id.clone(),
+                enabled: !plugin.enabled,
+            },
+        );
+        ui.close_menu();
+    }
+    if plugin.can_uninstall()
+        && ui
+            .button(menu_label(regular::TRASH, &i18n.text("plugin-uninstall")))
+            .clicked()
+    {
+        send(commands, AppCommand::SelectPlugin(plugin.id.clone()));
+        send(
+            commands,
+            AppCommand::UninstallPlugin {
+                plugin_id: plugin.id.clone(),
+            },
+        );
+        ui.close_menu();
+    }
+}
+
+fn menu_label(icon: &str, label: &str) -> String {
+    format!("{icon}  {label}")
 }
 
 fn selected_detail(

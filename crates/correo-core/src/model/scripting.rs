@@ -339,6 +339,34 @@ impl AppModel {
         );
     }
 
+    pub(super) fn remove_script_execution(&mut self, execution_id: &str) {
+        let Some(index) = self
+            .snapshot
+            .scripts
+            .executions
+            .iter()
+            .position(|execution| execution.execution_id == execution_id)
+        else {
+            return;
+        };
+        if self.snapshot.scripts.executions[index].status == ScriptExecutionStatus::Running {
+            self.cancel_script();
+        }
+        self.snapshot.scripts.executions.remove(index);
+        self.snapshot
+            .scripts
+            .log_lines
+            .retain(|line| line.execution_id != execution_id);
+        if self.snapshot.scripts.selected_execution_id.as_deref() == Some(execution_id) {
+            self.snapshot.scripts.selected_execution_id = self
+                .snapshot
+                .scripts
+                .executions
+                .first()
+                .map(|execution| execution.execution_id.clone());
+        }
+    }
+
     pub(super) fn append_script_log(
         &mut self,
         execution_id: String,

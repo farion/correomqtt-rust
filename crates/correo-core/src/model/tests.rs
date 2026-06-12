@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use correo_storage::current::{MessageType, PublishStatus, Qos as StorageQos};
 use correo_storage::legacy::LegacyProfile;
 use correo_storage::migration::MigrationPreview;
 
@@ -144,6 +145,80 @@ fn copying_incoming_message_restores_retained_state() {
     model.apply_command(AppCommand::CopyIncomingMessageToPublishForm(1));
     assert_eq!(model.snapshot().workbench.publish.qos, QosLevel::One);
     assert!(!model.snapshot().workbench.publish.retained);
+}
+
+#[test]
+fn removing_publish_history_message_updates_selection() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::RemovePublishHistoryMessage(1));
+
+    assert!(!model
+        .snapshot()
+        .workbench
+        .publish
+        .history
+        .iter()
+        .any(|row| row.id == 1));
+    assert_eq!(
+        model.snapshot().workbench.publish.selected_history_id,
+        Some(2)
+    );
+}
+
+#[test]
+fn removing_incoming_message_updates_selection_and_subscription_counts() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::RemoveIncomingMessage(1));
+
+    assert!(!model
+        .snapshot()
+        .workbench
+        .messages
+        .iter()
+        .any(|message| message.id == 1));
+    assert_eq!(model.snapshot().workbench.selected_message_id, Some(2));
+    assert_eq!(
+        model.snapshot().workbench.subscribe.subscriptions[0].message_count,
+        127
+    );
+}
+
+#[test]
+fn removing_incoming_message_marks_workbench_for_persistence() {
+    let mut model = AppModel::default();
+
+    model.apply_command(AppCommand::RemoveIncomingMessage(1));
+    let commands = model.drain_workbench_persistence_commands();
+
+    assert!(commands.iter().any(|command| matches!(
+        command,
+        crate::HistoryPersistenceCommand::ReplaceWorkbench { workbench, .. }
+            if !workbench.messages.iter().any(|message| message.id == 1)
+    )));
+}
+
+#[test]
+fn publish_history_removal_builds_persistence_command_from_selected_row() {
+    let model = AppModel::default();
+
+    let commands =
+        model.history_commands_for_app_command(&AppCommand::RemovePublishHistoryMessage(1));
+
+    assert_eq!(commands.len(), 1);
+    let crate::HistoryPersistenceCommand::RemovePublishedMessage { message, .. } = &commands[0]
+    else {
+        panic!("expected remove published message command");
+    };
+    assert_eq!(message.topic, "telemetry/device-42/set");
+    assert_eq!(
+        message.payload.as_deref(),
+        Some("{\n  \"target\": \"pump\",\n  \"enabled\": true\n}")
+    );
+    assert_eq!(message.qos, Some(StorageQos::AtLeastOnce));
+    assert_eq!(message.message_type, Some(MessageType::Outgoing));
+    assert_eq!(message.publish_status, Some(PublishStatus::Succeeded));
 }
 
 #[test]
@@ -363,6 +438,13 @@ fn add_connection_opens_settings_draft_and_save_adds_profile() {
         .validation_errors
         .iter()
         .any(|error| error == "Host is required"));
+
+    model.apply_command(AppCommand::SaveConnectionSettings);
+    assert!(model
+        .snapshot()
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.message == "Host is required"));
 
     model.apply_command(AppCommand::UpdateConnectionSetting {
         field: crate::ConnectionSettingField::Host,

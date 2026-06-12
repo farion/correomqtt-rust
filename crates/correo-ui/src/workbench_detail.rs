@@ -1,130 +1,162 @@
-use correo_core::{
-    AppCommand, AppCommandSender, AppSnapshot, MessageInspectorTab, MessageRow, PublishHistoryRow,
-};
-use egui::{RichText, Ui};
+use correo_core::{AppCommand, AppCommandSender, AppSnapshot, MessageRow, PublishHistoryRow};
+use correo_style::layout;
+use egui::{Button, Label, Layout, RichText, TextEdit, Ui};
+use egui_phosphor::regular;
 
-use crate::theme::ThemeTokens;
+use crate::{
+    payload_highlight,
+    theme::ThemeTokens,
+    widgets::{padded_text_edit, square_icon_button_size, with_icon_button_padding},
+    workbench_connection_messages_text::formatted_size,
+};
+
+const DETAIL_TOOLBAR_HEIGHT: f32 = 48.0;
 
 pub(crate) fn message_window_content(
     ui: &mut Ui,
-    snapshot: &AppSnapshot,
+    _snapshot: &AppSnapshot,
     message: &MessageRow,
     tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
-    ui.horizontal_wrapped(|ui| {
-        for tab in MessageInspectorTab::ALL {
-            if ui
-                .selectable_label(snapshot.workbench.inspector_tab == tab, tab.label())
-                .clicked()
-            {
-                send(commands, AppCommand::SelectInspectorTab(tab));
-            }
-        }
-    });
-    ui.separator();
-    selected_message(ui, snapshot.workbench.inspector_tab, message, tokens);
-}
-
-pub(crate) fn outgoing_window_content(ui: &mut Ui, row: &PublishHistoryRow, tokens: ThemeTokens) {
-    let timestamp = crate::time_format::local_date_time(&row.timestamp);
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(&row.topic).strong());
-        ui.label(RichText::new(&timestamp).color(tokens.text_secondary));
-        ui.label(row.qos.label());
-        if row.retained {
-            badge_label(ui, "retained", tokens);
-        }
-    });
-    ui.add_space(6.0);
-    ui.label(RichText::new(&row.payload_preview).monospace());
-    ui.label(format!("Bytes: {}", row.byte_size));
-    ui.label(RichText::new("Published message history").color(tokens.text_secondary));
-}
-
-fn selected_message(
-    ui: &mut Ui,
-    tab: MessageInspectorTab,
-    message: &MessageRow,
-    tokens: ThemeTokens,
-) {
-    let timestamp = crate::time_format::local_date_time(&message.timestamp);
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(&message.topic).strong());
-        ui.label(RichText::new(&timestamp).color(tokens.text_secondary));
-        ui.label(message.qos.label());
-        if message.retained {
-            badge_label(ui, "retained", tokens);
-        }
-    });
-    ui.add_space(4.0);
-    match tab {
-        MessageInspectorTab::Payload => payload_tab(ui, message, tokens),
-        MessageInspectorTab::Properties => properties_tab(ui, message, tokens),
-        MessageInspectorTab::Formatted => formatted_tab(ui, message, tokens),
-        MessageInspectorTab::Diagnostics => diagnostics_tab(ui, message, tokens),
-    }
-}
-
-fn payload_tab(ui: &mut Ui, message: &MessageRow, tokens: ThemeTokens) {
-    ui.label(RichText::new(&message.payload_preview).monospace());
-    ui.label(RichText::new(format!("{} bytes", message.byte_size)).color(tokens.text_secondary));
-}
-
-fn properties_tab(ui: &mut Ui, message: &MessageRow, tokens: ThemeTokens) {
-    ui.horizontal_wrapped(|ui| {
-        ui.label(format!("Topic: {}", message.topic));
-        ui.label(format!("QoS: {}", message.qos.label()));
-        ui.label(format!("Bytes: {}", message.byte_size));
-        ui.label(format!(
-            "Retained: {}",
-            if message.retained { "yes" } else { "no" }
-        ));
-    });
-    ui.label(
-        RichText::new(format!(
-            "Timestamp: {}",
-            crate::time_format::local_date_time(&message.timestamp)
-        ))
-        .color(tokens.text_secondary),
+    detail_view(
+        ui,
+        MessageDetail {
+            topic: &message.topic,
+            timestamp: &message.timestamp,
+            qos: message.qos.label(),
+            retained: message.retained,
+            byte_size: message.byte_size,
+            payload: &message.payload,
+            fallback_payload: &message.payload_preview,
+            export: AppCommand::ExportIncomingMessage(message.id),
+        },
+        tokens,
+        commands,
     );
 }
 
-fn formatted_tab(ui: &mut Ui, message: &MessageRow, tokens: ThemeTokens) {
-    match &message.formatted_detail {
-        Some(detail) => {
-            ui.label(RichText::new(&detail.text).monospace());
-            ui.label(
-                RichText::new(format!("{} formatter output", detail.format.label()))
-                    .color(tokens.text_secondary),
+pub(crate) fn outgoing_window_content(
+    ui: &mut Ui,
+    row: &PublishHistoryRow,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
+    detail_view(
+        ui,
+        MessageDetail {
+            topic: &row.topic,
+            timestamp: &row.timestamp,
+            qos: row.qos.label(),
+            retained: row.retained,
+            byte_size: row.byte_size,
+            payload: &row.payload,
+            fallback_payload: &row.payload_preview,
+            export: AppCommand::ExportPublishHistoryMessage(row.id),
+        },
+        tokens,
+        commands,
+    );
+}
+
+fn detail_view(
+    ui: &mut Ui,
+    detail: MessageDetail<'_>,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
+    detail_toolbar(ui, &detail, tokens, commands);
+    ui.add_space(6.0);
+    payload_area(ui, &detail);
+}
+
+fn detail_toolbar(
+    ui: &mut Ui,
+    detail: &MessageDetail<'_>,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), DETAIL_TOOLBAR_HEIGHT),
+        Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            let button_width = square_icon_button_size()[0] + layout::TOOLBAR_GAP;
+            ui.allocate_ui_with_layout(
+                egui::vec2(
+                    (ui.available_width() - button_width).max(0.0),
+                    DETAIL_TOOLBAR_HEIGHT,
+                ),
+                Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.add(Label::new(RichText::new(detail.topic).strong()).truncate());
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        ui.label(
+                            RichText::new(crate::time_format::local_date_time(detail.timestamp))
+                                .color(tokens.text_secondary),
+                        );
+                        ui.label(RichText::new(detail.qos).color(tokens.text_secondary));
+                        ui.label(
+                            RichText::new(formatted_size(detail.byte_size))
+                                .color(tokens.text_secondary),
+                        );
+                        if detail.retained {
+                            ui.label(RichText::new("retained").color(tokens.accent).strong());
+                        }
+                    });
+                },
             );
-        }
-        None => {
-            ui.label(RichText::new(&message.payload_preview).monospace());
-        }
+            ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                if with_icon_button_padding(ui, |ui| {
+                    ui.add_sized(
+                        square_icon_button_size(),
+                        Button::new(RichText::new(regular::DOWNLOAD_SIMPLE).size(16.0)),
+                    )
+                })
+                .on_hover_text("Export message to .cqm file")
+                .clicked()
+                {
+                    send(commands, detail.export.clone());
+                }
+            });
+        },
+    );
+}
+
+fn payload_area(ui: &mut Ui, detail: &MessageDetail<'_>) {
+    let mut payload = payload_text(detail.payload, detail.fallback_payload);
+    let height = ui.available_height().max(0.0);
+    let mut layouter = payload_highlight::layouter();
+    ui.add_sized(
+        [ui.available_width(), height],
+        padded_text_edit(
+            TextEdit::multiline(&mut payload)
+                .font(egui::TextStyle::Monospace)
+                .desired_width(f32::INFINITY)
+                .layouter(&mut layouter)
+                .interactive(false),
+        ),
+    );
+}
+
+fn payload_text(payload: &[u8], fallback: &str) -> String {
+    if payload.is_empty() {
+        fallback.to_owned()
+    } else {
+        String::from_utf8_lossy(payload).into_owned()
     }
 }
 
-fn diagnostics_tab(ui: &mut Ui, message: &MessageRow, tokens: ThemeTokens) {
-    ui.horizontal_wrapped(|ui| {
-        for badge in &message.badges {
-            badge_label(ui, badge, tokens);
-        }
-    });
-    for diagnostic in &message.diagnostics {
-        ui.label(RichText::new(format!(
-            "{}: {}",
-            diagnostic.severity.label(),
-            diagnostic.message
-        )));
-    }
-    if message.badges.is_empty() && message.diagnostics.is_empty() {
-        ui.label(RichText::new("No message diagnostics").color(tokens.text_secondary));
-    }
-}
-
-fn badge_label(ui: &mut Ui, label: &str, tokens: ThemeTokens) {
-    ui.label(RichText::new(label).color(tokens.accent).strong());
+struct MessageDetail<'a> {
+    topic: &'a str,
+    timestamp: &'a str,
+    qos: &'a str,
+    retained: bool,
+    byte_size: usize,
+    payload: &'a [u8],
+    fallback_payload: &'a str,
+    export: AppCommand,
 }
 
 fn send(commands: &AppCommandSender, command: AppCommand) {

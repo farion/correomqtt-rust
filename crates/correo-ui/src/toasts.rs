@@ -25,24 +25,23 @@ pub(crate) fn show(context: &egui::Context, snapshot: &AppSnapshot, tokens: Them
 
     context.request_repaint_after(Duration::from_millis(250));
     Area::new(Id::new("script-event-toasts"))
+        .order(egui::Order::Tooltip)
         .anchor(Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
         .show(context, |ui| {
             ui.set_width(300.0);
             ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
                 for diagnostic in toasts {
+                    let background = severity_color(diagnostic.severity, tokens);
                     Frame::NONE
-                        .fill(tokens.panel_raised.gamma_multiply(1.1))
-                        .stroke(egui::Stroke::new(
-                            1.0,
-                            severity_color(diagnostic.severity, tokens),
-                        ))
+                        .fill(background)
+                        .stroke(egui::Stroke::NONE)
                         .corner_radius(egui::CornerRadius::same(6))
                         .inner_margin(egui::Margin::symmetric(12, 8))
                         .show(ui, |ui| {
                             ui.label(
                                 RichText::new(&diagnostic.message)
                                     .strong()
-                                    .color(severity_color(diagnostic.severity, tokens)),
+                                    .color(contrast_text(background)),
                             );
                         });
                     ui.add_space(6.0);
@@ -59,6 +58,20 @@ fn is_recent(diagnostic: &Diagnostic) -> bool {
 fn is_toast_diagnostic(diagnostic: &Diagnostic) -> bool {
     SCRIPT_TOAST_MESSAGES.contains(&diagnostic.message.as_str())
         || is_script_feedback_message(&diagnostic.message)
+        || is_connection_settings_feedback_message(&diagnostic.message)
+}
+
+fn is_connection_settings_feedback_message(message: &str) -> bool {
+    matches!(
+        message,
+        "Name is required"
+            | "Host is required"
+            | "SSL keystore is required when TLS/SSL uses Keystore"
+            | "SSH host is required"
+            | "SSH username is required"
+            | "SSH key file is required"
+    ) || message.ends_with(" is required")
+        || message.ends_with(" must be between 1 and 65535")
 }
 
 fn is_script_feedback_message(message: &str) -> bool {
@@ -92,5 +105,15 @@ fn severity_color(severity: DiagnosticSeverity, tokens: ThemeTokens) -> egui::Co
         DiagnosticSeverity::Info => tokens.success,
         DiagnosticSeverity::Warning => tokens.warning,
         DiagnosticSeverity::Error => tokens.danger,
+    }
+}
+
+fn contrast_text(background: egui::Color32) -> egui::Color32 {
+    let [red, green, blue, _] = background.to_array();
+    let luminance = 0.299 * red as f32 + 0.587 * green as f32 + 0.114 * blue as f32;
+    if luminance > 140.0 {
+        egui::Color32::from_rgb(0x17, 0x20, 0x2A)
+    } else {
+        egui::Color32::WHITE
     }
 }

@@ -74,7 +74,13 @@ impl AppModel {
 
     pub(super) fn save_connection_settings(&mut self) {
         refresh_connection_settings_validation(&mut self.snapshot.connection_settings);
-        if !self.snapshot.connection_settings.dirty || !self.snapshot.connection_settings.valid {
+        if !self.snapshot.connection_settings.valid {
+            for error in self.snapshot.connection_settings.validation_errors.clone() {
+                self.push_diagnostic(Diagnostic::warning(error));
+            }
+            return;
+        }
+        if !self.snapshot.connection_settings.dirty {
             let reason = self
                 .snapshot
                 .connection_settings
@@ -133,6 +139,67 @@ impl AppModel {
         self.snapshot.connection_settings_overlay = None;
         self.open_default_connection_surface();
         self.push_diagnostic(Diagnostic::info("New connection draft discarded."));
+    }
+
+    pub(super) fn request_delete_connection(&mut self) {
+        let Some(id) = self.snapshot.selected_connection else {
+            self.snapshot.connection_settings.delete_confirmation_open = false;
+            return;
+        };
+        if self.snapshot.connection_settings_overlay != Some(id)
+            && self.snapshot.connection_surface != crate::ConnectionSurface::Settings
+        {
+            self.load_connection_settings(id);
+            if !self.connection_settings.contains_key(&id) {
+                if let Some(connection) = self.snapshot.connections.iter().find(|row| row.id == id)
+                {
+                    self.snapshot.connection_settings.profile_name = connection.name.clone();
+                }
+            }
+        }
+        self.snapshot.connection_settings.delete_confirmation_open = true;
+    }
+
+    pub(super) fn delete_selected_connection(&mut self) {
+        let Some(id) = self.snapshot.selected_connection else {
+            self.snapshot.connection_settings.delete_confirmation_open = false;
+            return;
+        };
+        let Some(index) = self.connection_index(id) else {
+            self.snapshot.connection_settings.delete_confirmation_open = false;
+            self.snapshot.connection_settings_overlay = None;
+            self.open_default_connection_surface();
+            return;
+        };
+
+        let name = self.snapshot.connections.remove(index).name;
+        self.connection_settings.remove(&id);
+        self.storage_connection_ids.remove(&id);
+        self.workbenches.remove(&id);
+        self.dirty_workbenches.remove(&id);
+        if self.snapshot.active_connection == Some(id) {
+            self.snapshot.active_connection = None;
+        }
+
+        self.snapshot.connection_count = self.snapshot.connections.len();
+        self.snapshot.connection_settings_overlay = None;
+        self.snapshot.connection_surface = crate::ConnectionSurface::Workbench;
+        self.snapshot.selected_connection = self
+            .snapshot
+            .connections
+            .first()
+            .map(|connection| connection.id);
+        self.snapshot.workbench = self
+            .snapshot
+            .selected_connection
+            .and_then(|selected| self.workbenches.get(&selected).cloned())
+            .unwrap_or_default();
+        self.snapshot.connection_settings = self
+            .snapshot
+            .selected_connection
+            .and_then(|selected| self.connection_settings.get(&selected).cloned())
+            .unwrap_or_default();
+        self.push_diagnostic(Diagnostic::info(format!("Deleted connection {name}.")));
     }
 
     pub(super) fn move_connection(

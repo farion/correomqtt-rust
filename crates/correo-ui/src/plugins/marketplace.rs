@@ -1,5 +1,6 @@
 use correo_core::{AppCommand, AppCommandSender, PluginMarketplaceRow, PluginSurfaceSnapshot};
 use egui::{Button, RichText, ScrollArea, Ui};
+use egui_phosphor::regular;
 
 use crate::i18n::I18n;
 use crate::theme::ThemeTokens;
@@ -95,6 +96,60 @@ fn marketplace_row(
             AppCommand::SelectMarketplacePlugin(plugin.id.clone()),
         );
     }
+    response.context_menu(|ui| marketplace_context_menu(ui, plugins, plugin, commands, i18n));
+}
+
+fn marketplace_context_menu(
+    ui: &mut Ui,
+    plugins: &PluginSurfaceSnapshot,
+    plugin: &PluginMarketplaceRow,
+    commands: &AppCommandSender,
+    i18n: &I18n,
+) {
+    if let Some(installed) = plugins.installed_plugin_for_marketplace(plugin) {
+        if ui
+            .add_enabled(
+                installed.can_uninstall(),
+                Button::new(menu_label(regular::TRASH, &i18n.text("plugin-uninstall"))),
+            )
+            .clicked()
+        {
+            send(
+                commands,
+                AppCommand::SelectMarketplacePlugin(plugin.id.clone()),
+            );
+            send(commands, AppCommand::SelectPlugin(installed.id.clone()));
+            send(
+                commands,
+                AppCommand::UninstallPlugin {
+                    plugin_id: installed.id.clone(),
+                },
+            );
+            ui.close_menu();
+        }
+    } else if ui
+        .button(menu_label(
+            regular::DOWNLOAD_SIMPLE,
+            &i18n.text("plugin-install"),
+        ))
+        .clicked()
+    {
+        send(
+            commands,
+            AppCommand::SelectMarketplacePlugin(plugin.id.clone()),
+        );
+        send(
+            commands,
+            AppCommand::InstallMarketplacePlugin {
+                marketplace_plugin_id: plugin.id.clone(),
+            },
+        );
+        ui.close_menu();
+    }
+}
+
+fn menu_label(icon: &str, label: &str) -> String {
+    format!("{icon}  {label}")
 }
 
 fn selected_detail(

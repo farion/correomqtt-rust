@@ -1,12 +1,12 @@
 use correo_core::{AppCommand, AppCommandSender, AppSnapshot, MessageRow, PublishHistoryRow};
 use correo_style::layout;
-use egui::{Button, Id, Rect, RichText, ScrollArea, Sense, TextEdit, Ui};
+use egui::{Button, Id, Rect, RichText, ScrollArea, Sense, Ui};
 use egui_phosphor::regular;
 
 use crate::{
-    theme::{ThemeTokens, CONTROL_HEIGHT},
+    theme::ThemeTokens,
     widgets::{
-        padded_text_edit, square_icon_button_size, tile_scroll_bar_rect_with_height,
+        clearable_search_edit, square_icon_button_size, tile_scroll_bar_rect_with_height,
         tile_table_fill, with_icon_button_padding,
     },
     workbench_connection_messages_filters::{message_visible_for_subscriptions, row_matches},
@@ -105,12 +105,7 @@ fn toolbar(
         let button_width = layout::square_icon_button_side();
         let search_width = (toolbar_width - button_width * 4.0 - ui.spacing().item_spacing.x * 4.0)
             .max(button_width);
-        if ui
-            .add_sized(
-                [search_width, CONTROL_HEIGHT],
-                padded_text_edit(TextEdit::singleline(&mut filter).hint_text(search_hint(origin))),
-            )
-            .changed()
+        if clearable_search_edit(ui, None, &mut filter, search_hint(origin), search_width).changed()
         {
             send(commands, search_command(origin, filter));
         }
@@ -256,7 +251,7 @@ fn message_table(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             for (index, row) in rows.iter().enumerate() {
-                message_row(ui, snapshot, index, row, tokens, commands);
+                message_row(ui, snapshot, origin, index, row, tokens, commands);
             }
             fill_remaining_table_space(ui, rows.len(), table_height, tokens);
         });
@@ -288,6 +283,7 @@ fn fill_remaining_table_space(
 fn message_row(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
+    origin: MessageOrigin,
     index: usize,
     row: &ConnectionMessageRow<'_>,
     tokens: ThemeTokens,
@@ -308,12 +304,7 @@ fn message_row(
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::ZERO, fill);
 
-    response.context_menu(|ui| {
-        if ui.button("Export .cqm").clicked() {
-            send(commands, export_command(row.key));
-            ui.close_menu();
-        }
-    });
+    response.context_menu(|ui| message_context_menu(ui, snapshot, origin, row, commands));
     if response.clicked() {
         send(commands, select_command(row.key));
     }
@@ -406,6 +397,128 @@ fn export_command(key: MessageKey) -> AppCommand {
         MessageKey::Outgoing(id) => AppCommand::ExportPublishHistoryMessage(id),
         MessageKey::Incoming(id) => AppCommand::ExportIncomingMessage(id),
     }
+}
+
+fn remove_command(key: MessageKey) -> AppCommand {
+    match key {
+        MessageKey::Outgoing(id) => AppCommand::RemovePublishHistoryMessage(id),
+        MessageKey::Incoming(id) => AppCommand::RemoveIncomingMessage(id),
+    }
+}
+
+fn message_context_menu(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    origin: MessageOrigin,
+    row: &ConnectionMessageRow<'_>,
+    commands: &AppCommandSender,
+) {
+    if ui
+        .button(menu_label(
+            regular::UPLOAD_SIMPLE,
+            "Put message into publish form",
+        ))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        send(commands, copy_command(row.key));
+        ui.close_menu();
+    }
+    if ui
+        .button(menu_label(
+            regular::ARROW_SQUARE_OUT,
+            "Show in separate window",
+        ))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        open_message(ui, snapshot, row.key);
+        ui.close_menu();
+    }
+    if ui
+        .button(menu_label(regular::TRASH, "Remove message"))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        send(commands, remove_command(row.key));
+        ui.close_menu();
+    }
+    if ui
+        .button(menu_label(
+            regular::DOWNLOAD_SIMPLE,
+            "Save message to cqm file",
+        ))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        send(commands, export_command(row.key));
+        ui.close_menu();
+    }
+    ui.separator();
+    if ui
+        .button(menu_label(regular::COPY, "Copy Topic to Clipboard"))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        ui.ctx().copy_text(row.topic.to_owned());
+        ui.close_menu();
+    }
+    if ui
+        .button(menu_label(regular::CLOCK, "Copy time to clipboard"))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        ui.ctx().copy_text(row.timestamp.to_owned());
+        ui.close_menu();
+    }
+    if ui
+        .button(menu_label(
+            regular::CLIPBOARD_TEXT,
+            "Copy payload to clipboard",
+        ))
+        .clicked()
+    {
+        send(commands, select_command(row.key));
+        if let Some(payload) = payload_text(snapshot, row.key) {
+            ui.ctx().copy_text(payload);
+        }
+        ui.close_menu();
+    }
+    ui.separator();
+    if ui
+        .button(menu_label(regular::BROOM, "Clear list"))
+        .clicked()
+    {
+        send(commands, clear_command(origin));
+        ui.close_menu();
+    }
+}
+
+fn menu_label(icon: &str, label: &str) -> String {
+    format!("{icon}  {label}")
+}
+
+fn payload_text(snapshot: &AppSnapshot, key: MessageKey) -> Option<String> {
+    let payload = match key {
+        MessageKey::Outgoing(id) => {
+            &snapshot
+                .workbench
+                .publish
+                .history
+                .iter()
+                .find(|row| row.id == id)?
+                .payload
+        }
+        MessageKey::Incoming(id) => {
+            &snapshot
+                .workbench
+                .messages
+                .iter()
+                .find(|message| message.id == id)?
+                .payload
+        }
+    };
+    Some(String::from_utf8_lossy(payload).into_owned())
 }
 
 fn open_message(ui: &Ui, snapshot: &AppSnapshot, key: MessageKey) {

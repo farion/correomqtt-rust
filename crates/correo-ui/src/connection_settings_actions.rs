@@ -1,9 +1,10 @@
 use correo_core::{AppCommand, AppCommandSender, ConnectionSettingsSnapshot};
-use egui::{Align, Button, Layout, Ui, Window};
+use egui::{Align, Button, Id, Layout, Modal, Ui};
 use egui_phosphor::regular;
 
 use crate::i18n::I18n;
-use crate::theme::CONTROL_HEIGHT;
+use crate::modal_style;
+use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 
 use super::controls::FORM_MAX_WIDTH;
 
@@ -13,6 +14,7 @@ pub(super) fn action_bar(
     commands: &AppCommandSender,
     i18n: &I18n,
     modal: bool,
+    allow_delete: bool,
 ) {
     let width = ui.available_width().min(FORM_MAX_WIDTH);
     ui.allocate_ui_with_layout(
@@ -20,15 +22,17 @@ pub(super) fn action_bar(
         Layout::left_to_right(Align::Center),
         |ui| {
             ui.set_width(width);
-            if ui
-                .button(format!(
-                    "{}  {}...",
-                    regular::TRASH,
-                    i18n.text("common-delete")
-                ))
-                .clicked()
-            {
-                send(commands, AppCommand::RequestDeleteConnection);
+            if allow_delete {
+                if ui
+                    .button(format!(
+                        "{}  {}...",
+                        regular::TRASH,
+                        i18n.text("common-delete")
+                    ))
+                    .clicked()
+                {
+                    send(commands, AppCommand::RequestDeleteConnection);
+                }
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let cancel_label = if modal {
@@ -45,7 +49,7 @@ pub(super) fn action_bar(
                 {
                     send(commands, AppCommand::DiscardConnectionSettings);
                 }
-                let can_save = settings.dirty && settings.valid;
+                let can_save = settings.dirty;
                 let save = ui.add_enabled(
                     can_save,
                     Button::new(format!(
@@ -57,9 +61,6 @@ pub(super) fn action_bar(
                 if save.clicked() {
                     send(commands, AppCommand::SaveConnectionSettings);
                 }
-                if !can_save {
-                    save.on_hover_text(&settings.save_disabled_reason);
-                }
             });
         },
     );
@@ -68,13 +69,15 @@ pub(super) fn action_bar(
 pub(super) fn delete_confirmation(
     ui: &mut Ui,
     settings: &ConnectionSettingsSnapshot,
+    tokens: ThemeTokens,
     commands: &AppCommandSender,
     i18n: &I18n,
 ) {
-    Window::new(i18n.text("connection-delete-title"))
-        .collapsible(false)
-        .resizable(false)
-        .show(ui.ctx(), |ui| {
+    let response = modal_style::style(Modal::new(Id::new("delete-connection-modal")), tokens).show(
+        ui.ctx(),
+        |ui| {
+            ui.set_width(360.0);
+            ui.heading(i18n.text("connection-delete-title"));
             ui.label(format!(
                 "{} {}?",
                 i18n.text("common-delete"),
@@ -89,7 +92,11 @@ pub(super) fn delete_confirmation(
                     send(commands, AppCommand::ConfirmDeleteConnection);
                 }
             });
-        });
+        },
+    );
+    if response.should_close() {
+        send(commands, AppCommand::CancelDeleteConnection);
+    }
 }
 
 fn send(commands: &AppCommandSender, command: AppCommand) {

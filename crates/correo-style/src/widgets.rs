@@ -159,6 +159,13 @@ impl<'a> FocusTextEdit<'a> {
         self
     }
 
+    pub fn extra_right_margin(mut self, extra: i8) -> Self {
+        let mut margin = layout::control_margin();
+        margin.right = margin.right.saturating_add(extra);
+        self.text_edit = self.text_edit.margin(margin);
+        self
+    }
+
     pub fn desired_rows(mut self, rows: usize) -> Self {
         self.text_edit = self.text_edit.desired_rows(rows);
         self

@@ -167,6 +167,7 @@ impl AppRuntime {
                 report.commands_processed += 1;
                 continue;
             }
+            self.dispatch_history_for_app_command(&command);
             self.model.apply_command(command.clone());
             if let Some((plugin_id, installed_path)) = plugin_file_result.installed_path {
                 self.model
@@ -220,6 +221,25 @@ impl AppRuntime {
 
     fn dispatch_history_for_mqtt_event(&self, event: &crate::MqttEvent) {
         let commands = self.model.history_commands_for_mqtt_event(event);
+        if commands.is_empty() {
+            return;
+        }
+        let Some(worker) = &self.history_worker else {
+            return;
+        };
+        for command in commands {
+            if let Err(error) = worker.dispatch(command) {
+                let _ = self
+                    .event_sender
+                    .emit(AppEvent::DiagnosticRaised(Diagnostic::warning(
+                        error.to_string(),
+                    )));
+            }
+        }
+    }
+
+    fn dispatch_history_for_app_command(&self, command: &AppCommand) {
+        let commands = self.model.history_commands_for_app_command(command);
         if commands.is_empty() {
             return;
         }

@@ -11,19 +11,22 @@ use crate::{
         with_icon_button_padding,
     },
     workbench_connection_messages::{self, MessageOrigin},
-    workbench_helpers::{child_ui, connected, qos_selector, right_rect, send, toolbar_rect},
+    workbench_helpers::{
+        child_ui, connected, disconnected_action_button, qos_selector, right_rect, send,
+        toolbar_rect,
+    },
     workbench_layout::{self, WorkbenchPaneSide},
 };
 
 pub(crate) fn editor(
     ui: &mut Ui,
     snapshot: &AppSnapshot,
-    _tokens: ThemeTokens,
+    tokens: ThemeTokens,
     commands: &AppCommandSender,
 ) {
     workbench_layout::pane_title(ui, "Publish", WorkbenchPaneSide::Publish);
     ui.add_space(4.0);
-    topic_row(ui, snapshot, commands);
+    topic_row(ui, snapshot, tokens, commands);
     let mut payload = snapshot.workbench.publish.payload.clone();
     let payload_height = ui.available_height().max(layout::TABLE_MIN_HEIGHT);
     let mut layouter = payload_highlight::layouter();
@@ -48,10 +51,16 @@ pub(crate) fn outgoing_messages(
     workbench_connection_messages::show(ui, snapshot, MessageOrigin::Outgoing, tokens, commands);
 }
 
-fn topic_row(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
+fn topic_row(
+    ui: &mut Ui,
+    snapshot: &AppSnapshot,
+    tokens: ThemeTokens,
+    commands: &AppCommandSender,
+) {
     let mut topic = snapshot.workbench.publish.topic.clone();
     let rect = toolbar_rect(ui);
-    let can_publish = snapshot.workbench.publish.valid && connected(snapshot);
+    let is_connected = connected(snapshot);
+    let can_publish = snapshot.workbench.publish.valid && is_connected;
 
     let publish_rect = right_rect(rect, layout::PUBLISH_ACTION_BUTTON_WIDTH, 0.0);
     let qos_rect = right_rect(
@@ -105,19 +114,28 @@ fn topic_row(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
         });
     });
     child_ui(ui, publish_rect, |ui| {
+        let label = format!("{}  Publish", regular::PAPER_PLANE_RIGHT);
+        if !is_connected {
+            disconnected_action_button(
+                ui,
+                publish_rect.width(),
+                label,
+                "Publish is not available as long as the connection is not connected.",
+                tokens,
+            );
+            return;
+        }
+
         let publish = ui.add_enabled_ui(can_publish, |ui| {
             ui.spacing_mut().button_padding.x = 4.0;
-            ui.add_sized(
-                [publish_rect.width(), CONTROL_HEIGHT],
-                Button::new(format!("{}  Publish", regular::PAPER_PLANE_RIGHT)),
-            )
+            ui.add_sized([publish_rect.width(), CONTROL_HEIGHT], Button::new(label))
         });
         let publish = publish.inner;
         if publish.clicked() {
             send(commands, AppCommand::Publish);
         }
         if !can_publish {
-            publish.on_hover_text("Requires a connected broker and a valid topic.");
+            publish.on_hover_text("Requires a valid topic.");
         }
     });
 

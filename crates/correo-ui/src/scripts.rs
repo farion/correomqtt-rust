@@ -1,6 +1,6 @@
 use correo_core::{
-    AppCommand, AppCommandSender, AppSnapshot, ScriptExecutionStatus, ScriptFileStatus,
-    ScriptSurfaceSnapshot,
+    AppCommand, AppCommandSender, AppSnapshot, ScriptExecutionRow, ScriptExecutionStatus,
+    ScriptFileStatus, ScriptRow, ScriptSurfaceSnapshot,
 };
 use correo_style::layout as style_layout;
 use egui::{Button, ComboBox, Id, Modal, RichText, ScrollArea, Sense, TextEdit, Ui};
@@ -10,9 +10,9 @@ use crate::i18n::I18n;
 use crate::payload_highlight;
 use crate::theme::{ThemeTokens, CONTROL_HEIGHT};
 use crate::widgets::{
-    fill_remaining_tile_rows, padded_text_edit, square_icon_button_size, tile_list_content_width,
-    tile_scroll_bar_rect_with_height, tile_table_fill, tile_table_hover_fill,
-    with_icon_button_padding, TILE_GAP, TWO_LINE_TILE_HEIGHT,
+    clearable_search_edit, fill_remaining_tile_rows, padded_text_edit, square_icon_button_size,
+    tile_list_content_width, tile_scroll_bar_rect_with_height, tile_table_fill,
+    tile_table_hover_fill, with_icon_button_padding, TILE_GAP, TWO_LINE_TILE_HEIGHT,
 };
 
 #[path = "scripts/dialogs.rs"]
@@ -31,12 +31,14 @@ pub fn sidebar(
     commands: &AppCommandSender,
 ) {
     let mut filter = scripts.script_filter.clone();
-    if ui
-        .add_sized(
-            [tile_list_content_width(ui), CONTROL_HEIGHT],
-            padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
-        )
-        .changed()
+    if clearable_search_edit(
+        ui,
+        None,
+        &mut filter,
+        "Search scripts...",
+        tile_list_content_width(ui),
+    )
+    .changed()
     {
         send(commands, AppCommand::SearchScripts(filter));
     }
@@ -100,12 +102,14 @@ fn script_browser(
         },
     );
     let mut filter = scripts.script_filter.clone();
-    if ui
-        .add_sized(
-            [tile_list_content_width(ui), CONTROL_HEIGHT],
-            padded_text_edit(TextEdit::singleline(&mut filter).hint_text("Search scripts...")),
-        )
-        .changed()
+    if clearable_search_edit(
+        ui,
+        None,
+        &mut filter,
+        "Search scripts...",
+        tile_list_content_width(ui),
+    )
+    .changed()
     {
         send(commands, AppCommand::SearchScripts(filter));
     }
@@ -177,12 +181,46 @@ fn script_list(
             tokens.text_secondary,
         );
         paint_segment(ui, rect, 1, x, &script.relative_path, tokens.text_secondary);
+        response.context_menu(|ui| script_context_menu(ui, scripts, script, commands));
         if response.clicked() {
             send(commands, AppCommand::SelectScript(script.name.clone()));
         }
         ui.add_space(TILE_GAP);
     }
     fill_remaining_tile_rows(ui, row_count, TWO_LINE_TILE_HEIGHT, list_height, tokens);
+}
+
+fn script_context_menu(
+    ui: &mut Ui,
+    scripts: &ScriptSurfaceSnapshot,
+    script: &ScriptRow,
+    commands: &AppCommandSender,
+) {
+    if ui
+        .add_enabled(
+            !scripts.running,
+            Button::new(menu_label(regular::PLAY, "Run Script")),
+        )
+        .clicked()
+    {
+        send(commands, AppCommand::SelectScript(script.name.clone()));
+        send(commands, AppCommand::RunScript);
+        ui.close_menu();
+    }
+    ui.separator();
+    if ui
+        .button(menu_label(regular::PENCIL_SIMPLE, "Rename"))
+        .clicked()
+    {
+        send(commands, AppCommand::SelectScript(script.name.clone()));
+        send(commands, AppCommand::RequestRenameScript);
+        ui.close_menu();
+    }
+    if ui.button(menu_label(regular::TRASH, "Delete...")).clicked() {
+        send(commands, AppCommand::SelectScript(script.name.clone()));
+        send(commands, AppCommand::RequestDeleteScript);
+        ui.close_menu();
+    }
 }
 
 fn paint_line(ui: &Ui, rect: egui::Rect, line: usize, text: &str, color: egui::Color32) -> f32 {
@@ -224,6 +262,9 @@ fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
         {
             send(commands, AppCommand::RequestRenameScript);
         }
+        if script_icon_button(ui, regular::TRASH, has_script, "Delete script").clicked() {
+            send(commands, AppCommand::RequestDeleteScript);
+        }
     });
     ui.add_space(2.0);
     ui.horizontal(|ui| {
@@ -240,9 +281,6 @@ fn toolbar(ui: &mut Ui, snapshot: &AppSnapshot, commands: &AppCommandSender) {
         .clicked()
         {
             send(commands, AppCommand::DiscardScriptChanges);
-        }
-        if script_icon_button(ui, regular::TRASH, has_script, "Delete script").clicked() {
-            send(commands, AppCommand::RequestDeleteScript);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
@@ -367,6 +405,7 @@ fn executions(
                 paint_segment(ui, rect, 0, x, &execution.duration, tokens.text_secondary);
                 let timestamp = crate::time_format::local_date_time(&execution.timestamp);
                 paint_line(ui, rect, 1, &timestamp, tokens.text_secondary);
+                response.context_menu(|ui| execution_context_menu(ui, execution, commands));
                 if response.clicked() {
                     send(
                         commands,
@@ -383,6 +422,50 @@ fn executions(
                 tokens,
             );
         });
+}
+
+fn execution_context_menu(
+    ui: &mut Ui,
+    execution: &ScriptExecutionRow,
+    commands: &AppCommandSender,
+) {
+    if ui
+        .add_enabled(
+            !execution.status.is_terminal(),
+            Button::new(menu_label(regular::STOP, "Stop")),
+        )
+        .clicked()
+    {
+        send(
+            commands,
+            AppCommand::SelectScriptExecution(execution.execution_id.clone()),
+        );
+        send(commands, AppCommand::CancelScript);
+        ui.close_menu();
+    }
+    if ui.button(menu_label(regular::TRASH, "Remove")).clicked() {
+        send(
+            commands,
+            AppCommand::SelectScriptExecution(execution.execution_id.clone()),
+        );
+        send(
+            commands,
+            AppCommand::RemoveScriptExecution(execution.execution_id.clone()),
+        );
+        ui.close_menu();
+    }
+    ui.separator();
+    if ui
+        .button(menu_label(regular::BROOM, "Clear execution log"))
+        .clicked()
+    {
+        send(commands, AppCommand::ClearFinishedScriptExecutions);
+        ui.close_menu();
+    }
+}
+
+fn menu_label(icon: &str, label: &str) -> String {
+    format!("{icon}  {label}")
 }
 
 fn rename_dialog(

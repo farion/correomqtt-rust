@@ -22,8 +22,11 @@ pub fn connection_header(
 
     ui.horizontal(|ui| {
         ui.heading(&connection.name);
-        if edit_button(ui).clicked() {
+        if header_icon_button(ui, regular::PENCIL_SIMPLE, "Edit connection").clicked() {
             send(commands, AppCommand::OpenConnectionSettings(connection.id));
+        }
+        if header_icon_button(ui, regular::TRASH, "Delete connection").clicked() {
+            send(commands, AppCommand::RequestDeleteConnection);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             connection_action(ui, connection, commands);
@@ -32,14 +35,14 @@ pub fn connection_header(
     });
 }
 
-fn edit_button(ui: &mut Ui) -> egui::Response {
+fn header_icon_button(ui: &mut Ui, icon: &'static str, hover_text: &'static str) -> egui::Response {
     with_icon_button_padding(ui, |ui| {
         ui.add_sized(
             square_icon_button_size(),
-            Button::new(RichText::new(regular::PENCIL_SIMPLE).size(16.0)),
+            Button::new(RichText::new(icon).size(16.0)),
         )
     })
-    .on_hover_text("Edit connection")
+    .on_hover_text(hover_text)
 }
 
 fn connection_action(ui: &mut Ui, connection: &ConnectionSummary, commands: &AppCommandSender) {
